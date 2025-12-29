@@ -4,7 +4,7 @@ import { Camera, X, Loader2, Search, PenTool, Image as ImageIcon, ChevronRight, 
 import { analyzeImage } from '@/services/aiService';
 import { searchFoodWithGemini } from '@/app/actions';
 
-export default function FoodLogger({ onLogMeal, onCancel }) {
+export default function FoodLogger({ onLogMeal, onCancel, activeDate }) {
     const [activeTab, setActiveTab] = useState('camera'); // 'camera', 'search', 'manual', 'review'
     const [loading, setLoading] = useState(false);
 
@@ -21,6 +21,11 @@ export default function FoodLogger({ onLogMeal, onCancel }) {
 
     // Manual State
     const [manualForm, setManualForm] = useState({ foodName: '', calories: '', protein: '' });
+
+    // Format date for display
+    const dateStr = activeDate ?
+        `${activeDate.getMonth() + 1}/${activeDate.getDate()} (${['日', '月', '火', '水', '木', '金', '土'][activeDate.getDay()]})`
+        : '';
 
     // --- Handlers ---
 
@@ -160,9 +165,6 @@ export default function FoodLogger({ onLogMeal, onCancel }) {
             }
         };
         setPendingItems(prev => [...prev, newItem]);
-        // setSearchResults([]); // Keep results open for multi-add
-        // setSearchQuery('');   // Keep query
-        // setActiveTab('review'); // Stay on search tab
         alert(`${item.foodName} を追加しました`); // Simple feedback for now
     };
 
@@ -286,6 +288,14 @@ export default function FoodLogger({ onLogMeal, onCancel }) {
                 <button onClick={onCancel} style={{ position: 'absolute', top: '15px', right: '15px', background: 'transparent', border: 'none', color: 'var(--text-secondary)', zIndex: 10, cursor: 'pointer' }}>
                     <X />
                 </button>
+
+                {activeDate && (
+                    <div style={{ position: 'absolute', top: '15px', left: '20px', fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--primary)' }}>
+                        {dateStr} の記録
+                    </div>
+                )}
+
+                <div style={{ marginTop: '25px' }}></div>
 
                 {/* Tabs */}
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '10px', marginRight: '30px' }}>

@@ -146,3 +146,77 @@ export const searchFoodWithGemini = async (query) => {
 
     return { error: "Failed to search food", details: lastError?.message };
 };
+
+export const evaluateDailyLog = async (data) => {
+    // data = { date, consumedCalories, targetCalories, meals: [], currentWeight, targetWeight, targetDate }
+    if (!apiKey) {
+        return { error: "API Key missing" };
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+
+    // Construct prompt
+    const prompt = `
+      あなたはプロフェッショナルな専属ダイエットコーチAIです。
+      ユーザーの今日の記録と目標に基づいて、厳しくも温かい評価、スコア、そしてアドバイスを提供してください。
+
+      【ユーザー状況】
+      - 日付: ${data.date}
+      - 現在の体重: ${data.currentWeight || "未計測"} kg
+      - 目標体重: ${data.targetWeight || "未設定"} kg
+      - 目標期限: ${data.targetDate || "未設定"}
+
+      【今日の摂取状況】
+      - 目標カロリー: ${data.targetCalories} kcal
+      - 摂取カロリー: ${data.consumedCalories} kcal
+      - 残りカロリー: ${data.targetCalories - data.consumedCalories} kcal
+      - 食事内容:
+      ${data.meals.map(m => `- ${m.foodName} (${new Date(m.timestamp).toLocaleTimeString('ja-JP')}): ${m.calories}kcal, P:${m.macros.protein}g`).join('\n')}
+
+      【タスク】
+      1. **スコア (0-100)**: 目標カロリーとの乖離、PFCバランス（特にタンパク質摂取）、食事のタイミング、質の良さを総合的に判断してください。
+        - カロリー超過は減点。極端な不足も減点（代謝低下リスク）。
+        - タンパク質不足は減点。
+      2. **短い評価コメント**: ひとことで言うと？ (例: 「素晴らしい管理です！」「夜食が少し多すぎましたね」)
+      3. **詳細アドバイス**: 具体的に何を改善すべきか、または何を続けるべきか。
+
+      出力形式 (JSONのみ):
+      {
+        "score": 数値,
+        "title": "短い評価コメント",
+        "advice": "詳細なアドバイス（300文字以内）",
+        "reasoning": "[AI思考] なぜこのスコアにしたか（ユーザーには見せませんが、分析の質を高めるために記述してください）"
+      }
+    `;
+
+    // Try stronger models for coaching reasoning
+    // Prioritize 1.5 Pro for "Coaching" quality, then 2.0 Flash for speed
+    const COACHING_MODELS = [
+        "gemini-1.5-pro",
+        "gemini-2.0-flash-exp",
+        "gemini-flash-latest"
+    ];
+
+    for (const modelName of COACHING_MODELS) {
+        try {
+            const model = genAI.getGenerativeModel({ model: modelName });
+
+            // Adjust safety settings if needed, but default is usually fine for diet advice
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const resultData = JSON.parse(jsonMatch[0]);
+                // Metadata
+                resultData.model = modelName;
+                return resultData;
+            }
+        } catch (e) {
+            console.warn(`Evaluation Model ${modelName} failed:`, e.message);
+        }
+    }
+
+    return { error: "Failed to evaluate log" };
+};

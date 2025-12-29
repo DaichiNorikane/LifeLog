@@ -8,8 +8,26 @@ import {
     query,
     orderBy,
     Timestamp,
-    setDoc
+    setDoc,
+    getDoc
 } from "firebase/firestore";
+
+
+// Get User Profile
+export const getUserProfile = async (userId) => {
+    try {
+        const docRef = doc(db, "users", userId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return docSnap.data();
+        } else {
+            return null;
+        }
+    } catch (e) {
+        console.error("Error fetching profile:", e);
+        return null;
+    }
+};
 
 // Collection reference
 const getMealsConf = (userId) => collection(db, "users", userId, "meals");
@@ -81,6 +99,7 @@ export const deleteMealFromFirestore = async (userId, mealId) => {
     }
 };
 
+
 // Save User Profile
 export const saveUserProfile = async (userId, profile) => {
     try {
@@ -89,3 +108,38 @@ export const saveUserProfile = async (userId, profile) => {
         console.error("Error saving profile: ", e);
     }
 }
+
+// Weight Management
+const getWeightsRef = (userId) => collection(db, "users", userId, "weights");
+
+export const addWeightToFirestore = async (userId, weight, date) => {
+    try {
+        // Use date string YYYY-MM-DD as ID to enforce one entry per day
+        const dateId = date.toISOString().split('T')[0];
+        const weightDoc = doc(db, "users", userId, "weights", dateId);
+
+        await setDoc(weightDoc, {
+            weight: parseFloat(weight),
+            date: dateId, // search key
+            timestamp: date.toISOString(), // exact time
+            updatedAt: Timestamp.now()
+        }, { merge: true });
+    } catch (e) {
+        console.error("Error adding weight: ", e);
+        throw e;
+    }
+};
+
+export const getWeightsFromFirestore = async (userId) => {
+    try {
+        const q = query(getWeightsRef(userId), orderBy("date", "desc")); // Order by date string
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+    } catch (e) {
+        console.error("Error fetching weights:", e);
+        return [];
+    }
+};

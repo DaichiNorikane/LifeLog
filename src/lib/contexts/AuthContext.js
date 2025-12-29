@@ -15,6 +15,11 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        if (!auth) {
+            setLoading(false);
+            return;
+        }
+
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             setUser(user);
             setLoading(false);
@@ -23,6 +28,10 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     const googleSignIn = () => {
+        if (!auth) {
+            alert("Firebase設定エラー: APIキーが見つかりません。Vercelの環境変数を確認してください。");
+            return Promise.reject("Firebase config missing");
+        }
         const provider = new GoogleAuthProvider();
         return signInWithPopup(auth, provider);
     };

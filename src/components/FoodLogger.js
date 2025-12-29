@@ -282,13 +282,13 @@ export default function FoodLogger({ onLogMeal, onCancel }) {
     // Main Input UI
     return (
         <div className="fixed-overlay" style={{ ...overlayStyle }}>
-            <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '20px', minHeight: '500px', display: 'flex', flexDirection: 'column' }}>
-                <button onClick={onCancel} style={{ position: 'absolute', top: '15px', right: '15px', background: 'transparent', border: 'none', color: '#fff', zIndex: 10 }}>
+            <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '20px', minHeight: '500px', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                <button onClick={onCancel} style={{ position: 'absolute', top: '15px', right: '15px', background: 'transparent', border: 'none', color: 'var(--text-secondary)', zIndex: 10, cursor: 'pointer' }}>
                     <X />
                 </button>
 
                 {/* Tabs */}
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '10px' }}>
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '10px', marginRight: '30px' }}>
                     <TabButton active={activeTab === 'camera'} onClick={() => setActiveTab('camera')} icon={<Camera size={18} />} label="写真" />
                     <TabButton active={activeTab === 'search'} onClick={() => setActiveTab('search')} icon={<Search size={18} />} label="検索" />
                     <TabButton active={activeTab === 'manual'} onClick={() => setActiveTab('manual')} icon={<PenTool size={18} />} label="手入力" />

@@ -15,8 +15,23 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase (Singleton pattern)
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
-const auth = getAuth(app);
-const db = getFirestore(app);
+// Initialize Firebase (Singleton pattern)
+let app;
+let auth;
+let db;
+
+try {
+  if (firebaseConfig.apiKey) {
+    app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
+    auth = getAuth(app);
+    db = getFirestore(app);
+  } else {
+    // During build time (e.g. Vercel static generation), keys might be missing.
+    // Return undefined to avoid build crash, but app will fail at runtime if keys are still missing.
+    console.warn("Firebase API keys missing. Initialization skipped.");
+  }
+} catch (error) {
+  console.error("Firebase initialization failed:", error);
+}
 
 export { auth, db };

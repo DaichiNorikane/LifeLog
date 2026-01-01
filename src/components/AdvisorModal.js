@@ -31,10 +31,10 @@ export default function AdvisorModal({ history, dailyLog, onClose, onSuggestionC
 
     return (
         <div className="fixed-overlay" style={{ zIndex: 1100 }}>
-            <div className="glass-panel zoom-in" style={{ width: '90%', maxWidth: '500px', padding: '0', position: 'relative', overflow: 'hidden' }}>
+            <div className="glass-panel zoom-in" style={{ width: '90%', maxWidth: '500px', maxHeight: '85vh', padding: '0', position: 'relative', display: 'flex', flexDirection: 'column' }}>
 
                 {/* Header */}
-                <div style={{ padding: '20px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ padding: '20px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
                     <h2 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <Sparkles size={20} /> AI 食事アドバイザー
                     </h2>
@@ -43,7 +43,7 @@ export default function AdvisorModal({ history, dailyLog, onClose, onSuggestionC
                     </button>
                 </div>
 
-                <div style={{ padding: '25px', minHeight: '300px' }}>
+                <div style={{ padding: '25px', minHeight: '300px', overflowY: 'auto' }}>
                     {loading ? (
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '15px', color: 'var(--text-muted)' }}>
                             <Loader2 className="spin" size={40} color="var(--primary)" />

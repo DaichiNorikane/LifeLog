@@ -656,7 +656,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                         {viewingRecipe && (
                             <div className="fixed-overlay" style={{ ...overlayStyle, zIndex: 120 }}>
                                 <div className="glass-panel zoom-in" style={{ width: '90%', maxWidth: '500px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', padding: '0' }}>
-                                    <div style={{ padding: '15px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ padding: '15px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
                                         <h3 style={{ margin: 0 }}>{viewingRecipe.foodName}</h3>
                                         <button onClick={() => setViewingRecipe(null)} style={{ background: 'none', border: 'none' }}><X /></button>
                                     </div>

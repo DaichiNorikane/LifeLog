@@ -597,7 +597,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                 </div>
 
                                 {foundRecipes.length > 0 && (
-                                    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                    <div className="fade-in" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '15px' }}>
                                         {foundRecipes.map((recipe, idx) => (
                                             <div key={idx} className="glass-panel" style={{ padding: '15px', border: '1px solid var(--primary-glow)' }}>
                                                 <h3 style={{ margin: '0 0 5px 0', fontSize: '1.1rem' }}>{recipe.foodName}</h3>
@@ -660,7 +660,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                         <h3 style={{ margin: 0 }}>{viewingRecipe.foodName}</h3>
                                         <button onClick={() => setViewingRecipe(null)} style={{ background: 'none', border: 'none' }}><X /></button>
                                     </div>
-                                    <div style={{ padding: '20px', overflowY: 'auto' }}>
+                                    <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
                                         {viewingRecipe.description && <p style={{ color: 'var(--text-secondary)', marginBottom: '15px' }}>{viewingRecipe.description}</p>}
 
                                         <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', fontSize: '1rem', fontWeight: 'bold', background: 'var(--bg-main)', padding: '10px', borderRadius: '8px' }}>

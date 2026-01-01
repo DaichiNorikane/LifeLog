@@ -9,7 +9,8 @@ import {
     orderBy,
     Timestamp,
     setDoc,
-    getDoc
+    getDoc,
+    limit
 } from "firebase/firestore";
 
 
@@ -34,22 +35,23 @@ const getMealsConf = (userId) => collection(db, "users", userId, "meals");
 
 // Helper to clean object for Firestore
 const cleanData = (data) => {
-    const cleaned = { ...data };
-    Object.keys(cleaned).forEach(key => {
-        if (cleaned[key] === undefined) {
-            delete cleaned[key];
-        }
-        // Convert strict nulls to empty string if needed, or keep null.
-        // Convert NaN to 0
-        if (typeof cleaned[key] === 'number' && isNaN(cleaned[key])) {
-            cleaned[key] = 0;
-        }
-        // Recurse for macros
-        if (typeof cleaned[key] === 'object' && cleaned[key] !== null && !(cleaned[key] instanceof Date)) {
-            cleaned[key] = cleanData(cleaned[key]);
-        }
-    });
-    return cleaned;
+    if (data === null || data === undefined) return null;
+    if (Array.isArray(data)) {
+        return data.map(item => cleanData(item)).filter(item => item !== undefined);
+    }
+    if (typeof data === 'object' && !(data instanceof Date)) {
+        const cleaned = {};
+        Object.keys(data).forEach(key => {
+            const value = cleanData(data[key]);
+            if (value !== undefined) {
+                cleaned[key] = value;
+            }
+        });
+        return cleaned;
+    }
+    // Primitives
+    if (typeof data === 'number' && isNaN(data)) return 0;
+    return data;
 };
 
 // Add a meal
@@ -141,5 +143,76 @@ export const getWeightsFromFirestore = async (userId) => {
     } catch (e) {
         console.error("Error fetching weights:", e);
         return [];
+    }
+};
+
+// --- History & Recipes ---
+
+// Get Recent Unique Meals (limit 50 unique)
+export const getRecentMeals = async (userId, limitCount = 50) => {
+    try {
+        // Fetch more to ensure we get enough unique items after deduping
+        const q = query(getMealsConf(userId), orderBy("timestamp", "desc"), limit(100));
+        const snapshot = await getDocs(q);
+
+        const uniqueMeals = [];
+        const seenNames = new Set();
+
+        for (const doc of snapshot.docs) {
+            const data = doc.data();
+            // Normalize name to avoid "Ramen" vs "ramen" duplicates if needed. 
+            // For now, exact match.
+            if (data.foodName && !seenNames.has(data.foodName)) {
+                seenNames.add(data.foodName);
+                uniqueMeals.push({ id: doc.id, ...data });
+            }
+            if (uniqueMeals.length >= limitCount) break;
+        }
+
+        return uniqueMeals;
+    } catch (e) {
+        console.error("Error fetching recent meals:", e);
+        return [];
+    }
+};
+
+// Recipe Management
+const getRecipesRef = (userId) => collection(db, "users", userId, "recipes");
+
+export const addRecipeToFirestore = async (userId, recipe) => {
+    try {
+        const recipesRef = getRecipesRef(userId);
+        const payload = cleanData({
+            ...recipe,
+            createdAt: Timestamp.now(),
+            updatedAt: Timestamp.now()
+        });
+        await addDoc(recipesRef, payload);
+    } catch (e) {
+        console.error("Error adding recipe:", e);
+        throw e;
+    }
+};
+
+export const getRecipesFromFirestore = async (userId) => {
+    try {
+        const q = query(getRecipesRef(userId), orderBy("createdAt", "desc"));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+    } catch (e) {
+        console.error("Error fetching recipes:", e);
+        return [];
+    }
+};
+
+export const deleteRecipeFromFirestore = async (userId, recipeId) => {
+    try {
+        const recipeDoc = doc(db, "users", userId, "recipes", recipeId);
+        await deleteDoc(recipeDoc);
+    } catch (e) {
+        console.error("Error deleting recipe:", e);
     }
 };

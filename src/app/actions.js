@@ -1,7 +1,7 @@
 "use server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const apiKey = process.env.GEMINI_API_KEY;
+const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
 // Models to try in order of preference
 const MODELS_TO_TRY = [
@@ -11,7 +11,7 @@ const MODELS_TO_TRY = [
     "gemini-flash-latest"     // Fast fallback
 ];
 
-export const analyzeImageWithGemini = async (base64Image) => {
+export const analyzeImageWithGemini = async (base64Image, context = "") => {
     if (!apiKey) {
         console.warn("No API Key found");
         return { error: "API Key missing" };
@@ -27,25 +27,27 @@ export const analyzeImageWithGemini = async (base64Image) => {
     };
 
     const prompt = `
-      あなたは世界最高峰の栄養管理AIです。
-      「Gemini 3 Thinking Mode」として、以下の画像を深く、論理的に分析してください。
-      
-      まず、<thinking>タグの中で、詳細な思考プロセスを展開してください。
-      - 料理の特定（特徴、彩り、調理法）
-      - 量の推定（皿のサイズ、比較対象、盛り付けの高さ）
-      - コンテキスト読解（1人分か、シェアか）
-      - カロリー計算の根拠
-      
-      その後、以下のJSON形式で結果を出力してください。
-      
-      {
-        "foodName": "料理名",
-        "calories": 数値,
-        "macros": { "protein": 数値, "fat": 数値, "carbs": 数値 },
-        "breakdown": ["食材A", "食材B"],
-        "reasoning": "ユーザーに表示する、あなたの分析結果の要約（日本語）"
-      }
-    `;
+          あなたは世界最高峰の栄養管理AIです。
+          「Gemini 3 Thinking Mode」として、以下の画像を深く、論理的に分析してください。
+
+          【ユーザーからの補足情報】
+          ${context ? `ユーザーは写真についてこう述べています: "「${context}」"\n\n**重要: ユーザーの補足情報を画像情報よりも優先してください。**\n例えば「半分食べた」とあれば、画像で満杯に見えても**必ずカロリーを50%に減らして**計算してください。「ご飯なし」とあれば、画像にご飯が写っていても**炭水化物を除外**してください。` : "特になし。"}
+          
+          まず、<thinking>タグの中で、詳細な思考プロセスを展開してください。
+          - 料理の特定
+          - コンテキストの反映（ユーザー補足がある場合、計算式を明示すること）
+          - 量の推定
+          
+          その後、以下のJSON形式で結果を出力してください。
+          
+          {
+            "foodName": "料理名",
+            "calories": 数値,
+            "macros": { "protein": 数値, "fat": 数値, "carbs": 数値 },
+            "breakdown": ["食材A", "食材B"],
+            "reasoning": "ユーザーに表示する、あなたの分析結果の要約（日本語）。補足情報の反映についても触れてください。"
+          }
+        `;
 
     // Try models sequentially
     let lastError = null;
@@ -86,7 +88,7 @@ export const analyzeImageWithGemini = async (base64Image) => {
     return { error: `All models failed. Last error: ${lastError?.message}` };
 };
 
-export const searchFoodWithGemini = async (query) => {
+export const searchFoodWithGemini = async (query, historyContext = "") => {
     if (!apiKey) {
         return { error: "API Key missing" };
     }
@@ -97,10 +99,14 @@ export const searchFoodWithGemini = async (query) => {
       あなたは厳格な栄養データベースです。ユーザーが「${query}」と検索しました。
       実在する、関連性の高い食事候補を10個提案してください。
 
+      【パーソナライズ考慮】
+      ユーザーの過去の食事履歴: ${historyContext}
+      - もし履歴の中に、検索語句「${query}」と一致または非常に近いものがあれば、それを優先的に上位に提案してください（ユーザーがよく食べるものを出しやすくするため）。
+      - ただし、検索語句と関係のない履歴は無視してください。
+
       【重要: ハルシネーション（嘘の生成）を禁止します】
       - 「${query}」そのものが存在しない・曖昧な場合は、推測で捏造せず、一般的な近い料理や、「該当なし」と判断できる候補を出してください。
       - お店のメニュー名が含まれる場合、公式情報を優先してください。
-      - ユーザーが「ラーメンと餃子」のように複数の食品を検索した場合、それぞれの食品について有力な候補を提案してください（例: ラーメンの候補数点、餃子の候補数点）。
       - ユーザーが「ラーメンと餃子」のように複数の食品を検索した場合、それぞれの食品について有力な候補を提案してください（例: ラーメンの候補数点、餃子の候補数点）。
       
       出力形式 (JSONのみ):
@@ -110,7 +116,7 @@ export const searchFoodWithGemini = async (query) => {
             "foodName": "正確な商品名/料理名",
             "calories": 数値 (kcal),
             "macros": { "protein": 数値(g), "fat": 数値(g), "carbs": 数値(g) },
-            "reasoning": "選出理由 (例: 2024年現在の公式情報に基づく / 一般的なMサイズ)"
+            "reasoning": "選出理由 (例: 履歴に基づく / 2024年現在の公式情報)"
           }
         ]
       }
@@ -219,4 +225,156 @@ export const evaluateDailyLog = async (data) => {
     }
 
     return { error: "Failed to evaluate log" };
+};
+
+export const calculateRecipeWithGemini = async (ingredients) => {
+    if (!apiKey) return { error: "API Key missing" };
+    const genAI = new GoogleGenerativeAI(apiKey);
+
+    const prompt = `
+      あなたは栄養計算のプロです。以下の食材リストから、料理全体の栄養価を計算してください。
+      
+      【食材リスト】
+      ${ingredients}
+
+      【タスク】
+      1. リストの内容を解釈し、一般的な料理名を推測してください。
+      2. 提供された食材リスト全体が「何人前」に相当するか推定してください。（例: 豆腐300gとひき肉100gなら概ね2人前など）
+      3. **1人前あたり**のカロリーとPFCを計算してください。（全体の栄養価 ÷ 推定人数）
+
+      出力形式 (JSONのみ):
+      {
+        "foodName": "推測される料理名",
+        "calories": 1人前あたりの数値 (kcal/整数),
+        "macros": { "protein": 1人前数値(g), "fat": 1人前数値(g), "carbs": 1人前数値(g) },
+        "reasoning": "計算の根拠（例: 全体を2人前と推定。合計XXXkcal ÷ 2...）"
+      }
+    `;
+
+    let lastError = null;
+
+    for (const modelName of MODELS_TO_TRY) {
+        try {
+            console.log(`Calculating recipe with model: ${modelName}`);
+            const model = genAI.getGenerativeModel({ model: modelName });
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                return JSON.parse(jsonMatch[0]);
+            }
+        } catch (e) {
+            console.warn(`Recipe Calc Model ${modelName} failed:`, e.message);
+            lastError = e;
+        }
+    }
+
+    return { error: `All models failed. Last check: ${lastError?.message}` };
+};
+
+export const suggestNextMeal = async (history, dailyLog) => {
+    const prompt = `
+        あなたはプロの管理栄養士です。
+        ユーザーの食事履歴と、本日の摂取状況から、**次の食事で何を食べると栄養バランスが整うか**を具体的に提案してください。
+
+        【ユーザーの直近の食事履歴】
+        ${history.map(m => `- ${m.foodName} (${m.calories}kcal)`).join('\n')}
+
+        【本日の摂取状況】
+        - 総摂取カロリー: ${dailyLog.totalCalories} kcal
+        - P (タンパク質): ${dailyLog.macros.protein} g
+        - F (脂質): ${dailyLog.macros.fat} g
+        - C (炭水化物): ${dailyLog.macros.carbs} g
+        - 目標カロリー: ${dailyLog.targetCalories} kcal
+
+        【提案のルール】
+        1. 具体的なメニュー名と、なぜそれが良いかを1文で説明してください。
+        2. 3つ提案してください。
+        3. 出力はJSON形式のみで、以下の構造にしてください。
+        {
+            "suggestions": [
+                { "name": "メニュー名", "reason": "理由" },
+                ...
+            ],
+            "advice": "全体的なアドバイスを1文で"
+        }
+    `;
+
+    let lastError = null;
+
+    for (const modelName of MODELS_TO_TRY) {
+        try {
+            if (!apiKey) throw new Error("API Key is missing.");
+            const genAI = new GoogleGenerativeAI(apiKey);
+            const model = genAI.getGenerativeModel({ model: modelName });
+
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text().replace(/```json\n?|\n?```/g, "").trim();
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+
+            if (jsonMatch) {
+                return JSON.parse(jsonMatch[0]);
+            }
+        } catch (error) {
+            console.warn(`Suggestion Model ${modelName} failed:`, error.message);
+            lastError = error;
+        }
+    }
+
+    return { suggestions: [], advice: `現在AIアドバイスを利用できません。(理由: ${lastError?.message || "All models failed"})` };
+};
+
+export const searchRecipesWithGemini = async (query) => {
+    const prompt = `
+        あなたは創作料理のシェフです。
+        ユーザーの要望「${query}」に基づき、美味しくて健康的なレシピを**3つ**考案してください。
+        3つはそれぞれ少し方向性（例えば、時短、低カロリー、ガッツリ系など）を変えてください。
+
+        【要件】
+        1. 一般的なスーパーで手に入る食材を使うこと。
+        2. 手順は簡潔に。
+        3. 以下のJSON形式で出力すること。
+
+        {
+            "recipes": [
+                {
+                    "foodName": "料理名",
+                    "description": "魅力的な説明文（特徴など）",
+                    "ingredients": "材料リスト（テキスト形式で、分量も含む）",
+                    "instructions": ["手順1", "手順2", ...],
+                    "calories": 推定カロリー(数値),
+                    "macros": { "protein": 数値, "fat": 数値, "carbs": 数値 },
+                    "sourceQuery": "Google検索用のクエリ文字列"
+                },
+                ...
+            ]
+        }
+    `;
+
+    let lastError = null;
+
+    for (const modelName of MODELS_TO_TRY) {
+        try {
+            if (!apiKey) throw new Error("API Key is missing.");
+            const genAI = new GoogleGenerativeAI(apiKey);
+            const model = genAI.getGenerativeModel({ model: modelName });
+
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text().replace(/```json\n?|\n?```/g, "").trim();
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+
+            if (jsonMatch) {
+                return JSON.parse(jsonMatch[0]);
+            }
+        } catch (error) {
+            console.warn(`Recipe Search Model ${modelName} failed:`, error.message);
+            lastError = error;
+        }
+    }
+
+    throw lastError || new Error("Recipe search failed");
 };

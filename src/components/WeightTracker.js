@@ -26,14 +26,28 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
         // Sort weights by date ascending
         const sorted = [...weights].sort((a, b) => new Date(a.date) - new Date(b.date));
 
-        // If we have a target date/weight, we might want to project it? 
-        // For now, let's just show history + a reference line
-        return sorted.map(w => ({
-            date: w.date.substring(5), // MM-DD
-            fullDate: w.date,
-            weight: w.weight
+        const data = sorted.map(w => ({
+            x: new Date(w.date).getTime(),
+            date: w.date.substring(5), // Keep for tooltip if needed, but main x is number
+            weight: w.weight,
+            isTarget: false
         }));
-    }, [weights]);
+
+        // Add Target Point if valid and in future
+        if (targetDate && targetWeight && sorted.length > 0) {
+            const lastDate = new Date(sorted[sorted.length - 1].date);
+            const tDate = new Date(targetDate);
+            if (tDate > lastDate) {
+                data.push({
+                    x: tDate.getTime(),
+                    date: targetDate.substring(5),
+                    weight: parseFloat(targetWeight),
+                    isTarget: true
+                });
+            }
+        }
+        return data;
+    }, [weights, targetDate, targetWeight]);
 
     // Calculate Insights
     const currentWeight = weights.length > 0 ? weights[0].weight : null; // weights is desc in prop, wait. 
@@ -152,15 +166,43 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
-                                <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#aaa' }} axisLine={false} tickLine={false} />
+                                <XAxis
+                                    dataKey="x"
+                                    type="number"
+                                    domain={['dataMin', 'dataMax']}
+                                    tickFormatter={(unixTime) => {
+                                        const d = new Date(unixTime);
+                                        return `${d.getMonth() + 1}/${d.getDate()}`;
+                                    }}
+                                    tick={{ fontSize: 12, fill: '#aaa' }}
+                                    axisLine={false}
+                                    tickLine={false}
+                                />
                                 <YAxis domain={['auto', 'auto']} tick={{ fontSize: 12, fill: '#aaa' }} axisLine={false} tickLine={false} unit="kg" />
                                 <Tooltip
+                                    labelFormatter={(unixTime) => new Date(unixTime).toLocaleDateString()}
                                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                                    formatter={(value) => [`${value} kg`, '体重']}
+                                    formatter={(value, name, props) => [
+                                        `${value} kg`,
+                                        props.payload.isTarget ? '目標' : '体重'
+                                    ]}
                                 />
-                                <Line type="monotone" dataKey="weight" stroke="var(--primary)" strokeWidth={3} dot={{ r: 4, fill: 'var(--primary)', strokeWidth: 0 }} activeDot={{ r: 6 }} />
+                                <Line
+                                    type="monotone"
+                                    dataKey="weight"
+                                    stroke="var(--primary)"
+                                    strokeWidth={3}
+                                    dot={(props) => {
+                                        const { cx, cy, payload } = props;
+                                        if (payload.isTarget) {
+                                            return <Target key={payload.x} x={cx - 10} y={cy - 10} size={20} color="red" />;
+                                        }
+                                        return <circle key={payload.x} cx={cx} cy={cy} r={4} fill="var(--primary)" stroke="none" />;
+                                    }}
+                                    activeDot={{ r: 6 }}
+                                />
                                 {targetWeight && (
-                                    <ReferenceLine y={targetWeight} label="目標" stroke="red" strokeDasharray="3 3" />
+                                    <ReferenceLine y={targetWeight} stroke="red" strokeDasharray="3 3" />
                                 )}
                             </LineChart>
                         </ResponsiveContainer>

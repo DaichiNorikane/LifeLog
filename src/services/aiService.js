@@ -30,7 +30,7 @@ const resizeImage = (file, maxWidth = 1024) => {
     });
 };
 
-export const analyzeImage = async (file) => {
+export const analyzeImage = async (file, context = "") => {
     return new Promise(async (resolve) => {
         // 1. Resize/Compress file to base64 for API (Client-side)
         // This avoids Vercel's 4.5MB payload limit
@@ -40,7 +40,7 @@ export const analyzeImage = async (file) => {
         setTimeout(async () => {
             try {
                 // Attempt Real API
-                const apiResult = await analyzeImageWithGemini(base64Image);
+                const apiResult = await analyzeImageWithGemini(base64Image, context); // Pass context
 
                 if (apiResult && !apiResult.error) {
                     resolve({

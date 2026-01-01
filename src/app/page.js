@@ -2,8 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import FoodLogger from '@/components/FoodLogger';
 import WeightTracker from '@/components/WeightTracker';
-import EvaluationModal from '@/components/EvaluationModal'; // Imported
-import { Camera, XCircle, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Weight, Utensils, Flame, Activity } from 'lucide-react';
+import EvaluationModal from '@/components/EvaluationModal';
+import AdvisorModal from '@/components/AdvisorModal'; // Imported
+import { Camera, XCircle, ChevronLeft, ChevronRight, Calculator, Weight, Utensils, Flame, Activity, Sparkles } from 'lucide-react';
 
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { addMealToFirestore, getMealsFromFirestore, deleteMealFromFirestore, getWeightsFromFirestore, getUserProfile } from '@/lib/firebase/firestore';
@@ -18,7 +19,10 @@ export default function Home() {
 
   // Modal States
   const [showWeightTracker, setShowWeightTracker] = useState(false);
-  const [showEvaluation, setShowEvaluation] = useState(false); // New State
+  const [showEvaluation, setShowEvaluation] = useState(false);
+  const [showAdvisor, setShowAdvisor] = useState(false); // New: Advisor State
+  const [deleteConfirmation, setDeleteConfirmation] = useState(null);
+  const [initialRecipeSearch, setInitialRecipeSearch] = useState(null);
 
   // Data Loading
   useEffect(() => {
@@ -116,13 +120,22 @@ export default function Home() {
     setShowLogger(false);
   };
 
-  const handleDeleteMeal = async (id, e) => {
+  const handleDeleteMeal = (id, e) => {
     e.stopPropagation();
-    if (!confirm('削除しますか？')) return;
-    if (user) {
-      await deleteMealFromFirestore(user.uid, id);
+    setDeleteConfirmation({ id });
+  };
+
+  const executeDeleteMeal = async () => {
+    if (!deleteConfirmation || !user) return;
+    try {
+      await deleteMealFromFirestore(user.uid, deleteConfirmation.id);
       const savedMeals = await getMealsFromFirestore(user.uid);
       setMeals(savedMeals);
+    } catch (e) {
+      console.error(e);
+      alert('削除に失敗しました');
+    } finally {
+      setDeleteConfirmation(null);
     }
   };
 
@@ -178,6 +191,13 @@ export default function Home() {
           onClick={() => setShowEvaluation(true)} // Toggle Evaluation
           subtext={`タップしてAI評価を見る`}
         />
+
+        {/* New AI Advisor Card (Small one or integrate? Let's add a small button below stats or a new card row) */}
+        {/* Let's just create a Floating or Header button for Advisor? Or maybe replace Weight card with something else? 
+           User wants "Proposal", maybe a dedicated button is good.
+           Let's put it as a banner or extra button.
+        */}
+
         <StatCard
           title="Weight"
           value={selectedWeightEntry ? selectedWeightEntry.weight : '--'}
@@ -187,6 +207,21 @@ export default function Home() {
           onClick={() => setShowWeightTracker(true)}
           subtext={selectedWeightEntry ? '記録済み' : 'タップして管理'}
         />
+      </div>
+
+      {/* AI Advisor Banner */}
+      <div
+        onClick={() => setShowAdvisor(true)}
+        className="glass-panel"
+        style={{ padding: '15px 20px', marginBottom: '25px', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer', background: 'linear-gradient(135deg, #fff 0%, #f3f4f6 100%)', border: '1px solid #c7d2fe' }}
+      >
+        <div style={{ background: '#e0e7ff', padding: '10px', borderRadius: '50%', color: '#4338ca' }}>
+          <Sparkles size={24} />
+        </div>
+        <div>
+          <div style={{ fontWeight: 'bold', fontSize: '1rem', color: '#3730a3' }}>AI食事提案</div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>今のあなたに最適な次の一食を提案します</div>
+        </div>
       </div>
 
       {/* PFC Balance Card */}
@@ -249,6 +284,44 @@ export default function Home() {
         </div>
       )}
 
+      {showAdvisor && (
+        <div style={{ position: 'relative', zIndex: 1002 }}>
+          <AdvisorModal
+            history={meals.slice(0, 30)} // Pass recent history
+            dailyLog={{
+              totalCalories,
+              macros: {
+                protein: displayMeals.reduce((acc, m) => acc + (m.macros?.protein || 0), 0),
+                fat: displayMeals.reduce((acc, m) => acc + (m.macros?.fat || 0), 0),
+                carbs: displayMeals.reduce((acc, m) => acc + (m.macros?.carbs || 0), 0)
+              },
+              targetCalories
+            }}
+            onClose={() => setShowAdvisor(false)}
+            onSuggestionClick={(query) => {
+              setShowAdvisor(false);
+              setInitialRecipeSearch(query);
+              setShowLogger(true);
+            }}
+          />
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {
+        deleteConfirmation && (
+          <div className="fixed-overlay" style={{ zIndex: 2000 }}>
+            <div className="glass-panel" style={{ padding: '20px', width: '300px', textAlign: 'center' }}>
+              <p style={{ marginBottom: '20px', fontWeight: 'bold' }}>記録を削除しますか？</p>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={() => setDeleteConfirmation(null)} style={{ flex: 1, padding: '10px', background: 'transparent', border: '1px solid var(--border-subtle)', borderRadius: '8px' }}>キャンセル</button>
+                <button onClick={executeDeleteMeal} className="btn-primary" style={{ flex: 1, background: '#ff4d4d', borderColor: '#ff4d4d' }}>削除</button>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
       {/* Meal Timeline */}
       <div style={{ marginBottom: '40px' }}>
         <h3 style={{ fontSize: '1rem', color: 'var(--text-primary)', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -305,13 +378,23 @@ export default function Home() {
         </button>
       </div>
 
-      {showLogger && (
-        <React.Suspense fallback={null}>
-          <div style={{ position: 'relative', zIndex: 999 }}>
-            <FoodLogger onLogMeal={handleLogMeal} onCancel={() => setShowLogger(false)} activeDate={currentDate} />
-          </div>
-        </React.Suspense>
-      )}
+      {
+        showLogger && (
+          <React.Suspense fallback={null}>
+            <div style={{ position: 'relative', zIndex: 999 }}>
+              <FoodLogger
+                onLogMeal={handleLogMeal}
+                onCancel={() => {
+                  setShowLogger(false);
+                  setInitialRecipeSearch(null);
+                }}
+                activeDate={currentDate}
+                initialRecipeSearch={initialRecipeSearch}
+              />
+            </div>
+          </React.Suspense>
+        )
+      }
 
       <style jsx global>{`
         body { background-color: #F7F9FC; color: #2D3748; }
@@ -325,6 +408,6 @@ export default function Home() {
         @keyframes zoomIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
         .empty-state { text-align: center; color: #A0AEC0; padding: 40px; border: 2px dashed #E2E8F0; border-radius: 20px; }
       `}</style>
-    </main>
+    </main >
   );
 }

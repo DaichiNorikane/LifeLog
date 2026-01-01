@@ -500,7 +500,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
 
                 {/* --- SEARCH --- */}
                 {activeTab === 'search' && (
-                    <div className="fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    <div className="fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>履歴に基づいた候補も表示されます。</p>
                         <form onSubmit={handleSearch} style={{ display: 'flex', gap: '8px', marginBottom: '15px' }}>
                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '5px' }}>
@@ -513,7 +513,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                             </div>
                             <button type="submit" className="btn-primary" disabled={loading} style={{ padding: '0 15px' }}>{loading ? <Loader2 className="spin" /> : <Search />}</button>
                         </form>
-                        <div style={{ flex: 1, overflowY: 'auto' }}>
+                        <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', minHeight: 0 }}>
                             {searchResults.map((item, i) => (
                                 <div key={i} onClick={() => { addItemToPending(item, 'search'); alert('追加しました'); }} className="glass-panel hover-card" style={{ padding: '12px', marginBottom: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div>
@@ -546,7 +546,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
 
                 {/* --- RECIPES --- */}
                 {activeTab === 'recipes' && (
-                    <div className="fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    <div className="fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                         {isCreatingRecipe ? (
                             <form onSubmit={handleCreateRecipe}>
                                 <div style={{ marginBottom: '10px' }}>
@@ -578,7 +578,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                             </form>
                         ) : recipeSearchMode ? (
                             /* Search Mode UI */
-                            <div className="fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                            <div className="fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                                 <div style={{ marginBottom: '15px' }}>
                                     <button onClick={() => setRecipeSearchMode(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '10px' }}>
                                         <ChevronRight style={{ transform: 'rotate(180deg)' }} size={16} /> 戻る
@@ -597,7 +597,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                 </div>
 
                                 {foundRecipes.length > 0 && (
-                                    <div className="fade-in" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                    <div className="fade-in" style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', minHeight: 0, display: 'flex', flexDirection: 'column', gap: '15px' }}>
                                         {foundRecipes.map((recipe, idx) => (
                                             <div key={idx} className="glass-panel" style={{ padding: '15px', border: '1px solid var(--primary-glow)' }}>
                                                 <h3 style={{ margin: '0 0 5px 0', fontSize: '1.1rem' }}>{recipe.foodName}</h3>
@@ -660,7 +660,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                         <h3 style={{ margin: 0 }}>{viewingRecipe.foodName}</h3>
                                         <button onClick={() => setViewingRecipe(null)} style={{ background: 'none', border: 'none' }}><X /></button>
                                     </div>
-                                    <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
+                                    <div style={{ padding: '20px', overflowY: 'auto', flex: 1, overscrollBehavior: 'contain', minHeight: 0 }}>
                                         {viewingRecipe.description && <p style={{ color: 'var(--text-secondary)', marginBottom: '15px' }}>{viewingRecipe.description}</p>}
 
                                         <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', fontSize: '1rem', fontWeight: 'bold', background: 'var(--bg-main)', padding: '10px', borderRadius: '8px' }}>

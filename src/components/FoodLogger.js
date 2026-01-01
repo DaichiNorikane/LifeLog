@@ -460,7 +460,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
 
     return (
         <div className="fixed-overlay" style={{ ...overlayStyle }}>
-            <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '20px', minHeight: '600px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+            <div className="glass-panel" style={{ width: '95%', maxWidth: '400px', padding: '20px', maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative' }}>
                 <button onClick={onCancel} style={{ position: 'absolute', top: '15px', right: '15px', background: 'transparent', border: 'none', color: 'var(--text-secondary)', zIndex: 10, cursor: 'pointer' }}>
                     <X />
                 </button>

@@ -390,12 +390,20 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
     const logAllItems = async () => {
         const validItems = pendingItems.filter(i => i.status === 'done' && i.result);
         if (validItems.length === 0) return;
-        const mealsToLog = validItems.map(item => ({
-            ...item.result,
-            mealType: mealType, // Add selected meal type
-            timestamp: new Date().toISOString()
-        }));
-        await onLogMeal(mealsToLog);
+
+        setLoading(true);
+        try {
+            const mealsToLog = validItems.map(item => ({
+                ...item.result,
+                mealType: mealType, // Add selected meal type
+                timestamp: new Date().toISOString()
+            }));
+            await onLogMeal(mealsToLog);
+        } catch (error) {
+            console.error("Logging failed", error);
+            alert("記録に失敗しました");
+            setLoading(false);
+        }
     };
 
     // --- RENDER ---

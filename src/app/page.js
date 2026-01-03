@@ -24,6 +24,7 @@ export default function Home() {
   const [targetMealType, setTargetMealType] = useState('dinner'); // For Advisor
 
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false); // New: Delete Loading State
   const [initialRecipeSearch, setInitialRecipeSearch] = useState(null);
 
   // Data Loading
@@ -140,14 +141,17 @@ export default function Home() {
 
   const executeDeleteMeal = async () => {
     if (!deleteConfirmation || !user) return;
+    setIsDeleting(true);
     try {
       await deleteMealFromFirestore(user.uid, deleteConfirmation.id);
+      // Optimistic update or fetch
       const savedMeals = await getMealsFromFirestore(user.uid);
       setMeals(savedMeals);
     } catch (e) {
       console.error(e);
       alert('削除に失敗しました');
     } finally {
+      setIsDeleting(false);
       setDeleteConfirmation(null);
     }
   };
@@ -427,8 +431,10 @@ export default function Home() {
             <div className="glass-panel" style={{ padding: '20px', width: '300px', textAlign: 'center' }}>
               <p style={{ marginBottom: '20px', fontWeight: 'bold' }}>記録を削除しますか？</p>
               <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={() => setDeleteConfirmation(null)} style={{ flex: 1, padding: '10px', background: 'transparent', border: '1px solid var(--border-subtle)', borderRadius: '8px' }}>キャンセル</button>
-                <button onClick={executeDeleteMeal} className="btn-primary" style={{ flex: 1, background: '#ff4d4d', borderColor: '#ff4d4d' }}>削除</button>
+                <button onClick={() => setDeleteConfirmation(null)} disabled={isDeleting} style={{ flex: 1, padding: '10px', background: 'transparent', border: '1px solid var(--border-subtle)', borderRadius: '8px', cursor: isDeleting ? 'not-allowed' : 'pointer' }}>キャンセル</button>
+                <button onClick={executeDeleteMeal} disabled={isDeleting} className="btn-primary" style={{ flex: 1, background: '#ff4d4d', borderColor: '#ff4d4d', cursor: isDeleting ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                  {isDeleting ? <Loader2 className="spin" size={16} /> : '削除'}
+                </button>
               </div>
             </div>
           </div>
@@ -468,10 +474,20 @@ export default function Home() {
                         onClick={async (e) => {
                           e.stopPropagation();
                           const types = ['breakfast', 'lunch', 'dinner', 'snack'];
-                          const currentIdx = types.indexOf(meal.mealType || 'snack'); // Default to snack if undefined
+                          const currentIdx = types.indexOf(meal.mealType || 'snack');
                           const nextType = types[(currentIdx + 1) % types.length];
-                          // Optimistic update handled by Firestore listener, but let's just trigger update
-                          await updateMealInFirestore(user.uid, meal.id, { mealType: nextType });
+
+                          // 1. Optimistic Update (Immediate UI Feedback)
+                          setMeals(prev => prev.map(m => m.id === meal.id ? { ...m, mealType: nextType } : m));
+
+                          // 2. Background Update
+                          try {
+                            await updateMealInFirestore(user.uid, meal.id, { mealType: nextType });
+                          } catch (err) {
+                            console.error("Failed to update meal type", err);
+                            // Revert if failed (optional, but good practice)
+                            setMeals(prev => prev.map(m => m.id === meal.id ? { ...m, mealType: meal.mealType } : m));
+                          }
                         }}
                         style={{ marginTop: '5px', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-subtle)', background: 'white', cursor: 'pointer', whiteSpace: 'nowrap' }}
                       >

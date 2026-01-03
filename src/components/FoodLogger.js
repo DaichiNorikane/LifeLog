@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from 'react';
-import { Camera, X, Loader2, Search, PenTool, Image as ImageIcon, ChevronRight, Trash2, Clock, BookOpen, Plus, Minus, Save, Sparkles, ExternalLink } from 'lucide-react';
+import { Camera, X, Loader2, Search, PenTool, Image as ImageIcon, ChevronRight, Trash2, Clock, BookOpen, Plus, Minus, Save, Sparkles } from 'lucide-react';
 import { analyzeImage } from '@/services/aiService';
 import { searchFoodWithGemini, calculateRecipeWithGemini, searchRecipesWithGemini } from '@/app/actions';
 import { useAuth } from '@/lib/contexts/AuthContext';
@@ -731,43 +731,16 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                         </div>
 
                                         <div style={{ marginBottom: '20px' }}>
-                                            <h4 style={{ fontSize: '0.9rem', marginBottom: '10px' }}>作り方・詳細</h4>
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                                                {[
-                                                    { name: 'Googleで検索', url: 'https://www.google.com/search?q=', color: '#4285F4' },
-                                                    { name: 'クックパッド', url: 'https://cookpad.com/search/', color: '#ff9200' },
-                                                    { name: 'クラシル', url: 'https://www.kurashiru.com/search?query=', color: '#00af85' },
-                                                    { name: '楽天レシピ', url: 'https://recipe.rakuten.co.jp/search/', color: '#bf0000' }
-                                                ].map(site => {
-                                                    const keyword = viewingRecipe.sourceQuery || (viewingRecipe.foodName + " レシピ");
-                                                    return (
-                                                        <a
-                                                            key={site.name}
-                                                            href={`${site.url}${encodeURIComponent(keyword)}`}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            style={{
-                                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                                padding: '10px', borderRadius: '8px',
-                                                                border: `1px solid ${site.color}`, color: site.color,
-                                                                textDecoration: 'none', fontWeight: 'bold', fontSize: '0.9rem',
-                                                                background: 'white'
-                                                            }}
-                                                        >
-                                                            {site.name} <ExternalLink size={14} style={{ marginLeft: '4px' }} />
-                                                        </a>
-                                                    );
-                                                })}
-                                            </div>
-                                            <p style={{ marginTop: '10px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                                ※詳しい作り方は各レシピサイトでご確認ください。
-                                            </p>
+                                            <h4 style={{ fontSize: '0.9rem', marginBottom: '5px' }}>材料</h4>
+                                            <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{viewingRecipe.ingredients || "なし"}</div>
                                         </div>
 
-                                        {viewingRecipe.ingredients && viewingRecipe.ingredients !== "（詳細は検索リンク先でご確認ください）" && (
+                                        {viewingRecipe.instructions && viewingRecipe.instructions.length > 0 && (
                                             <div style={{ marginBottom: '20px' }}>
-                                                <h4 style={{ fontSize: '0.9rem', marginBottom: '5px' }}>材料 (参考)</h4>
-                                                <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{viewingRecipe.ingredients}</div>
+                                                <h4 style={{ fontSize: '0.9rem', marginBottom: '5px' }}>手順</h4>
+                                                <ol style={{ paddingLeft: '20px', margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                                                    {viewingRecipe.instructions.map((step, i) => <li key={i} style={{ marginBottom: '5px' }}>{step}</li>)}
+                                                </ol>
                                             </div>
                                         )}
 

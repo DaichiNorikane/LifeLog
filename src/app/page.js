@@ -142,23 +142,21 @@ export default function Home() {
   const handleEvaluationComplete = async (result) => {
     if (!user || !result.foodAssessments) return;
 
-    // Create a map for quick access: name -> assessment
-    const assessmentMap = {};
-    result.foodAssessments.forEach(item => {
-      assessmentMap[item.foodName] = item.assessment;
-    });
-
+    // Update meals with assessments using partial name matching
     const updatedMeals = meals.map(meal => {
-      // Evaluate only meals from the evaluated day (usually today or data.date)
-      // Since EvaluationModal is showing today's data, we can just check if foodName matches in map
-      if (assessmentMap[meal.foodName]) {
-        meal.assessment = assessmentMap[meal.foodName];
-        // Fire and forget update to Firestore to avoid blocking UI
+      // Find matching assessment (partial match for flexibility)
+      const matchingAssessment = result.foodAssessments.find(item =>
+        meal.foodName.includes(item.foodName) || item.foodName.includes(meal.foodName)
+      );
+
+      if (matchingAssessment) {
+        meal.assessment = matchingAssessment.assessment;
+        // Fire and forget update to Firestore
         updateMealInFirestore(user.uid, meal.id, { assessment: meal.assessment });
       }
       return meal;
     });
-    setMeals(updatedMeals);
+    setMeals([...updatedMeals]); // Force re-render with new array reference
   };
 
   const StatCard = ({ title, value, unit, icon, color, onClick, subtext }) => (
@@ -404,19 +402,16 @@ export default function Home() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {displayMeals.map((meal) => {
-              // Color Coding Logic
-              let borderColor = 'transparent';
-              let bgTint = 'white';
+              // Background Color Coding Logic
+              let bgColor = 'white';
               if (meal.assessment === 'positive') {
-                borderColor = '#48BB78'; // Green
-                bgTint = '#F0FFF4';
+                bgColor = 'rgba(72, 187, 120, 0.15)'; // Light Green
               } else if (meal.assessment === 'negative') {
-                borderColor = '#F56565'; // Red
-                bgTint = '#FFF5F5';
+                bgColor = 'rgba(245, 101, 101, 0.15)'; // Light Red
               }
 
               return (
-                <div key={meal.id || meal.timestamp} className="glass-panel" style={{ padding: '15px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)', borderLeft: `5px solid ${borderColor}`, background: bgTint }}>
+                <div key={meal.id || meal.timestamp} className="glass-panel" style={{ padding: '15px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)', background: bgColor }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '45px' }}>
                       <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>

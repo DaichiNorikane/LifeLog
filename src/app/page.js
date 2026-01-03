@@ -266,22 +266,22 @@ export default function Home() {
           icon={<Flame />}
           color="#FF6B6B"
           onClick={() => {
-            const now = new Date();
-            const hour = now.getHours();
-            const mealCount = displayMeals.length;
+            const hour = new Date().getHours();
 
-            // Evening (after 19:00) or 3+ meals logged -> Review mode
-            if (hour >= 19 || mealCount >= 3) {
+            // Evening (after 20:00) -> Review mode, otherwise -> Suggestion mode
+            if (hour >= 20) {
               setShowEvaluation(true);
             } else {
-              // Morning/Afternoon -> Suggestion mode (if meals remain)
               setShowAdvisor(true);
             }
           }}
           subtext={(() => {
             const hour = new Date().getHours();
-            if (hour >= 19 || displayMeals.length >= 3) return 'タップして1日を振り返る';
-            return 'タップして次の食事を提案';
+            if (hour >= 20) return 'タップして1日を振り返る';
+            if (hour < 10) return 'タップして朝食を提案';
+            if (hour < 14) return 'タップして昼食を提案';
+            if (hour < 17) return 'タップして間食を提案';
+            return 'タップして夕食を提案';
           })()}
         />
 

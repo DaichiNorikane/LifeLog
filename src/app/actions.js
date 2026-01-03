@@ -282,9 +282,18 @@ export const calculateRecipeWithGemini = async (ingredients) => {
 };
 
 export const suggestNextMeal = async (history, dailyLog) => {
+    // Determine meal category based on current time
+    const now = new Date();
+    const hour = now.getHours();
+    let mealCategory = "夕食";
+    if (hour < 10) mealCategory = "朝食";
+    else if (hour < 14) mealCategory = "昼食";
+    else if (hour < 17) mealCategory = "間食・おやつ";
+
     const prompt = `
         あなたはプロの管理栄養士です。
-        ユーザーの食事履歴と、本日の摂取状況から、**次の食事で何を食べると栄養バランスが整うか**を具体的に提案してください。
+        現在の時刻は${hour}時です。ユーザーは**${mealCategory}**を探しています。
+        ユーザーの食事履歴と、本日の摂取状況から、次の${mealCategory}で何を食べると栄養バランスが整うか、具体的に提案してください。
 
         【ユーザーの直近の食事履歴】
         ${history.map(m => `- ${m.foodName} (${m.calories}kcal)`).join('\n')}
@@ -297,10 +306,11 @@ export const suggestNextMeal = async (history, dailyLog) => {
         - 目標カロリー: ${dailyLog.targetCalories} kcal
 
         【提案のルール】
-        1. 具体的なメニュー名と、なぜそれが良いかを1文で説明してください。
+        1. ${mealCategory}にふさわしい具体的なメニュー名と、なぜそれが良いかを1文で説明してください。
         2. 3つ提案してください。
         3. 出力はJSON形式のみで、以下の構造にしてください。
         {
+            "mealCategory": "${mealCategory}",
             "suggestions": [
                 { "name": "メニュー名", "reason": "理由" },
                 ...

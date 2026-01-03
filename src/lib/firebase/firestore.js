@@ -102,6 +102,18 @@ export const deleteMealFromFirestore = async (userId, mealId) => {
 };
 
 
+// Update a meal
+export const updateMealInFirestore = async (userId, mealId, updates) => {
+    try {
+        const mealDoc = doc(db, "users", userId, "meals", mealId);
+        const cleanUpdates = cleanData({ ...updates, updatedAt: Timestamp.now() });
+        await setDoc(mealDoc, cleanUpdates, { merge: true });
+    } catch (e) {
+        console.error("Error updating meal: ", e);
+        throw e;
+    }
+};
+
 // Save User Profile
 export const saveUserProfile = async (userId, profile) => {
     try {

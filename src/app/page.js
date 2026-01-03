@@ -7,7 +7,7 @@ import AdvisorModal from '@/components/AdvisorModal'; // Imported
 import { Camera, XCircle, ChevronLeft, ChevronRight, Calculator, Weight, Utensils, Flame, Activity, Sparkles, Loader2, LogIn } from 'lucide-react';
 
 import { useAuth } from '@/lib/contexts/AuthContext';
-import { addMealToFirestore, getMealsFromFirestore, deleteMealFromFirestore, getWeightsFromFirestore, getUserProfile } from '@/lib/firebase/firestore';
+import { addMealToFirestore, getMealsFromFirestore, deleteMealFromFirestore, getWeightsFromFirestore, getUserProfile, updateMealInFirestore } from '@/lib/firebase/firestore';
 
 export default function Home() {
   const { user, logOut, googleSignIn, loading } = useAuth();
@@ -139,6 +139,28 @@ export default function Home() {
     }
   };
 
+  const handleEvaluationComplete = async (result) => {
+    if (!user || !result.foodAssessments) return;
+
+    // Create a map for quick access: name -> assessment
+    const assessmentMap = {};
+    result.foodAssessments.forEach(item => {
+      assessmentMap[item.foodName] = item.assessment;
+    });
+
+    const updatedMeals = meals.map(meal => {
+      // Evaluate only meals from the evaluated day (usually today or data.date)
+      // Since EvaluationModal is showing today's data, we can just check if foodName matches in map
+      if (assessmentMap[meal.foodName]) {
+        meal.assessment = assessmentMap[meal.foodName];
+        // Fire and forget update to Firestore to avoid blocking UI
+        updateMealInFirestore(user.uid, meal.id, { assessment: meal.assessment });
+      }
+      return meal;
+    });
+    setMeals(updatedMeals);
+  };
+
   const StatCard = ({ title, value, unit, icon, color, onClick, subtext }) => (
     <div onClick={onClick} className="glass-panel hover-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '5px', cursor: onClick ? 'pointer' : 'default', position: 'relative', overflow: 'hidden' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -174,7 +196,7 @@ export default function Home() {
             <Activity size={40} color="white" />
           </div>
           <h1 style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '10px' }}>LifeLog</h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>AIで食事管理をもっと簡単に。\n理想の自分へ近づこう。</p>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>AIで食事管理をもっと簡単に。理想の自分へ近づこう。</p>
         </div>
 
         <button onClick={googleSignIn} className="glass-panel hover-card" style={{ padding: '15px 30px', display: 'flex', alignItems: 'center', gap: '15px', fontSize: '1.1rem', fontWeight: 'bold', cursor: 'pointer', border: '1px solid var(--border-subtle)', background: 'white' }}>
@@ -326,6 +348,7 @@ export default function Home() {
           <EvaluationModal
             data={evaluationData}
             onClose={() => setShowEvaluation(false)}
+            onEvaluationComplete={handleEvaluationComplete}
           />
         </div>
       )}
@@ -380,35 +403,48 @@ export default function Home() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {displayMeals.map((meal) => (
-              <div key={meal.id || meal.timestamp} className="glass-panel" style={{ padding: '15px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '45px' }}>
-                    <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>
-                      {new Date(meal.timestamp).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+            {displayMeals.map((meal) => {
+              // Color Coding Logic
+              let borderColor = 'transparent';
+              let bgTint = 'white';
+              if (meal.assessment === 'positive') {
+                borderColor = '#48BB78'; // Green
+                bgTint = '#F0FFF4';
+              } else if (meal.assessment === 'negative') {
+                borderColor = '#F56565'; // Red
+                bgTint = '#FFF5F5';
+              }
+
+              return (
+                <div key={meal.id || meal.timestamp} className="glass-panel" style={{ padding: '15px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)', borderLeft: `5px solid ${borderColor}`, background: bgTint }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '45px' }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>
+                        {new Date(meal.timestamp).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+
+                    <div style={{ width: '40px', height: '40px', background: 'var(--bg-main)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
+                      <Utensils size={18} />
+                    </div>
+
+                    <div>
+                      <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{meal.foodName}</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>P: {meal.macros.protein}g</div>
+                    </div>
                   </div>
 
-                  <div style={{ width: '40px', height: '40px', background: 'var(--bg-main)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
-                    <Utensils size={18} />
-                  </div>
-
-                  <div>
-                    <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{meal.foodName}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>P: {meal.macros.protein}g</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-primary)' }}>
+                      {meal.calories} <span style={{ fontSize: '0.7rem', fontWeight: 400, color: 'var(--text-muted)' }}>kcal</span>
+                    </div>
+                    <button onClick={(e) => handleDeleteMeal(meal.id, e)} style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', opacity: 0.5 }}>
+                      <XCircle size={18} />
+                    </button>
                   </div>
                 </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                  <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-primary)' }}>
-                    {meal.calories} <span style={{ fontSize: '0.7rem', fontWeight: 400, color: 'var(--text-muted)' }}>kcal</span>
-                  </div>
-                  <button onClick={(e) => handleDeleteMeal(meal.id, e)} style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', opacity: 0.5 }}>
-                    <XCircle size={18} />
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

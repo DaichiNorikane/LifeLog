@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Sparkles, Trophy, AlertTriangle, Info } from 'lucide-react';
 import { evaluateDailyLog } from '@/app/actions';
 
-export default function EvaluationModal({ data, onClose }) {
+export default function EvaluationModal({ data, onClose, onEvaluationComplete }) {
     const [result, setResult] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
@@ -16,6 +16,7 @@ export default function EvaluationModal({ data, onClose }) {
                     setError(true);
                 } else {
                     setResult(res);
+                    if (onEvaluationComplete) onEvaluationComplete(res);
                 }
             } catch (e) {
                 console.error(e);

@@ -21,6 +21,8 @@ export default function Home() {
   const [showWeightTracker, setShowWeightTracker] = useState(false);
   const [showEvaluation, setShowEvaluation] = useState(false);
   const [showAdvisor, setShowAdvisor] = useState(false); // New: Advisor State
+  const [targetMealType, setTargetMealType] = useState('dinner'); // For Advisor
+
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
   const [initialRecipeSearch, setInitialRecipeSearch] = useState(null);
 
@@ -266,22 +268,53 @@ export default function Home() {
           icon={<Flame />}
           color="#FF6B6B"
           onClick={() => {
+            const loggedTypes = new Set(displayMeals.map(m => m.mealType));
             const hour = new Date().getHours();
 
-            // Evening (after 20:00) -> Review mode, otherwise -> Suggestion mode
-            if (hour >= 20) {
+            // Check if all main meals are logged
+            if (loggedTypes.has('breakfast') && loggedTypes.has('lunch') && loggedTypes.has('dinner')) {
               setShowEvaluation(true);
-            } else {
-              setShowAdvisor(true);
+              return;
             }
+
+            // Suggestion Logic (Priority: Missing meals in order, respecting time windows)
+            let nextType = 'dinner';
+
+            // 1. Breakfast (Until 12:00)
+            if (!loggedTypes.has('breakfast')) {
+              if (hour < 12) nextType = 'breakfast';
+              // else skipped
+            }
+
+            // 2. Lunch (Until 17:00)
+            if (!loggedTypes.has('lunch')) {
+              // If we haven't decided on breakfast (it was skipped or done), check lunch
+              if (loggedTypes.has('breakfast') || hour >= 12) {
+                if (hour < 17) nextType = 'lunch';
+                // else skipped
+              }
+            }
+
+            // 3. Dinner (Until 22:00, but usually suggested if missing)
+            if (!loggedTypes.has('dinner')) {
+              if (loggedTypes.has('lunch') || hour >= 17) {
+                nextType = 'dinner';
+              }
+            }
+
+            // Fallback: If everything skipped or illogical, decide based on time
+            if (!loggedTypes.has('breakfast') && hour < 12) nextType = 'breakfast';
+            else if (!loggedTypes.has('lunch') && hour < 17) nextType = 'lunch';
+            else if (!loggedTypes.has('dinner')) nextType = 'dinner';
+            else nextType = 'snack';
+
+            setTargetMealType(nextType);
+            setShowAdvisor(true);
           }}
           subtext={(() => {
-            const hour = new Date().getHours();
-            if (hour >= 20) return 'タップして1日を振り返る';
-            if (hour < 10) return 'タップして朝食を提案';
-            if (hour < 14) return 'タップして昼食を提案';
-            if (hour < 17) return 'タップして間食を提案';
-            return 'タップして夕食を提案';
+            const loggedTypes = new Set(displayMeals.map(m => m.mealType));
+            if (loggedTypes.has('breakfast') && loggedTypes.has('lunch') && loggedTypes.has('dinner')) return 'タップして1日を振り返る';
+            return 'タップして次の食事を提案';
           })()}
         />
 
@@ -366,6 +399,7 @@ export default function Home() {
       {showAdvisor && (
         <div style={{ position: 'relative', zIndex: 1002 }}>
           <AdvisorModal
+            targetType={targetMealType} // NEW prop
             history={meals.slice(0, 30)} // Pass recent history
             dailyLog={{
               totalCalories,
@@ -429,6 +463,20 @@ export default function Home() {
                       <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>
                         {new Date(meal.timestamp).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
                       </span>
+                      {/* Meal Type Badge (Click to Rotate) */}
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const types = ['breakfast', 'lunch', 'dinner', 'snack'];
+                          const currentIdx = types.indexOf(meal.mealType || 'snack'); // Default to snack if undefined
+                          const nextType = types[(currentIdx + 1) % types.length];
+                          // Optimistic update handled by Firestore listener, but let's just trigger update
+                          await updateMealInFirestore(user.uid, meal.id, { mealType: nextType });
+                        }}
+                        style={{ marginTop: '5px', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-subtle)', background: 'white', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        {{ breakfast: '🌅 朝食', lunch: '☀️ 昼食', dinner: '🌙 夕食', snack: '🍪 間食' }[meal.mealType] || '🍪 間食'}
+                      </button>
                     </div>
 
                     <div style={{ width: '40px', height: '40px', background: 'var(--bg-main)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>

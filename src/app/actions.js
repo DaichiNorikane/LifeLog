@@ -281,18 +281,20 @@ export const calculateRecipeWithGemini = async (ingredients) => {
     return { error: `All models failed. Last check: ${lastError?.message}` };
 };
 
-export const suggestNextMeal = async (history, dailyLog) => {
-    // Determine meal category based on current time
-    const now = new Date();
-    const hour = now.getHours();
-    let mealCategory = "夕食";
-    if (hour < 10) mealCategory = "朝食";
-    else if (hour < 14) mealCategory = "昼食";
-    else if (hour < 17) mealCategory = "間食・おやつ";
+export const suggestNextMeal = async (history, dailyLog, targetType = 'dinner') => {
+    // Map targetType to Japanese label
+    const labels = {
+        breakfast: '朝食',
+        lunch: '昼食',
+        dinner: '夕食',
+        snack: '間食・おやつ'
+    };
+    const mealCategory = labels[targetType] || '食事';
+    const hour = new Date().getHours();
 
     const prompt = `
         あなたはプロの管理栄養士です。
-        現在の時刻は${hour}時です。ユーザーは**${mealCategory}**を探しています。
+        現在の時刻は${hour}時です。ユーザーは**${mealCategory}**の提案を求めています。
         ユーザーの食事履歴と、本日の摂取状況から、次の${mealCategory}で何を食べると栄養バランスが整うか、具体的に提案してください。
 
         【ユーザーの直近の食事履歴】

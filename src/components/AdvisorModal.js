@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Loader2, Sparkles, Utensils, Search } from 'lucide-react';
 import { suggestNextMeal } from '@/app/actions';
 
-export default function AdvisorModal({ history, dailyLog, onClose, onSuggestionClick }) {
+export default function AdvisorModal({ history, dailyLog, targetType, onClose, onSuggestionClick }) {
     const [suggestions, setSuggestions] = useState([]);
     const [advice, setAdvice] = useState('');
     const [loading, setLoading] = useState(true);
@@ -21,7 +21,7 @@ export default function AdvisorModal({ history, dailyLog, onClose, onSuggestionC
                 if (uniqueHistory.length >= 10) break;
             }
 
-            const result = await suggestNextMeal(uniqueHistory, dailyLog);
+            const result = await suggestNextMeal(uniqueHistory, dailyLog, targetType);
             setSuggestions(result.suggestions || []);
             setAdvice(result.advice || "アドバイスを取得できませんでした。");
             setLoading(false);
@@ -36,7 +36,9 @@ export default function AdvisorModal({ history, dailyLog, onClose, onSuggestionC
                 {/* Header */}
                 <div style={{ padding: '20px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
                     <h2 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <Sparkles size={20} /> AI 食事アドバイザー
+                        <Sparkles size={20} /> AI 食事アドバイザー ({
+                            { breakfast: '朝食', lunch: '昼食', dinner: '夕食', snack: '間食' }[targetType] || '食事'
+                        })
                     </h2>
                     <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white' }}>
                         <X size={18} />

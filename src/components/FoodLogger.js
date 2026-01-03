@@ -92,6 +92,17 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
 
     // --- Handlers ---
 
+    // Helper: Default Meal Type based on time
+    const getDefaultMealType = () => {
+        const hour = new Date().getHours();
+        if (hour >= 4 && hour < 10) return 'breakfast';
+        if (hour >= 10 && hour < 16) return 'lunch';
+        if (hour >= 16 || hour < 4) return 'dinner';
+        return 'snack';
+    };
+
+    const [mealType, setMealType] = useState(getDefaultMealType());
+
     // ... (Resize Image Helper same as before) ...
     const resizeImage = (file, maxWidth = 800) => {
         return new Promise((resolve) => {
@@ -381,6 +392,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
         if (validItems.length === 0) return;
         const mealsToLog = validItems.map(item => ({
             ...item.result,
+            mealType: mealType, // Add selected meal type
             timestamp: new Date().toISOString()
         }));
         await onLogMeal(mealsToLog);
@@ -402,6 +414,13 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                             <button onClick={onCancel} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)' }}><X size={20} /></button>
                         </div>
                     </div>
+
+                    {/* Meal Type Selection */}
+                    <div style={{ marginBottom: '10px' }}>
+                        <p style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-secondary)', marginBottom: '5px' }}>いつの食事ですか？</p>
+                        <MealTypeSelector value={mealType} onChange={setMealType} />
+                    </div>
+
                     <div style={{ flex: 1, overflowY: 'auto', marginBottom: '20px' }}>
                         {pendingItems.map((item) => (
                             <div key={item.id} className="glass-panel" style={{ padding: '10px', marginBottom: '10px', display: 'flex', gap: '10px', alignItems: 'center', border: '1px solid var(--border-subtle)' }}>
@@ -767,6 +786,9 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                 {activeTab === 'manual' && (
                     <div className="fade-in" style={{ flex: 1 }}>
                         <form onSubmit={handleManualSubmit}>
+                            <div style={{ marginBottom: '15px' }}>
+                                <MealTypeSelector value={mealType} onChange={setMealType} />
+                            </div>
                             <div style={{ marginBottom: '10px' }}><label style={labelStyle}>料理名</label><input required style={inputStyle} value={manualForm.foodName} onChange={e => setManualForm({ ...manualForm, foodName: e.target.value })} /></div>
                             <div style={{ marginBottom: '10px' }}><label style={labelStyle}>カロリー</label><input type="number" required style={inputStyle} value={manualForm.calories} onChange={e => setManualForm({ ...manualForm, calories: e.target.value })} /></div>
                             <div style={{ marginBottom: '20px' }}><label style={labelStyle}>タンパク質 (g)</label><input type="number" style={inputStyle} value={manualForm.protein} onChange={e => setManualForm({ ...manualForm, protein: e.target.value })} /></div>
@@ -811,3 +833,40 @@ const TabButton = ({ active, onClick, icon, label }) => (
 const overlayStyle = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' };
 const inputStyle = { width: '100%', padding: '12px', background: '#FFFFFF', border: '1px solid var(--border-subtle)', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '1rem', outline: 'none' };
 const labelStyle = { display: 'block', marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem' };
+
+const MealTypeSelector = ({ value, onChange }) => {
+    const types = [
+        { id: 'breakfast', label: '朝食', icon: '🌅' },
+        { id: 'lunch', label: '昼食', icon: '☀️' },
+        { id: 'dinner', label: '夕食', icon: '🌙' },
+        { id: 'snack', label: '間食', icon: '🍪' }
+    ];
+    return (
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '15px' }}>
+            {types.map(t => (
+                <button
+                    key={t.id}
+                    onClick={() => onChange(t.id)}
+                    style={{
+                        flex: 1,
+                        padding: '8px 4px',
+                        borderRadius: '8px',
+                        border: value === t.id ? '2px solid var(--primary)' : '1px solid var(--border-subtle)',
+                        background: value === t.id ? 'var(--primary-glow)' : 'white',
+                        color: value === t.id ? 'var(--primary-dark)' : 'var(--text-secondary)',
+                        fontSize: '0.85rem',
+                        fontWeight: value === t.id ? 'bold' : 'normal',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '2px'
+                    }}
+                >
+                    <span style={{ fontSize: '1.2rem' }}>{t.icon}</span>
+                    <span>{t.label}</span>
+                </button>
+            ))}
+        </div>
+    );
+};

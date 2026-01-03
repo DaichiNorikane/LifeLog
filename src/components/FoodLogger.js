@@ -48,6 +48,12 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
     const [foundRecipes, setFoundRecipes] = useState([]); // Array of recipes
     const [isSearchingRecipe, setIsSearchingRecipe] = useState(false);
     const [viewingRecipe, setViewingRecipe] = useState(null); // For viewing details (found or saved)
+    const [toast, setToast] = useState(null);
+
+    const showToast = (msg) => {
+        setToast(msg);
+        setTimeout(() => setToast(null), 2000);
+    };
 
     // Initial Load & Auto Search
     useEffect(() => {
@@ -522,7 +528,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                         .filter(item => item.foodName.toLowerCase().includes(searchQueries[0].toLowerCase()))
                                         .slice(0, 5)
                                         .map((item, i) => (
-                                            <div key={`hist-${i}`} onClick={() => { addItemToPending(item, 'history'); alert('追加しました'); }} className="glass-panel hover-card" style={{ padding: '12px', marginBottom: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f0fdf4', borderLeft: '3px solid #48BB78' }}>
+                                            <div key={`hist-${i}`} onClick={() => { addItemToPending(item, 'history'); showToast('履歴から追加しました'); }} className="glass-panel hover-card" style={{ padding: '12px', marginBottom: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f0fdf4', borderLeft: '3px solid #48BB78' }}>
                                                 <div>
                                                     <div style={{ fontWeight: 'bold' }}>{item.foodName}</div>
                                                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.calories} kcal</div>
@@ -541,7 +547,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                 <>
                                     <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '5px' }}>✨ AI検索結果:</p>
                                     {searchResults.map((item, i) => (
-                                        <div key={i} onClick={() => { addItemToPending(item, 'search'); alert('追加しました'); }} className="glass-panel hover-card" style={{ padding: '12px', marginBottom: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div key={i} onClick={() => { addItemToPending(item, 'search'); showToast('AI検索から追加しました'); }} className="glass-panel hover-card" style={{ padding: '12px', marginBottom: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                             <div>
                                                 <div style={{ fontWeight: 'bold' }}>{item.foodName}</div>
                                                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.calories} kcal</div>
@@ -783,6 +789,16 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                     </div>
                 </div>
             )}
+            {/* Toast notification */}
+            {toast && (
+                <div style={{ position: 'fixed', bottom: '100px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(45, 55, 72, 0.9)', color: 'white', padding: '10px 20px', borderRadius: '30px', zIndex: 3000, fontSize: '0.9rem', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', animation: 'slideUp 0.3s ease-out forwards' }}>
+                    {toast}
+                </div>
+            )}
+
+            <style jsx>{`
+                @keyframes slideUp { from { transform: translate(-50%, 20px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+            `}</style>
         </div>
     );
 }

@@ -501,7 +501,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                 {/* --- SEARCH --- */}
                 {activeTab === 'search' && (
                     <div className="fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>履歴に基づいた候補も表示されます。</p>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>入力中に履歴から候補を表示。AI検索はボタンをタップ。</p>
                         <form onSubmit={handleSearch} style={{ display: 'flex', gap: '8px', marginBottom: '15px' }}>
                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '5px' }}>
                                 {searchQueries.map((q, i) => (
@@ -511,18 +511,46 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                     </div>
                                 ))}
                             </div>
-                            <button type="submit" className="btn-primary" disabled={loading} style={{ padding: '0 15px' }}>{loading ? <Loader2 className="spin" /> : <Search />}</button>
+                            <button type="submit" className="btn-primary" disabled={loading} style={{ padding: '0 15px' }}>{loading ? <Loader2 className="spin" /> : <><Sparkles size={16} /><span style={{ fontSize: '0.7rem' }}>AI</span></>}</button>
                         </form>
                         <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', minHeight: 0 }}>
-                            {searchResults.map((item, i) => (
-                                <div key={i} onClick={() => { addItemToPending(item, 'search'); alert('追加しました'); }} className="glass-panel hover-card" style={{ padding: '12px', marginBottom: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div>
-                                        <div style={{ fontWeight: 'bold' }}>{item.foodName}</div>
-                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.calories} kcal</div>
-                                    </div>
-                                    <Plus size={18} color="var(--primary)" />
-                                </div>
-                            ))}
+                            {/* Quick History Suggestions (before AI search) */}
+                            {searchQueries[0] && searchQueries[0].length > 0 && searchResults.length === 0 && (
+                                <>
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '5px' }}>💡 履歴から候補:</p>
+                                    {historyItems
+                                        .filter(item => item.foodName.toLowerCase().includes(searchQueries[0].toLowerCase()))
+                                        .slice(0, 5)
+                                        .map((item, i) => (
+                                            <div key={`hist-${i}`} onClick={() => { addItemToPending(item, 'history'); alert('追加しました'); }} className="glass-panel hover-card" style={{ padding: '12px', marginBottom: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f0fdf4', borderLeft: '3px solid #48BB78' }}>
+                                                <div>
+                                                    <div style={{ fontWeight: 'bold' }}>{item.foodName}</div>
+                                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.calories} kcal</div>
+                                                </div>
+                                                <Plus size={18} color="var(--primary)" />
+                                            </div>
+                                        ))
+                                    }
+                                    {historyItems.filter(item => item.foodName.toLowerCase().includes(searchQueries[0].toLowerCase())).length === 0 && (
+                                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '10px' }}>一致する履歴がありません。AI検索をお試しください。</p>
+                                    )}
+                                </>
+                            )}
+                            {/* AI Search Results */}
+                            {searchResults.length > 0 && (
+                                <>
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '5px' }}>✨ AI検索結果:</p>
+                                    {searchResults.map((item, i) => (
+                                        <div key={i} onClick={() => { addItemToPending(item, 'search'); alert('追加しました'); }} className="glass-panel hover-card" style={{ padding: '12px', marginBottom: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div>
+                                                <div style={{ fontWeight: 'bold' }}>{item.foodName}</div>
+                                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.calories} kcal</div>
+                                            </div>
+                                            <Plus size={18} color="var(--primary)" />
+                                        </div>
+                                    ))}
+                                </>
+                            )}
                         </div>
                     </div>
                 )}

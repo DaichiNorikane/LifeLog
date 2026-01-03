@@ -44,6 +44,17 @@ export default function Home() {
     if (user) loadData();
   }, [user]);
 
+  // Lock body scroll when any modal is open
+  useEffect(() => {
+    const isAnyModalOpen = showLogger || showWeightTracker || showEvaluation || showAdvisor || deleteConfirmation;
+    if (isAnyModalOpen) {
+      document.body.classList.add('modal-open');
+    } else {
+      document.body.classList.remove('modal-open');
+    }
+    return () => document.body.classList.remove('modal-open'); // Cleanup
+  }, [showLogger, showWeightTracker, showEvaluation, showAdvisor, deleteConfirmation]);
+
   const refreshWeights = async () => {
     if (user) {
       const w = await getWeightsFromFirestore(user.uid);
@@ -254,8 +265,24 @@ export default function Home() {
           unit="kcal"
           icon={<Flame />}
           color="#FF6B6B"
-          onClick={() => setShowEvaluation(true)} // Toggle Evaluation
-          subtext={`タップしてAI評価を見る`}
+          onClick={() => {
+            const now = new Date();
+            const hour = now.getHours();
+            const mealCount = displayMeals.length;
+
+            // Evening (after 19:00) or 3+ meals logged -> Review mode
+            if (hour >= 19 || mealCount >= 3) {
+              setShowEvaluation(true);
+            } else {
+              // Morning/Afternoon -> Suggestion mode (if meals remain)
+              setShowAdvisor(true);
+            }
+          }}
+          subtext={(() => {
+            const hour = new Date().getHours();
+            if (hour >= 19 || displayMeals.length >= 3) return 'タップして1日を振り返る';
+            return 'タップして次の食事を提案';
+          })()}
         />
 
         {/* New AI Advisor Card (Small one or integrate? Let's add a small button below stats or a new card row) */}

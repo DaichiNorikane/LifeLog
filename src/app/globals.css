@@ -5,6 +5,19 @@ body {
   min-height: 100vh;
 }
 
+/* Lock body scroll when modal is open (applied via JS) */
+body.modal-open {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+  height: 100%;
+}
+
+/* Ensure overlay captures all touch events and blocks background */
+.fixed-overlay {
+  touch-action: none; /* Prevent scroll passthrough on iOS */
+}
+
 /* Animations from FoodLogger */
 .spin {
   animation: spin 1s linear infinite;

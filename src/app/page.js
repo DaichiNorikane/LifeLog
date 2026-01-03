@@ -302,21 +302,6 @@ export default function Home() {
         />
       </div>
 
-      {/* AI Advisor Banner */}
-      <div
-        onClick={() => setShowAdvisor(true)}
-        className="glass-panel"
-        style={{ padding: '15px 20px', marginBottom: '25px', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer', background: 'linear-gradient(135deg, #fff 0%, #f3f4f6 100%)', border: '1px solid #c7d2fe' }}
-      >
-        <div style={{ background: '#e0e7ff', padding: '10px', borderRadius: '50%', color: '#4338ca' }}>
-          <Sparkles size={24} />
-        </div>
-        <div>
-          <div style={{ fontWeight: 'bold', fontSize: '1rem', color: '#3730a3' }}>AI食事提案</div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>今のあなたに最適な次の一食を提案します</div>
-        </div>
-      </div>
-
       {/* PFC Balance Card */}
       <div className="glass-panel" style={{ padding: '20px', marginBottom: '25px' }}>
         <h3 style={{ margin: '0 0 15px 0', fontSize: '1rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>

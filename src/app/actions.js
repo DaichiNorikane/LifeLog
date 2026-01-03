@@ -348,25 +348,28 @@ export const suggestNextMeal = async (history, dailyLog, targetType = 'dinner') 
 
 export const searchRecipesWithGemini = async (query) => {
     const prompt = `
-        あなたは創作料理のシェフです。
-        ユーザーの要望「${query}」に基づき、美味しくて健康的なレシピを**3つ**考案してください。
-        3つはそれぞれ少し方向性（例えば、時短、低カロリー、ガッツリ系など）を変えてください。
+        あなたは料理のアシスタントです。
+        ユーザーの要望「${query}」に基づき、おすすめのレシピ（メニュー）を**3つ**提案してください。
+        
+        【重要な方針】
+        - 詳しい作り方や分量は生成しないでください（ユーザーは外部のレシピサイトで確認します）。
+        - その代わり、ユーザーがGoogleやクックパッド等で検索するための「最適な検索キーワード」を提供してください。
+        - カロリーやPFCバランスは、一般的な目安として推測して出力してください。
 
         【要件】
-        1. 一般的なスーパーで手に入る食材を使うこと。
-        2. 手順は簡潔に。
-        3. 以下のJSON形式で出力すること。
+        1. 3つの異なるバリエーションを提案。
+        2. 以下のJSON形式で出力すること。
 
         {
             "recipes": [
                 {
                     "foodName": "料理名",
-                    "description": "魅力的な説明文（特徴など）",
-                    "ingredients": "材料リスト（テキスト形式で、分量も含む）",
-                    "instructions": ["手順1", "手順2", ...],
+                    "description": "魅力的な短い説明",
+                    "ingredients": "（詳細は検索リンク先でご確認ください）",
+                    "instructions": [],
                     "calories": 推定カロリー(数値),
                     "macros": { "protein": 数値, "fat": 数値, "carbs": 数値 },
-                    "sourceQuery": "Google検索用のクエリ文字列"
+                    "sourceQuery": "Google検索用の最適なキーワード（例: 豚肉 キャベツ 味噌炒め レシピ 人気）"
                 },
                 ...
             ]

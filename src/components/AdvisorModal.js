@@ -34,7 +34,7 @@ export default function AdvisorModal({ history, dailyLog, targetType, onClose, o
             <div className="glass-panel zoom-in" style={{ width: '90%', maxWidth: '500px', maxHeight: '85vh', padding: '0', position: 'relative', display: 'flex', flexDirection: 'column' }}>
 
                 {/* Header */}
-                <div style={{ padding: '20px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+                <div style={{ padding: '20px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, borderTopLeftRadius: '20px', borderTopRightRadius: '20px' }}>
                     <h2 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <Sparkles size={20} /> AI 食事アドバイザー ({
                             { breakfast: '朝食', lunch: '昼食', dinner: '夕食', snack: '間食' }[targetType] || '食事'

@@ -730,29 +730,46 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                         </div>
 
                                         <div style={{ marginBottom: '20px' }}>
-                                            <h4 style={{ fontSize: '0.9rem', marginBottom: '5px' }}>材料</h4>
-                                            <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{viewingRecipe.ingredients || "なし"}</div>
+                                            <h4 style={{ fontSize: '0.9rem', marginBottom: '10px' }}>作り方・詳細</h4>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                                {[
+                                                    { name: 'Googleで検索', url: 'https://www.google.com/search?q=', color: '#4285F4' },
+                                                    { name: 'クックパッド', url: 'https://cookpad.com/search/', color: '#ff9200' },
+                                                    { name: 'クラシル', url: 'https://www.kurashiru.com/search?query=', color: '#00af85' },
+                                                    { name: '楽天レシピ', url: 'https://recipe.rakuten.co.jp/search/', color: '#bf0000' }
+                                                ].map(site => {
+                                                    const keyword = viewingRecipe.sourceQuery || (viewingRecipe.foodName + " レシピ");
+                                                    return (
+                                                        <a
+                                                            key={site.name}
+                                                            href={`${site.url}${encodeURIComponent(keyword)}`}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            style={{
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                padding: '10px', borderRadius: '8px',
+                                                                border: `1px solid ${site.color}`, color: site.color,
+                                                                textDecoration: 'none', fontWeight: 'bold', fontSize: '0.9rem',
+                                                                background: 'white'
+                                                            }}
+                                                        >
+                                                            {site.name} <ExternalLink size={14} style={{ marginLeft: '4px' }} />
+                                                        </a>
+                                                    );
+                                                })}
+                                            </div>
+                                            <p style={{ marginTop: '10px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                                ※詳しい作り方は各レシピサイトでご確認ください。
+                                            </p>
                                         </div>
 
-                                        {viewingRecipe.instructions && viewingRecipe.instructions.length > 0 && (
+                                        {viewingRecipe.ingredients && viewingRecipe.ingredients !== "（詳細は検索リンク先でご確認ください）" && (
                                             <div style={{ marginBottom: '20px' }}>
-                                                <h4 style={{ fontSize: '0.9rem', marginBottom: '5px' }}>手順</h4>
-                                                <ol style={{ paddingLeft: '20px', margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                                                    {viewingRecipe.instructions.map((step, i) => <li key={i} style={{ marginBottom: '5px' }}>{step}</li>)}
-                                                </ol>
+                                                <h4 style={{ fontSize: '0.9rem', marginBottom: '5px' }}>材料 (参考)</h4>
+                                                <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{viewingRecipe.ingredients}</div>
                                             </div>
                                         )}
 
-                                        {viewingRecipe.sourceQuery && (
-                                            <a
-                                                href={`https://www.google.com/search?q=${encodeURIComponent(viewingRecipe.sourceQuery)}`}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                style={{ display: 'block', marginTop: '20px', color: 'var(--secondary)', textDecoration: 'none', fontSize: '0.9rem' }}
-                                            >
-                                                🔍 Googleで関連レシピを検索
-                                            </a>
-                                        )}
 
                                         {!recipes.find(r => r.id === viewingRecipe.id) && (
                                             <button onClick={() => importRecipe(viewingRecipe)} className="btn-primary" style={{ width: '100%', marginTop: '20px' }}>
@@ -808,28 +825,32 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
             </div>
 
             {/* Delete Confirmation Modal - Moved outside glass-panel to avoid transform clipping */}
-            {deleteConfirmation && (
-                <div className="fixed-overlay" style={{ ...overlayStyle, zIndex: 120 }}>
-                    <div className="glass-panel" style={{ padding: '20px', width: '300px', textAlign: 'center' }}>
-                        <p style={{ marginBottom: '20px', fontWeight: 'bold' }}>レシピを削除しますか？</p>
-                        <div style={{ display: 'flex', gap: '10px' }}>
-                            <button onClick={() => setDeleteConfirmation(null)} style={{ flex: 1, padding: '10px', background: 'transparent', border: '1px solid var(--border-subtle)', borderRadius: '8px' }}>キャンセル</button>
-                            <button onClick={executeDeleteRecipe} className="btn-primary" style={{ flex: 1, background: '#ff4d4d', borderColor: '#ff4d4d' }}>削除</button>
+            {
+                deleteConfirmation && (
+                    <div className="fixed-overlay" style={{ ...overlayStyle, zIndex: 120 }}>
+                        <div className="glass-panel" style={{ padding: '20px', width: '300px', textAlign: 'center' }}>
+                            <p style={{ marginBottom: '20px', fontWeight: 'bold' }}>レシピを削除しますか？</p>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <button onClick={() => setDeleteConfirmation(null)} style={{ flex: 1, padding: '10px', background: 'transparent', border: '1px solid var(--border-subtle)', borderRadius: '8px' }}>キャンセル</button>
+                                <button onClick={executeDeleteRecipe} className="btn-primary" style={{ flex: 1, background: '#ff4d4d', borderColor: '#ff4d4d' }}>削除</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
             {/* Toast notification */}
-            {toast && (
-                <div style={{ position: 'fixed', bottom: '100px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(45, 55, 72, 0.9)', color: 'white', padding: '10px 20px', borderRadius: '30px', zIndex: 3000, fontSize: '0.9rem', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', animation: 'slideUp 0.3s ease-out forwards' }}>
-                    {toast}
-                </div>
-            )}
+            {
+                toast && (
+                    <div style={{ position: 'fixed', bottom: '100px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(45, 55, 72, 0.9)', color: 'white', padding: '10px 20px', borderRadius: '30px', zIndex: 3000, fontSize: '0.9rem', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', animation: 'slideUp 0.3s ease-out forwards' }}>
+                        {toast}
+                    </div>
+                )
+            }
 
             <style jsx>{`
                 @keyframes slideUp { from { transform: translate(-50%, 20px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
             `}</style>
-        </div>
+        </div >
     );
 }
 

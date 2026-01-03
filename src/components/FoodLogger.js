@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from 'react';
-import { Camera, X, Loader2, Search, PenTool, Image as ImageIcon, ChevronRight, Trash2, Clock, BookOpen, Plus, Minus, Save, Sparkles } from 'lucide-react';
+import { Camera, X, Loader2, Search, PenTool, Image as ImageIcon, ChevronRight, Trash2, Clock, BookOpen, Plus, Minus, Save, Sparkles, ExternalLink } from 'lucide-react';
 import { analyzeImage } from '@/services/aiService';
 import { searchFoodWithGemini, calculateRecipeWithGemini, searchRecipesWithGemini } from '@/app/actions';
 import { useAuth } from '@/lib/contexts/AuthContext';
@@ -380,8 +380,9 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
             instructions: recipe.instructions || [],
             description: recipe.description || ""
         });
-        setRecipeSearchMode(false);
-        setFoundRecipes([]);
+        // Keep search mode active so user can go back
+        // setRecipeSearchMode(false); 
+        // setFoundRecipes([]);
         setViewingRecipe(null);
         setIsCreatingRecipe(true);
     };

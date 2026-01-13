@@ -6,7 +6,7 @@ import { searchFoodWithGemini, calculateRecipeWithGemini, searchRecipesWithGemin
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { getRecentMeals, getRecipesFromFirestore, addRecipeToFirestore, deleteRecipeFromFirestore } from '@/lib/firebase/firestore';
 
-export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRecipeSearch = null }) {
+export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRecipeSearch = null, stockItems = [], savedRecipeSearch, onSaveRecipeSearch }) {
     const [activeTab, setActiveTab] = useState('camera'); // 'camera', 'search', 'manual', 'review', 'history', 'recipes'
     const [loading, setLoading] = useState(false);
     const { user } = useAuth();
@@ -43,9 +43,9 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
     const [deleteConfirmation, setDeleteConfirmation] = useState(null); // New state for delete modal
 
     // Recipe Search State
-    const [recipeSearchMode, setRecipeSearchMode] = useState(false);
-    const [recipeSearchQuery, setRecipeSearchQuery] = useState('');
-    const [foundRecipes, setFoundRecipes] = useState([]); // Array of recipes
+    const [recipeSearchMode, setRecipeSearchMode] = useState(savedRecipeSearch?.results?.length > 0 || initialRecipeSearch);
+    const [recipeSearchQuery, setRecipeSearchQuery] = useState(savedRecipeSearch?.query || '');
+    const [foundRecipes, setFoundRecipes] = useState(savedRecipeSearch?.results || []); // Array of recipes
     const [isSearchingRecipe, setIsSearchingRecipe] = useState(false);
     const [viewingRecipe, setViewingRecipe] = useState(null); // For viewing details (found or saved)
     const [toast, setToast] = useState(null);
@@ -353,7 +353,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
         setIsSearchingRecipe(true);
         setFoundRecipes([]);
         try {
-            const result = await searchRecipesWithGemini(query);
+            const result = await searchRecipesWithGemini(query, stockItems);
             if (result && result.recipes) {
                 setFoundRecipes(result.recipes);
             } else if (result && result.foodName) {
@@ -368,6 +368,13 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
             setIsSearchingRecipe(false);
         }
     };
+
+    // Save state on success
+    useEffect(() => {
+        if (onSaveRecipeSearch && (foundRecipes.length > 0 || recipeSearchQuery)) {
+            onSaveRecipeSearch({ query: recipeSearchQuery, results: foundRecipes });
+        }
+    }, [foundRecipes, recipeSearchQuery]);
 
     const importRecipe = (recipe) => {
         setRecipeForm({
@@ -414,7 +421,10 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
         const totalCals = pendingItems.reduce((acc, item) => acc + (item.result?.calories || 0), 0);
         return (
             <div className="fixed-overlay" style={{ ...overlayStyle }}>
-                <div className="glass-panel fade-in" style={{ width: '100%', maxWidth: '400px', padding: '20px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+                <div className="fade-in" style={{
+                    width: '100%', maxWidth: '400px', padding: '20px', maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+                    background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)'
+                }}>
                     {/* Same Review UI as before */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', alignItems: 'center' }}>
                         <h3 className="title-gradient" style={{ margin: 0 }}>記録の確認 ({pendingItems.length})</h3>
@@ -717,7 +727,11 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                         {/* Detail View Modal (For Found or Saved) */}
                         {viewingRecipe && (
                             <div className="fixed-overlay" style={{ ...overlayStyle, zIndex: 120 }}>
-                                <div className="glass-panel zoom-in" style={{ width: '90%', maxWidth: '500px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', padding: '0' }}>
+                                <div style={{
+                                    width: '90%', maxWidth: '500px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', padding: '0',
+                                    background: 'white', border: '1px solid #E5E7EB', borderRadius: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+                                    position: 'relative'
+                                }}>
                                     <div style={{ padding: '15px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
                                         <h3 style={{ margin: 0 }}>{viewingRecipe.foodName}</h3>
                                         <button onClick={() => setViewingRecipe(null)} style={{ background: 'none', border: 'none' }}><X /></button>
@@ -758,7 +772,11 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                         {/* Portion Modal */}
                         {selectedRecipe && (
                             <div className="fixed-overlay" style={{ zIndex: 110 }}>
-                                <div className="glass-panel zoom-in" style={{ padding: '20px', width: '300px', textAlign: 'center' }}>
+                                <div style={{
+                                    padding: '20px', width: '300px', textAlign: 'center',
+                                    background: 'white', border: '1px solid #E5E7EB', borderRadius: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+                                    position: 'relative'
+                                }}>
                                     <h3>{selectedRecipe.foodName}</h3>
                                     <p style={{ color: 'var(--text-muted)', marginBottom: '20px' }}>何人前食べましたか？</p>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '20px', marginBottom: '25px' }}>

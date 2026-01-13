@@ -164,41 +164,112 @@ export const evaluateDailyLog = async (data) => {
     // Construct prompt
     const prompt = `
       あなたはプロフェッショナルな専属ダイエットコーチAIです。
-      ユーザーの今日の記録と目標に基づいて、厳しくも温かい評価、スコア、そしてアドバイスを提供してください。
+      ユーザーの**今の時点での**食事記録と目標に基づいて、厳しくも温かい評価、スコア、そしてアドバイスを提供してください。
 
-      【ユーザー状況】
-      - 日付: ${data.date}
-      - 現在の体重: ${data.currentWeight || "未計測"} kg
-      - 目標体重: ${data.targetWeight || "未設定"} kg
-      - 目標期限: ${data.targetDate || "未設定"}
+       【ユーザー状況】
+       - 現在時刻: ${new Date().toLocaleTimeString('ja-JP')}
+       - 現在の体重: ${data.currentWeight || "未計測"} kg
+       - 目標体重: ${data.targetWeight || "未設定"} kg
+       - 目標期限: ${data.targetDate || "未設定"}
 
-      【今日の摂取状況】
-      - 目標カロリー: ${data.targetCalories} kcal
-      - 摂取カロリー: ${data.consumedCalories} kcal
-      - 残りカロリー: ${data.targetCalories - data.consumedCalories} kcal
-      - 食事内容:
-      ${data.meals.map(m => `- ${m.foodName} (${new Date(m.timestamp).toLocaleTimeString('ja-JP')}): ${m.calories}kcal, P:${m.macros.protein}g`).join('\n')}
+       【今日の摂取状況 (現在まで)】
+       - 今日の目標カロリー: ${data.targetCalories} kcal (基準値: ${data.baseTargetCalories} kcal からの調整含む)
+       - 摂取カロリー: ${data.consumedCalories} kcal
+       - 現在の収支: ${data.targetCalories - data.consumedCalories} kcal 
+         (プラスなら残り余裕あり、マイナスなら超過)
+
+       【直近の履歴 (コンテキストとして使用)】
+       ${data.historySummary || "履歴なし"}
+
+       【評価ルール (冷徹な科学的ファクトに基づく徹底説教モード)】
+       1. **スコア (0-100点)**: 
+          - カロリー目標とPFCバランスの達成度で採点してください。
+          - ただし、**「今日だけ」ではなく「直近の履歴」も考慮**してください。
+          - 今日が悪くても、過去数日が完璧なら温情スコア（+5~10点）。
+          - 逆に、3日連続で食べ過ぎているなら、今日は多少マシでも厳しく採点（-10~20点）。「継続的な失敗」として断罪してください。
+          
+       2. **短い評価コメント**: ひとことで言うと？ (例: 「3日連続の失態です」「リカバリー成功。よく持ち直しました」)
+
+       3. **詳細アドバイス**: 
+         **【現状の冷徹な分析と定量的予測】**
+         - 文体は**冷徹・論理的・断定的**に。甘えは一切許容しません。
+         - **履歴に基づいた評価**: 「昨日も食べ過ぎていますね。これで2日連続です」「先週からカロリーオーバーが常態化しています」と、過去の行動も引き合いに出して詰めてください。
+         - **生理学的メカニズム**: 「連日の糖質過多により、肝臓のグリコーゲンタンクは溢れ、全て脂肪に変換されています」など、身体の中で起きていることを解説。
+         - **動的目標**: もし目標カロリーが調整（減らされている）されている場合、「昨日の借金を返すための低カロリー設定ですが、それすら守れていませんね」と指摘してください。
+
+         **【明日からの是正措置（アクションプラン）】**
+         - 具体的な物理タスクを命令。
+         - 履歴を見て、リバウンド傾向なら「明日は断食に近い調整が必要」など厳しめに。
+
+         **【結論（定型文の禁止・ランダム選択）】**
+         - 毎回同じ「やるかやらないかは自分次第」という言葉は禁止です。響きません。
+         - 以下のパターンから**ランダムに1つ**を選び、そのトーンで締めくくってください。
+           - **パターンA (冷徹な事実)**: 「結果は全てあなたの身体に刻まれます。鏡を見るのが楽しみですね（皮肉）」
+           - **パターンB (失望と突き放し)**: 「正直、この程度の意志かと思うと失望を禁じ得ません。勝手にしてください」
+           - **パターンC (挑発と鼓舞)**: 「今のまま豚になるか、ここで踏みとどまるか。見返してみせろ」
+           - **パターンD (哲学的問い)**: 「食べることは生きること。あなたは今日、自分の命を削りました」
+           - **パターンE (予言)**: 「この生活を続ければ、来月の体重計が絶叫することになるでしょう」
+
+      4. **食事ごとの評価 (10点満点評価)**: 
+         各食事について、その内容と質を0〜10点で採点してください。
+         - **10点 (最高)**: 完璧。高タンパク、低脂質、栄養バランス最高。緑色で表示されます。
+         - **5点 (普通)**: 可もなく不可もなく標準的。無色で表示されます。
+         - **0点 (最悪)**: スキップ(欠食)、または極度なカロリーオーバー、ジャンクフード。赤色で表示されます。
+         
+         ※ **採点基準**:
+         - 欠食(Skip)は問答無用で **0点**。
+         - 揚げ物、菓子パン、深夜のラーメンなどは **0〜2点**。
+         - 普通の定食などは **5〜7点**。
+         - 鶏胸肉サラダ、和定食などの理想食は **8〜10点**。
+
+      ※ **科学的解説の多様性**: いつも「脂肪とグリコーゲン」の話ばかりしないでください。以下のような観点もランダムに織り交ぜてください。
+      - インスリン感受性とレプチン抵抗性
+      - コルチゾールによる筋分解
+      - ミトコンドリアの機能不全と活性酸素
+      - オートファジーの阻害
+      - 腸内フローラの乱れと脳腸相関
+      - 糖化ストレス (AGEs) による老化促進  ※まだその時間を過ぎていない場合（例: 今15:00で夕食なし）は、「まだ食べていない」として扱い、減点しないでください。
 
       【タスク】
-      1. **スコア (0-100)**: 目標カロリーとの乖離、PFCバランス（特にタンパク質摂取）、食事のタイミング、質の良さを総合的に判断してください。
-        - カロリー超過は減点。極端な不足も減点（代謝低下リスク）。
-        - タンパク質不足は減点。
-      2. **短い評価コメント**: ひとことで言うと？ (例: 「素晴らしい管理です！」「夜食が少し多すぎましたね」)
-      3. **詳細アドバイス**: 具体的に何を改善すべきか、または何を続けるべきか。
-      4. **食事ごとの評価**: 各食事について、目標に対して「食べて良かった(positive)」「食べなくて良かった(negative)」「どちらでもない(neutral)」の3段階で評価してください。
-        - positive: 高タンパク低脂質、栄養バランスが良い、適切なカロリーなど。
-        - negative: 高カロリー、高脂質、糖質過多、栄養が偏っている、など。
-        - neutral: 普通。
+      1. **スコア (0-100)**:
+         - **これまでの食事**が目標に対して適切か？
+         - 過去のスキップは**減点**。
+         - 食べ過ぎは**減点**。
+         - まだ来ていない未来の食事はスコアに影響させないでください。
+      2. **短い評価コメント**: ひとことで言うと？ (例: 「完璧なスタートです！」「危機的状況です」)
+      3. **詳細アドバイス**: 
+         **【現状の冷徹な分析と定量的予測】**
+         - **子供だましの比喩表現（工場や擬人化など）は一切禁止です。**
+         - 文体は**冷徹・論理的・断定的**に。「〜しましょうね」のような甘えは排除し、「〜という結果になる」と言い切ってください。
+         - 良い場合: 「完璧です。PFCバランス、カロリー収支ともに隙がありません。この数値を維持できれば、生理学的にも体脂肪減少は不可避です」
+         - 悪い場合: 
+           - **感情を排して、残酷なまでの事実**を突きつけてください。甘えは一切許容しません。
+           - **生理学的メカニズム**を詳細に解説し、知識で相手を圧倒してください。
+           - 例: 「この糖質過多はインスリン抵抗性を引き起こす愚行です。血中のグルコースが処理しきれず、血管内皮細胞が糖化・劣化しています」
+           - 例: 「夜間のこの脂質摂取は自殺行為に等しい。睡眠中の成長ホルモン分泌を阻害し、脂肪燃焼のチャンスを自らドブを捨てています」
+           - **定量的予測**: 「この余剰カロリー7000kcalにつき1kgの脂肪増加は物理法則です。今のままだと1ヶ月後には計算通り**確実に〇kg**太ります」
+         
+         **【明日からの是正措置（アクションプラン）】**
+         - 精神論は不要。物理的に実行すべきタスクのみを提示せよ。
+         - 例: 「明朝は納豆と卵のみ摂取せよ。グリコーゲンが枯渇した状態で脂質代謝を回すためだ」
+         - 例: 「今すぐスクワット50回。過剰なグルコースを筋グリコーゲンとして押し込む以外に救済措置はない」
+
+         **【結論】**
+         - 最後に一言、突き放しつつも**「やるかやらないかは自分次第」**というスタンスで締めてください。
+         - 「未来を変えるのは今の行動のみ。どうするかは自分で決めろ」というトーンで。
+
+      4. **食事ごとの評価**: 各食事について、目標に対して「Good (良い)」「Bad (悪い)」「Normal (普通)」の3段階で評価してください。
+         - Normal: 普通。
 
       出力形式 (JSONのみ):
       {
-        "score": 数値,
+        "score": 数値(1日の総合点),
         "title": "短い評価コメント",
         "advice": "詳細なアドバイス（300文字以内）",
         "foodAssessments": [
-            { "foodName": "料理名（入力と同じ文字列）", "assessment": "positive" | "negative" | "neutral", "reason": "短い理由" }
+            { "foodName": "料理名（入力と同じ）", "score": 数値(0-10), "reason": "短い理由" }
         ],
-        "reasoning": "[AI思考] なぜこのスコアにしたか（ユーザーには見せませんが、分析の質を高めるために記述してください）"
+        "reasoning": "[AI思考] なぜこのスコアにしたか。"
       }
     `;
 
@@ -232,6 +303,87 @@ export const evaluateDailyLog = async (data) => {
     }
 
     return { error: "Failed to evaluate log" };
+};
+
+export const evaluateSingleMeal = async (meal) => {
+    if (!apiKey) return { error: "API Key missing", score: 5, reason: "APIキーなし" };
+    const genAI = new GoogleGenerativeAI(apiKey);
+
+    const prompt = `
+      あなたはプロの管理栄養士です。以下の「1回の食事」を0点〜10点で採点してください。
+      
+      【食事データ】
+      - 料理名: ${meal.foodName}
+      - カロリー: ${meal.calories} kcal
+      - タンパク質: ${meal.macros?.protein || meal.protein || '不明'} g
+      - 脂質: ${meal.macros?.fat || meal.fat || '不明'} g
+      - 炭水化物: ${meal.macros?.carbs || meal.carbs || '不明'} g
+      - 時間帯: ${meal.mealType || '不明'}
+
+      【採点基準 (0-10点)】
+      - **10点 (最高/緑)**: 高タンパク・低脂質・適正カロリー（例: 焼き魚定食、鶏胸肉サラダ）。
+      - **7-9点 (良い)**: タンパク質豊富で栄養バランス良好（例: 和定食、プロテイン）。
+      - **4-6点 (普通/白)**: 一般的な食事（例: カレーライス、パスタ、おにぎり）。
+      - **1-3点 (悪い)**: 栄養偏り、高脂質、高糖質（例: ラーメン、揚げ物、菓子パン）。
+      - **0点 (最悪/赤)**: ジャンクフードや極端な過食。
+      
+      出力形式 (JSONのみ):
+      {
+        "score": 数値(0-10の整数),
+        "reason": "短いコメント(20文字以内。例: 脂質が高すぎます/完璧なバランスです)"
+      }
+    `;
+
+    // Try multiple models for reliability
+    const FAST_MODELS = ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-flash-latest"];
+
+    for (const modelName of FAST_MODELS) {
+        try {
+            console.log(`[SingleMealEval] Trying model: ${modelName}`);
+            const model = genAI.getGenerativeModel({ model: modelName });
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                console.log(`[SingleMealEval] Success with ${modelName}:`, parsed);
+                return parsed;
+            }
+        } catch (e) {
+            console.warn(`[SingleMealEval] Model ${modelName} failed:`, e.message);
+        }
+    }
+
+    // Fallback: use simple heuristic based on food name
+    console.log('[SingleMealEval] All models failed, using heuristic fallback');
+    return heuristicScore(meal);
+};
+
+// Simple heuristic scorer when AI is unavailable
+const heuristicScore = (meal) => {
+    const name = (meal.foodName || '').toLowerCase();
+    const calories = meal.calories || 0;
+    const protein = meal.macros?.protein || 0;
+
+    // Bad foods (low score)
+    if (/ラーメン|カップ麺|唐揚げ|フライ|ポテト|菓子|チョコ|ケーキ|アイス|揚げ/.test(name)) {
+        return { score: 2, reason: '高カロリー食' };
+    }
+    // Good foods (high score)
+    if (/サラダ|鶏胸|ササミ|魚|焼き|蒸し|野菜|プロテイン|納豆|豆腐/.test(name)) {
+        return { score: 8, reason: '健康的な食事' };
+    }
+    // High protein is good
+    if (protein >= 25 && calories < 500) {
+        return { score: 7, reason: '高タンパク' };
+    }
+    // Very high calories is bad
+    if (calories > 1000) {
+        return { score: 3, reason: 'カロリー過多' };
+    }
+    // Default neutral
+    return { score: 5, reason: '普通の食事' };
 };
 
 export const calculateRecipeWithGemini = async (ingredients) => {
@@ -281,7 +433,7 @@ export const calculateRecipeWithGemini = async (ingredients) => {
     return { error: `All models failed. Last check: ${lastError?.message}` };
 };
 
-export const suggestNextMeal = async (history, dailyLog, targetType = 'dinner') => {
+export const suggestNextMeal = async (history, dailyLog, targetType = 'dinner', stockItems = []) => {
     // Map targetType to Japanese label
     const labels = {
         breakfast: '朝食',
@@ -292,10 +444,16 @@ export const suggestNextMeal = async (history, dailyLog, targetType = 'dinner') 
     const mealCategory = labels[targetType] || '食事';
     const hour = new Date().getHours();
 
+    const stockContext = stockItems.length > 0 ? `冷蔵庫・ストック・文脈情報: ${stockItems.map(i => i.name).join(', ')}` : "特になし";
+
     const prompt = `
-        あなたはプロの管理栄養士です。
+        あなたはプロの管理栄養士かつグルメコンシェルジュです。
         現在の時刻は${hour}時です。ユーザーは**${mealCategory}**の提案を求めています。
-        ユーザーの食事履歴と、本日の摂取状況から、次の${mealCategory}で何を食べると栄養バランスが整うか、具体的に提案してください。
+        
+        【入力情報】
+        1. **ユーザーの食事履歴**: 直近の食事内容。
+        2. **本日の摂取状況**: カロリーとPFCバランス。
+        3. **ストック・文脈情報**: 冷蔵庫の中身だけでなく、「新宿駅周辺」「居酒屋」「イタリアン」などの**場所やジャンル**が含まれている場合があります。
 
         【ユーザーの直近の食事履歴】
         ${history.map(m => `- ${m.foodName} (${m.calories}kcal)`).join('\n')}
@@ -307,19 +465,31 @@ export const suggestNextMeal = async (history, dailyLog, targetType = 'dinner') 
         - C (炭水化物): ${dailyLog.macros.carbs} g
         - 目標カロリー: ${dailyLog.targetCalories} kcal
 
+        【ストック・文脈情報】
+        ${stockContext}
+
         【提案のルール】
-        1. ${mealCategory}にふさわしい具体的なメニュー名と、なぜそれが良いかを1文で説明してください。
-        2. 3つ提案してください。
-        3. 出力はJSON形式のみで、以下の構造にしてください。
+        1. 合計**6つ**のメニューを提案してください。
+        2. **ストック・文脈情報の活用**:
+           - **場所やジャンル（外食）が指定されている場合（例: "新宿", "居酒屋"）**
+             → そのエリアやジャンルで楽しめる、栄養バランスを考慮した具体的なメニューやお店のスタイルを提案してください（例: 「新宿の焼き鳥店でレバーとササミ」「居酒屋で刺身盛り合わせ」）。
+           - **食材が指定されている場合（例: "キャベツ", "豚肉"）**
+             → それらを使った自炊レシピを提案してください。
+           - **特に指定がない場合**
+             → 栄養バランスを整えるための最適な食事を提案してください。
+        3. 提案構成:
+           - 前半3つ: 入力されたストック・文脈情報に**強く関連する**提案。
+           - 後半3つ: 視点を変えた、あるいはバランス重視の全く新しい提案。
+        4. 出力はJSON形式のみ:
         {
             "mealCategory": "${mealCategory}",
             "suggestions": [
-                { "name": "メニュー名", "reason": "理由" },
+                { "name": "具体的なメニュー名（または店ジャンル+メニュー）", "reason": "なぜこれが良いか（ストック活用、場所考慮など）を1文で" },
                 ...
             ],
             "advice": "全体的なアドバイスを1文で"
         }
-    `;
+        `;
 
     let lastError = null;
 
@@ -346,15 +516,21 @@ export const suggestNextMeal = async (history, dailyLog, targetType = 'dinner') 
     return { suggestions: [], advice: `現在AIアドバイスを利用できません。(理由: ${lastError?.message || "All models failed"})` };
 };
 
-export const searchRecipesWithGemini = async (query) => {
+export const searchRecipesWithGemini = async (query, stockItems = []) => {
+    const stockContext = stockItems.length > 0 ? `冷蔵庫・ストック: ${stockItems.map(i => i.name).join(', ')}` : "";
+
     const prompt = `
         あなたはプロの栄養士兼シェフです。
-        ユーザーの要望「${query}」に基づき、美味しくて健康的なレシピを**3つ**考案してください。
+        ユーザーの要望「${query}」に基づき、美味しくて健康的なレシピを合計**6つ**考案してください。
+        ${stockContext}
         
         【重要な要件】
-        1. **材料と分量を明確に**: カロリー計算の根拠となるため、全ての材料と分量（1人前）を具体的にリストアップしてください。
-        2. **正確な栄養価計算**: 提示した材料に基づいて、カロリーとPFCバランスを可能な限り正確に計算してください。
-        3. **手順**: 簡潔かつ分かりやすい手順を含めてください。
+        1. **提案の内訳**:
+           - **3つ**: ストックにある食材（もしあれば）を**優先的に使う**レシピ。
+           - **3つ**: ストックを**完全に無視して**、純粋に美味しさや目新しさを追求したレシピ。
+        2. **材料と分量を明確に**: カロリー計算の根拠となるため、全ての材料と分量（1人前）を具体的にリストアップしてください。
+        3. **正確な栄養価計算**: 提示した材料に基づいて、カロリーとPFCバランスを可能な限り正確に計算してください。
+        4. **手順**: 簡潔かつ分かりやすい手順を含めてください。
         
         【出力フォーマット】
         以下のJSON形式のみを出力してください。

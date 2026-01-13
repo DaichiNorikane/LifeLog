@@ -3,14 +3,17 @@ import {
     collection,
     addDoc,
     getDocs,
-    deleteDoc,
-    doc,
     query,
+    where,
     orderBy,
-    Timestamp,
-    setDoc,
+    limit,
+    doc,
     getDoc,
-    limit
+    setDoc,
+    deleteDoc,
+    updateDoc,
+    writeBatch,
+    Timestamp
 } from "firebase/firestore";
 
 
@@ -69,7 +72,8 @@ export const addMealToFirestore = async (userId, meal) => {
             image: meal.image || null
         });
 
-        await addDoc(mealsRef, payload);
+        const docRef = await addDoc(mealsRef, payload);
+        return docRef.id;
     } catch (e) {
         console.error("Error adding document: ", e);
         throw e; // Propagate error so page.js knows
@@ -188,6 +192,46 @@ export const getRecentMeals = async (userId, limitCount = 50) => {
     }
 };
 
+
+// --- STOCK/PANTRY ---
+
+export const addStockItem = async (userId, item) => {
+    try {
+        const userRef = doc(db, 'users', userId);
+        const stockRef = collection(userRef, 'stockItems');
+        await addDoc(stockRef, {
+            ...item,
+            addedAt: new Date().toISOString()
+        });
+    } catch (e) {
+        console.error("Error adding stock item: ", e);
+        throw e;
+    }
+};
+
+export const getStockItems = async (userId) => {
+    try {
+        const userRef = doc(db, 'users', userId);
+        const stockRef = collection(userRef, 'stockItems');
+        const q = query(stockRef, orderBy('addedAt', 'desc'));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (e) {
+        console.error("Error getting stock items: ", e);
+        return [];
+    }
+};
+
+export const deleteStockItem = async (userId, itemId) => {
+    try {
+        const itemRef = doc(db, 'users', userId, 'stockItems', itemId);
+        await deleteDoc(itemRef);
+    } catch (e) {
+        console.error("Error deleting stock item: ", e);
+        throw e;
+    }
+};
+
 // Recipe Management
 const getRecipesRef = (userId) => collection(db, "users", userId, "recipes");
 
@@ -226,5 +270,50 @@ export const deleteRecipeFromFirestore = async (userId, recipeId) => {
         await deleteDoc(recipeDoc);
     } catch (e) {
         console.error("Error deleting recipe:", e);
+    }
+};
+
+// --- Game Scores ---
+export const saveGameScore = async (userId, userName, score, dietStats) => {
+    if (!userId) return;
+    try {
+        await addDoc(collection(db, "game_scores"), {
+            userId,
+            userName: userName || 'Anonymous',
+            score: Number(score),
+            stats: dietStats || {},
+            timestamp: new Date().toISOString()
+        });
+    } catch (e) {
+        console.error("Error saving score:", e);
+    }
+};
+
+export const getLeaderboard = async () => {
+    try {
+        const q = query(
+            collection(db, "game_scores"),
+            orderBy("score", "desc"),
+            limit(10)
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (e) {
+        console.error("Error fetching leaderboard:", e);
+        return [];
+    }
+};
+
+export const resetLeaderboard = async () => {
+    try {
+        const q = query(collection(db, "game_scores"));
+        const snapshot = await getDocs(q);
+        const batch = writeBatch(db);
+        snapshot.docs.forEach((doc) => {
+            batch.delete(doc.ref);
+        });
+        await batch.commit();
+    } catch (e) {
+        console.error("Error resetting leaderboard:", e);
     }
 };

@@ -77,12 +77,14 @@ h6 {
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-sm);
   border-radius: var(--radius-md);
-  transition: var(--transition-smooth);
+  /* Removed transition to prevent unwanted animations */
 }
 
-.glass-panel:hover {
+/* Utility class for cards that SHOULD have hover lift effect */
+.hover-lift:hover {
   box-shadow: var(--shadow-md);
   transform: translateY(-2px);
+  transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .btn-primary {
@@ -157,4 +159,10 @@ textarea:focus {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* Utility to disable hover effects on glass-panel (e.g. for modals) */
+.glass-panel.no-hover:hover {
+  transform: none;
+  box-shadow: var(--shadow-sm);
 }

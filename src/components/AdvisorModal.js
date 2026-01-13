@@ -2,31 +2,41 @@ import React, { useState, useEffect } from 'react';
 import { X, Loader2, Sparkles, Utensils, Search } from 'lucide-react';
 import { suggestNextMeal } from '@/app/actions';
 
-export default function AdvisorModal({ history, dailyLog, targetType, onClose, onSuggestionClick }) {
-    const [suggestions, setSuggestions] = useState([]);
-    const [advice, setAdvice] = useState('');
-    const [loading, setLoading] = useState(true);
+export default function AdvisorModal({ history, dailyLog, targetType, onClose, onSuggestionClick, stockItems = [], savedState, onSave }) {
+    const [suggestions, setSuggestions] = useState(savedState?.suggestions || []);
+    const [advice, setAdvice] = useState(savedState?.advice || '');
+    const [loading, setLoading] = useState(!savedState?.suggestions?.length);
+
+    const fetchAdvice = async () => {
+        setLoading(true);
+        // Limit history to last 10 unique items to save tokens/complexity
+        const uniqueHistory = [];
+        const seen = new Set();
+        for (const h of history) {
+            if (!seen.has(h.foodName)) {
+                uniqueHistory.push(h);
+                seen.add(h.foodName);
+            }
+            if (uniqueHistory.length >= 10) break;
+        }
+
+        const result = await suggestNextMeal(uniqueHistory, dailyLog, targetType, stockItems);
+        setSuggestions(result.suggestions || []);
+        setAdvice(result.advice || "アドバイスを取得できませんでした。");
+
+        // Save state
+        if (onSave) {
+            onSave({ suggestions: result.suggestions || [], advice: result.advice, targetType });
+        }
+
+        setLoading(false);
+    };
 
     useEffect(() => {
-        const fetchAdvice = async () => {
-            if (!loading) return;
-            // Limit history to last 10 unique items to save tokens/complexity
-            const uniqueHistory = [];
-            const seen = new Set();
-            for (const h of history) {
-                if (!seen.has(h.foodName)) {
-                    uniqueHistory.push(h);
-                    seen.add(h.foodName);
-                }
-                if (uniqueHistory.length >= 10) break;
-            }
-
-            const result = await suggestNextMeal(uniqueHistory, dailyLog, targetType);
-            setSuggestions(result.suggestions || []);
-            setAdvice(result.advice || "アドバイスを取得できませんでした。");
-            setLoading(false);
-        };
-        fetchAdvice();
+        // Run only if no saved state or target type changed
+        if (!savedState?.suggestions?.length || savedState.targetType !== targetType) {
+            fetchAdvice();
+        }
     }, []);
 
     return (
@@ -40,9 +50,14 @@ export default function AdvisorModal({ history, dailyLog, targetType, onClose, o
                             { breakfast: '朝食', lunch: '昼食', dinner: '夕食', snack: '間食' }[targetType] || '食事'
                         })
                     </h2>
-                    <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white' }}>
-                        <X size={18} />
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <button onClick={fetchAdvice} disabled={loading} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white' }}>
+                            <Sparkles size={16} />
+                        </button>
+                        <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white' }}>
+                            <X size={18} />
+                        </button>
+                    </div>
                 </div>
 
                 <div style={{ padding: '25px', minHeight: '300px', overflowY: 'auto' }}>

@@ -87,7 +87,13 @@ export default function EvaluationModal({ data, onClose, onEvaluationComplete, s
                                         <Info size={18} color="var(--primary)" /> アドバイス
                                     </h4>
                                     <div style={{ lineHeight: 1.8, color: 'var(--text-secondary)', fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}>
-                                        {result.advice}
+                                        {/* Simple parser for **bold** text */}
+                                        {result.advice.split(/(\*\*.*?\*\*)/).map((part, index) => {
+                                            if (part.startsWith('**') && part.endsWith('**')) {
+                                                return <strong key={index} style={{ color: 'var(--primary)', fontWeight: 700 }}>{part.slice(2, -2)}</strong>;
+                                            }
+                                            return part;
+                                        })}
                                     </div>
                                 </div>
 

@@ -555,19 +555,19 @@ export default function Home() {
       {showAdvisor && (
         <div style={{ position: 'relative', zIndex: 1000 }}>
           <AdvisorModal
-            targetType={targetMealType} // NEW prop
-            history={meals} // Use full meal history (filtered in modal)
+            targetType="auto"
+            history={meals}
             dailyLog={{
               totalCalories,
+              targetCalories,
               macros: {
                 protein: displayMeals.reduce((acc, m) => acc + (m.macros?.protein || 0), 0),
                 fat: displayMeals.reduce((acc, m) => acc + (m.macros?.fat || 0), 0),
-                carbs: displayMeals.reduce((acc, m) => acc + (m.macros?.carbs || 0), 0),
-                targetCalories
+                carbs: displayMeals.reduce((acc, m) => acc + (m.macros?.carbs || 0), 0)
               }
             }}
-            savedState={advisorState} // Pass persisted state
-            onSave={setAdvisorState}   // Save state callback
+            savedState={advisorState}
+            onSave={setAdvisorState}
             onClose={() => setShowAdvisor(false)}
             onSuggestionClick={(query) => {
               setShowAdvisor(false);

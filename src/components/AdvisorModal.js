@@ -9,18 +9,11 @@ export default function AdvisorModal({ history, dailyLog, targetType, onClose, o
 
     const fetchAdvice = async () => {
         setLoading(true);
-        // Limit history to last 10 unique items to save tokens/complexity
-        const uniqueHistory = [];
-        const seen = new Set();
-        for (const h of history) {
-            if (!seen.has(h.foodName)) {
-                uniqueHistory.push(h);
-                seen.add(h.foodName);
-            }
-            if (uniqueHistory.length >= 10) break;
-        }
+        // Pass recent meals with full data (timestamp, mealType) for context detection
+        // Keep unique food names but preserve all meal metadata
+        const recentMeals = history.slice(0, 20); // Last 20 meals for context
 
-        const result = await suggestNextMeal(uniqueHistory, dailyLog, targetType, stockItems);
+        const result = await suggestNextMeal(recentMeals, dailyLog, targetType, stockItems);
         setSuggestions(result.suggestions || []);
         setAdvice(result.advice || "アドバイスを取得できませんでした。");
 
@@ -46,9 +39,7 @@ export default function AdvisorModal({ history, dailyLog, targetType, onClose, o
                 {/* Header */}
                 <div style={{ padding: '20px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, borderTopLeftRadius: '20px', borderTopRightRadius: '20px' }}>
                     <h2 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <Sparkles size={20} /> AI 食事アドバイザー ({
-                            { breakfast: '朝食', lunch: '昼食', dinner: '夕食', snack: '間食' }[targetType] || '食事'
-                        })
+                        <Sparkles size={20} /> AI 食事アドバイザー
                     </h2>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <button onClick={fetchAdvice} disabled={loading} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white' }}>

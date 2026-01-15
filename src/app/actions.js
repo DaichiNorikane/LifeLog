@@ -206,8 +206,13 @@ export const evaluateDailyLog = async (data) => {
       ${(data.meals || []).map(m => `- ${m.mealType || '不明'}: ${m.foodName} (${m.calories}kcal)`).join('\n')}
       
       ユーザーの**今の時点での**食事記録と目標に基づいて、厳しくも温かい評価、スコア、そしてアドバイスを提供してください。
-      **まだ食べていない将来の食事（例: 夕食前なのに夕食がない）を「欠食」として減点しないでください。**
-
+      
+      【評価の絶対ルール】
+      1. **「記録あり」の食事を「欠食」「抜いた」と言わないこと。**
+         - たとえカロリーが低くても（例: ヨーグルトのみ）、「欠食」ではなく「少なすぎる」「不十分」と表現してください。
+         - 「朝食: 記録あり」なのに「朝食を抜くな」と言うのは**重大なハルシネーション**です。絶対に避けてください。
+      2. **まだ食べていない将来の食事を減点しないこと。**
+      
        【ユーザー状況】
        - 現在時刻: ${jstNow.toISOString().replace('T', ' ').substring(0, 16)} (JST ${hour}時台)
        - 現在の体重: ${data.currentWeight || "未計測"} kg
@@ -528,8 +533,15 @@ export const suggestNextMeal = async (history, dailyLog, targetType = 'auto', st
                 suggestedMealType = 'skip';
                 mealContext = '午後ですが、既にカロリーオーバーです。';
             } else if (hasLunch && !hasDinner) {
-                suggestedMealType = 'snack';
-                mealContext = '昼食後で夕食前。軽い間食の時間帯です。';
+                // Determine if snack is needed based on time
+                // User dislikes snacks unless absolutely needed.
+                if (hour < 16) {
+                    suggestedMealType = 'snack';
+                    mealContext = '昼食から時間が空いていますが、無駄な間食は控えましょう。どうしてもお腹が空いた場合のみ。';
+                } else {
+                    suggestedMealType = 'dinner';
+                    mealContext = '夕食のことを考える時間帯です。間食は控え、夕食に備えましょう。';
+                }
             } else if (!hasLunch) {
                 suggestedMealType = 'lunch';
                 mealContext = 'まだ昼食を食べていません。遅めの昼食を。';
@@ -568,6 +580,7 @@ export const suggestNextMeal = async (history, dailyLog, targetType = 'auto', st
         【提案する食事カテゴリ】
         **${mealCategory}** を提案してください。
         ${suggestedMealType === 'skip' ? '※カロリーオーバーまたは夜遅いため、「食べない」「軽い運動」「水分のみ」などの選択肢も含めてください。' : ''}
+        ${suggestedMealType === 'snack' ? '※**ユーザーは無駄な間食を嫌います。**「本当にお腹が空いた時用のヘルシーなもの」か、「食べずに済ませる方法（お茶など）」を提案に含めてください。' : ''}
         
         【入力情報】
         1. **ユーザーの食事履歴**: 直近の食事内容。

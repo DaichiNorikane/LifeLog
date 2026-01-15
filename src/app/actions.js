@@ -160,7 +160,11 @@ export const evaluateDailyLog = async (data) => {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const hour = new Date().getHours();
+
+    // Fix Timezone to JST (UTC+9)
+    const now = new Date();
+    const jstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+    const hour = jstNow.getUTCHours();
 
     // Determine what meals have been logged
     const loggedMealTypes = (data.meals || []).map(m => m.mealType).filter(Boolean);
@@ -198,14 +202,20 @@ export const evaluateDailyLog = async (data) => {
       【記録されている食事の状況】
       ${mealStatusContext}
       
+      【今日食べた具体的な食事内容】
+      ${(data.meals || []).map(m => `- ${m.mealType || '不明'}: ${m.foodName} (${m.calories}kcal)`).join('\n')}
+      
       ユーザーの**今の時点での**食事記録と目標に基づいて、厳しくも温かい評価、スコア、そしてアドバイスを提供してください。
       **まだ食べていない将来の食事（例: 夕食前なのに夕食がない）を「欠食」として減点しないでください。**
 
        【ユーザー状況】
-       - 現在時刻: ${new Date().toLocaleTimeString('ja-JP')} (${hour}時台)
+       - 現在時刻: ${jstNow.toISOString().replace('T', ' ').substring(0, 16)} (JST ${hour}時台)
        - 現在の体重: ${data.currentWeight || "未計測"} kg
        - 目標体重: ${data.targetWeight || "未設定"} kg
        - 目標期限: ${data.targetDate || "未設定"}
+
+       【今日食べた具体的な食事内容】
+       ${(data.meals || []).map(m => `- ${m.mealType || '不明'}: ${m.foodName} (${m.calories}kcal)`).join('\n')}
 
        【今日の摂取状況 (現在まで)】
        - 今日の目標カロリー: ${data.targetCalories} kcal (基準値: ${data.baseTargetCalories} kcal からの調整含む)
@@ -479,13 +489,17 @@ export const suggestNextMeal = async (history, dailyLog, targetType = 'auto', st
         auto: '次の食事'
     };
 
-    const hour = new Date().getHours();
+    const now = new Date();
+    // Fix Timezone to JST (UTC+9)
+    const jstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+    const hour = jstNow.getUTCHours();
 
-    // Determine what meals have been eaten today
+    // Determine what meals have been eaten today using JST
     const todayMeals = history.filter(m => {
         const mealDate = new Date(m.timestamp);
-        const today = new Date();
-        return mealDate.toDateString() === today.toDateString();
+        // Correctly match "today" in JST
+        const mealDateJST = new Date(mealDate.getTime() + (9 * 60 * 60 * 1000));
+        return mealDateJST.toISOString().split('T')[0] === jstNow.toISOString().split('T')[0];
     });
     const eatenMealTypes = todayMeals.map(m => m.mealType).filter(Boolean);
     const hasBreakfast = eatenMealTypes.includes('breakfast');
@@ -546,7 +560,7 @@ export const suggestNextMeal = async (history, dailyLog, targetType = 'auto', st
         ${mealContext}
         カロリー状況: ${isOverCalories ? `既に${Math.abs(remainingCalories)}kcalオーバー` : `残り${remainingCalories}kcal`}
         
-        【今日食べた食事】
+        【今日食べた食事 (JST判定)】
         ・朝食: ${hasBreakfast ? '済' : '未'}
         ・昼食: ${hasLunch ? '済' : '未'}
         ・夕食: ${hasDinner ? '済' : '未'}

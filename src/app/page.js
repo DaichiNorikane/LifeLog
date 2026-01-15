@@ -210,6 +210,11 @@ export default function Home() {
   const evaluationData = {
     date: currentDate.toISOString(),
     consumedCalories: dayTotals.calories,
+    macros: {
+      protein: dayTotals.protein,
+      fat: dayTotals.fat,
+      carbs: dayTotals.carbs
+    },
     targetCalories: dailyTarget, // Use Dynamic Target
     baseTargetCalories: baseTarget, // Pass base for reference
     historySummary: getHistorySummary(), // Pass history context
@@ -428,17 +433,7 @@ export default function Home() {
             <button onClick={() => setShowGame(true)} style={{ background: 'white', border: '1px solid var(--border-subtle)', padding: '6px 10px', borderRadius: '20px', fontSize: '0.8rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
               <Gamepad2 size={14} /> Game
             </button>
-            <button onClick={() => {
-              // Intelligent default based on time
-              const hour = new Date().getHours();
-              let type = 'dinner';
-              if (hour < 11) type = 'breakfast';
-              else if (hour < 16) type = 'lunch';
-              setTargetMealType(type);
-              setShowAdvisor(true);
-            }} style={{ background: 'white', border: '1px solid var(--border-subtle)', padding: '6px 10px', borderRadius: '20px', fontSize: '0.8rem', color: '#F59E0B', display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <Sparkles size={14} /> 提案
-            </button>
+
             <button onClick={() => logOut && logOut()} style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Sign Out</button>
           </div>
         </div>
@@ -548,6 +543,7 @@ export default function Home() {
             onSave={setDailyEvaluation}   // Save result callback
             onClose={() => setShowEvaluation(false)}
             onEvaluationComplete={handleEvaluationComplete}
+            stockItems={stockItems}
           />
         </div>
       )}

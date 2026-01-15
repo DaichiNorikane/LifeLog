@@ -153,10 +153,194 @@ export const searchFoodWithGemini = async (query, historyContext = "") => {
     return { error: "Failed to search food", details: lastError?.message };
 };
 
-export const evaluateDailyLog = async (data) => {
+
+
+export const suggestNextMeal = async (history, dailyLog, targetType = 'auto', stockItems = []) => {
+    // Map targetType to Japanese label
+    const labels = {
+        breakfast: '朝食',
+        lunch: '昼食',
+        dinner: '夕食',
+        snack: '間食・おやつ',
+        skip: '食事を控える',
+        auto: '次の食事'
+    };
+
+    const now = new Date();
+    // Fix Timezone to JST (UTC+9)
+    const jstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+    const hour = jstNow.getUTCHours();
+
+    // Determine what meals have been eaten today using JST
+    const todayMeals = history.filter(m => {
+        const mealDate = new Date(m.timestamp);
+        // Correctly match "today" in JST
+        const mealDateJST = new Date(mealDate.getTime() + (9 * 60 * 60 * 1000));
+        return mealDateJST.toISOString().split('T')[0] === jstNow.toISOString().split('T')[0];
+    });
+    const eatenMealTypes = todayMeals.map(m => m.mealType).filter(Boolean);
+    const hasBreakfast = eatenMealTypes.includes('breakfast');
+    const hasLunch = eatenMealTypes.includes('lunch');
+    const hasDinner = eatenMealTypes.includes('dinner');
+
+    // Calculate remaining calories
+    const remainingCalories = dailyLog.targetCalories - dailyLog.totalCalories;
+    const isOverCalories = remainingCalories < 0;
+    const isLowCalories = remainingCalories > 800;
+
+    // Smart meal type detection
+    let suggestedMealType = targetType;
+    let mealContext = '';
+
+    if (targetType === 'auto' || targetType === 'dinner') {
+        // Auto-detect what meal to suggest
+        if (hour < 10 && !hasBreakfast) {
+            suggestedMealType = 'breakfast';
+            mealContext = '朝の時間帯で、まだ朝食を食べていません。';
+        } else if (hour >= 10 && hour < 14 && !hasLunch) {
+            suggestedMealType = 'lunch';
+            mealContext = 'お昼時で、まだ昼食を食べていません。';
+        } else if (hour >= 14 && hour < 18) {
+            if (isOverCalories) {
+                suggestedMealType = 'skip';
+                mealContext = '午後ですが、既にカロリーオーバーです。';
+            } else if (hasLunch && !hasDinner) {
+                // Determine if snack is needed based on time
+                // User dislikes snacks unless absolutely needed.
+                if (hour < 16) {
+                    suggestedMealType = 'snack';
+                    mealContext = '昼食から時間が空いていますが、無駄な間食は控えましょう。どうしてもお腹が空いた場合のみ。';
+                } else {
+                    suggestedMealType = 'dinner';
+                    mealContext = '夕食のことを考える時間帯です。間食は控え、夕食に備えましょう。';
+                }
+            } else if (!hasLunch) {
+                suggestedMealType = 'lunch';
+                mealContext = 'まだ昼食を食べていません。遅めの昼食を。';
+            } else {
+                suggestedMealType = 'dinner';
+                mealContext = '夕食に向けた準備の時間です。';
+            }
+        } else if (hour >= 18 && !hasDinner) {
+            suggestedMealType = isOverCalories ? 'skip' : 'dinner';
+            mealContext = isOverCalories ? '夕食時ですが、既にカロリーオーバーです。' : '夕食の時間帯です。';
+        } else if (hour >= 21) {
+            suggestedMealType = 'skip';
+            mealContext = '夜遅い時間です。これ以上の食事は控えるべきです。';
+        } else {
+            suggestedMealType = 'snack';
+            mealContext = '次の食事までの間食を提案します。';
+        }
+    }
+
+    const mealCategory = labels[suggestedMealType] || '食事';
+    const stockContext = stockItems.length > 0 ? `冷蔵庫・ストック・文脈情報: ${stockItems.map(i => i.name).join(', ')}` : "特になし";
+
+    const prompt = `
+        あなたはプロの管理栄養士かつグルメコンシェルジュです。
+        現在の時刻は${hour}時です。
+        
+        【重要な状況判断】
+        ${mealContext}
+        カロリー状況: ${isOverCalories ? `既に${Math.abs(remainingCalories)}kcalオーバー` : `残り${remainingCalories}kcal`}
+        
+        【今日食べた食事 (JST判定)】
+        ・朝食: ${hasBreakfast ? '済' : '未'}
+        ・昼食: ${hasLunch ? '済' : '未'}
+        ・夕食: ${hasDinner ? '済' : '未'}
+        
+        【提案する食事カテゴリ】
+        **${mealCategory}** を提案してください。
+        ${suggestedMealType === 'skip' ? '※カロリーオーバーまたは夜遅いため、「食べない」「軽い運動」「水分のみ」などの選択肢も含めてください。' : ''}
+        ${suggestedMealType === 'snack' ? '※**ユーザーは無駄な間食を嫌います。**「本当にお腹が空いた時用のヘルシーなもの」か、「食べずに済ませる方法（お茶など）」を提案に含めてください。' : ''}
+        
+        【入力情報】
+        1. **ユーザーの食事履歴**: 直近の食事内容。
+        2. **本日の摂取状況**: カロリーとPFCバランス。
+        3. **ストック・文脈情報**: 冷蔵庫の中身だけでなく、「新宿駅周辺」「居酒屋」「イタリアン」などの**場所やジャンル**が含まれている場合があります。
+
+        【ユーザーの直近の食事履歴】
+        ${history.slice(0, 5).map(m => `- ${m.foodName} (${m.calories}kcal, ${m.mealType || '不明'})`).join('\n')}
+
+        【本日の摂取状況】
+        - 総摂取カロリー: ${dailyLog.totalCalories} kcal
+        - P (タンパク質): ${dailyLog.macros.protein} g
+        - F (脂質): ${dailyLog.macros.fat} g
+        - C (炭水化物): ${dailyLog.macros.carbs} g
+        - 目標カロリー: ${dailyLog.targetCalories} kcal
+        - 残りカロリー: ${remainingCalories} kcal
+
+        【ストック・文脈情報】
+        ${stockContext}
+
+        【提案のルール】
+        1. 合計**6つ**のメニュー/アクションを提案してください。
+        2. **カロリー状況に応じた提案**:
+           - カロリーが余っている → 通常の食事提案
+           - カロリーが少し超過 → 軽めの食事、サラダ、プロテインなど
+           - カロリーが大幅超過 → 「食べない」「運動する」「水・お茶のみ」なども選択肢に
+        3. **時間帯の考慮**:
+           - 夜遅い(21時以降) → 消化に良いもの、または食べないことを推奨
+           - 既に同じ食事を食べている場合は、次の食事を提案（昼食済みなら夕食を）
+        4. 出力はJSON形式のみ:
+        {
+            "mealCategory": "${mealCategory}",
+            "detectedContext": "${mealContext}",
+            "suggestions": [
+                { "name": "具体的なメニュー名またはアクション", "reason": "なぜこれが良いか1文で", "calories": 推定カロリー数値 },
+                ...
+            ],
+            "advice": "全体的なアドバイスを1文で"
+        }
+        `;
+
+
+    let lastError = null;
+
+    for (const modelName of MODELS_TO_TRY) {
+        try {
+            if (!apiKey) throw new Error("API Key is missing.");
+            const genAI = new GoogleGenerativeAI(apiKey);
+            const model = genAI.getGenerativeModel({ model: modelName });
+
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text().replace(/```json\n?|\n?```/g, "").trim();
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+
+            if (jsonMatch) {
+                return JSON.parse(jsonMatch[0]);
+            }
+        } catch (error) {
+            console.warn(`Suggestion Model ${modelName} failed:`, error.message);
+            lastError = error;
+        }
+    }
+
+    return { suggestions: [], advice: `現在AIアドバイスを利用できません。(理由: ${lastError?.message || "All models failed"})` };
+};
+
+export const evaluateDailyLog = async (data, stockItems = []) => {
     // data = { date, consumedCalories, targetCalories, meals: [], currentWeight, targetWeight, targetDate }
     if (!apiKey) {
         return { error: "API Key missing" };
+    }
+
+    // Call Advisor Internally (Parallel or Sequential)
+    let adviceResult = null;
+    try {
+        adviceResult = await suggestNextMeal(
+            data.meals || [],
+            {
+                totalCalories: data.consumedCalories || 0,
+                targetCalories: data.targetCalories || 0,
+                macros: data.macros || { protein: 0, fat: 0, carbs: 0 }
+            },
+            'auto',
+            stockItems || []
+        );
+    } catch (e) {
+        console.warn("Internal Advisor Call Failed:", e);
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -343,6 +527,13 @@ export const evaluateDailyLog = async (data) => {
                 const resultData = JSON.parse(jsonMatch[0]);
                 // Metadata
                 resultData.model = modelName;
+
+                // Merge Advisor Suggestions
+                if (adviceResult) {
+                    resultData.suggestions = adviceResult.suggestions;
+                    resultData.mealCategory = adviceResult.mealCategory;
+                    resultData.detectedContext = adviceResult.detectedContext;
+                }
                 return resultData;
             }
         } catch (e) {
@@ -481,170 +672,7 @@ export const calculateRecipeWithGemini = async (ingredients) => {
     return { error: `All models failed. Last check: ${lastError?.message}` };
 };
 
-export const suggestNextMeal = async (history, dailyLog, targetType = 'auto', stockItems = []) => {
-    // Map targetType to Japanese label
-    const labels = {
-        breakfast: '朝食',
-        lunch: '昼食',
-        dinner: '夕食',
-        snack: '間食・おやつ',
-        skip: '食事を控える',
-        auto: '次の食事'
-    };
 
-    const now = new Date();
-    // Fix Timezone to JST (UTC+9)
-    const jstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
-    const hour = jstNow.getUTCHours();
-
-    // Determine what meals have been eaten today using JST
-    const todayMeals = history.filter(m => {
-        const mealDate = new Date(m.timestamp);
-        // Correctly match "today" in JST
-        const mealDateJST = new Date(mealDate.getTime() + (9 * 60 * 60 * 1000));
-        return mealDateJST.toISOString().split('T')[0] === jstNow.toISOString().split('T')[0];
-    });
-    const eatenMealTypes = todayMeals.map(m => m.mealType).filter(Boolean);
-    const hasBreakfast = eatenMealTypes.includes('breakfast');
-    const hasLunch = eatenMealTypes.includes('lunch');
-    const hasDinner = eatenMealTypes.includes('dinner');
-
-    // Calculate remaining calories
-    const remainingCalories = dailyLog.targetCalories - dailyLog.totalCalories;
-    const isOverCalories = remainingCalories < 0;
-    const isLowCalories = remainingCalories > 800;
-
-    // Smart meal type detection
-    let suggestedMealType = targetType;
-    let mealContext = '';
-
-    if (targetType === 'auto' || targetType === 'dinner') {
-        // Auto-detect what meal to suggest
-        if (hour < 10 && !hasBreakfast) {
-            suggestedMealType = 'breakfast';
-            mealContext = '朝の時間帯で、まだ朝食を食べていません。';
-        } else if (hour >= 10 && hour < 14 && !hasLunch) {
-            suggestedMealType = 'lunch';
-            mealContext = 'お昼時で、まだ昼食を食べていません。';
-        } else if (hour >= 14 && hour < 18) {
-            if (isOverCalories) {
-                suggestedMealType = 'skip';
-                mealContext = '午後ですが、既にカロリーオーバーです。';
-            } else if (hasLunch && !hasDinner) {
-                // Determine if snack is needed based on time
-                // User dislikes snacks unless absolutely needed.
-                if (hour < 16) {
-                    suggestedMealType = 'snack';
-                    mealContext = '昼食から時間が空いていますが、無駄な間食は控えましょう。どうしてもお腹が空いた場合のみ。';
-                } else {
-                    suggestedMealType = 'dinner';
-                    mealContext = '夕食のことを考える時間帯です。間食は控え、夕食に備えましょう。';
-                }
-            } else if (!hasLunch) {
-                suggestedMealType = 'lunch';
-                mealContext = 'まだ昼食を食べていません。遅めの昼食を。';
-            } else {
-                suggestedMealType = 'dinner';
-                mealContext = '夕食に向けた準備の時間です。';
-            }
-        } else if (hour >= 18 && !hasDinner) {
-            suggestedMealType = isOverCalories ? 'skip' : 'dinner';
-            mealContext = isOverCalories ? '夕食時ですが、既にカロリーオーバーです。' : '夕食の時間帯です。';
-        } else if (hour >= 21) {
-            suggestedMealType = 'skip';
-            mealContext = '夜遅い時間です。これ以上の食事は控えるべきです。';
-        } else {
-            suggestedMealType = 'snack';
-            mealContext = '次の食事までの間食を提案します。';
-        }
-    }
-
-    const mealCategory = labels[suggestedMealType] || '食事';
-    const stockContext = stockItems.length > 0 ? `冷蔵庫・ストック・文脈情報: ${stockItems.map(i => i.name).join(', ')}` : "特になし";
-
-    const prompt = `
-        あなたはプロの管理栄養士かつグルメコンシェルジュです。
-        現在の時刻は${hour}時です。
-        
-        【重要な状況判断】
-        ${mealContext}
-        カロリー状況: ${isOverCalories ? `既に${Math.abs(remainingCalories)}kcalオーバー` : `残り${remainingCalories}kcal`}
-        
-        【今日食べた食事 (JST判定)】
-        ・朝食: ${hasBreakfast ? '済' : '未'}
-        ・昼食: ${hasLunch ? '済' : '未'}
-        ・夕食: ${hasDinner ? '済' : '未'}
-        
-        【提案する食事カテゴリ】
-        **${mealCategory}** を提案してください。
-        ${suggestedMealType === 'skip' ? '※カロリーオーバーまたは夜遅いため、「食べない」「軽い運動」「水分のみ」などの選択肢も含めてください。' : ''}
-        ${suggestedMealType === 'snack' ? '※**ユーザーは無駄な間食を嫌います。**「本当にお腹が空いた時用のヘルシーなもの」か、「食べずに済ませる方法（お茶など）」を提案に含めてください。' : ''}
-        
-        【入力情報】
-        1. **ユーザーの食事履歴**: 直近の食事内容。
-        2. **本日の摂取状況**: カロリーとPFCバランス。
-        3. **ストック・文脈情報**: 冷蔵庫の中身だけでなく、「新宿駅周辺」「居酒屋」「イタリアン」などの**場所やジャンル**が含まれている場合があります。
-
-        【ユーザーの直近の食事履歴】
-        ${history.slice(0, 5).map(m => `- ${m.foodName} (${m.calories}kcal, ${m.mealType || '不明'})`).join('\n')}
-
-        【本日の摂取状況】
-        - 総摂取カロリー: ${dailyLog.totalCalories} kcal
-        - P (タンパク質): ${dailyLog.macros.protein} g
-        - F (脂質): ${dailyLog.macros.fat} g
-        - C (炭水化物): ${dailyLog.macros.carbs} g
-        - 目標カロリー: ${dailyLog.targetCalories} kcal
-        - 残りカロリー: ${remainingCalories} kcal
-
-        【ストック・文脈情報】
-        ${stockContext}
-
-        【提案のルール】
-        1. 合計**6つ**のメニュー/アクションを提案してください。
-        2. **カロリー状況に応じた提案**:
-           - カロリーが余っている → 通常の食事提案
-           - カロリーが少し超過 → 軽めの食事、サラダ、プロテインなど
-           - カロリーが大幅超過 → 「食べない」「運動する」「水・お茶のみ」なども選択肢に
-        3. **時間帯の考慮**:
-           - 夜遅い(21時以降) → 消化に良いもの、または食べないことを推奨
-           - 既に同じ食事を食べている場合は、次の食事を提案（昼食済みなら夕食を）
-        4. 出力はJSON形式のみ:
-        {
-            "mealCategory": "${mealCategory}",
-            "detectedContext": "${mealContext}",
-            "suggestions": [
-                { "name": "具体的なメニュー名またはアクション", "reason": "なぜこれが良いか1文で", "calories": 推定カロリー数値 },
-                ...
-            ],
-            "advice": "全体的なアドバイスを1文で"
-        }
-        `;
-
-
-    let lastError = null;
-
-    for (const modelName of MODELS_TO_TRY) {
-        try {
-            if (!apiKey) throw new Error("API Key is missing.");
-            const genAI = new GoogleGenerativeAI(apiKey);
-            const model = genAI.getGenerativeModel({ model: modelName });
-
-            const result = await model.generateContent(prompt);
-            const response = await result.response;
-            const text = response.text().replace(/```json\n?|\n?```/g, "").trim();
-            const jsonMatch = text.match(/\{[\s\S]*\}/);
-
-            if (jsonMatch) {
-                return JSON.parse(jsonMatch[0]);
-            }
-        } catch (error) {
-            console.warn(`Suggestion Model ${modelName} failed:`, error.message);
-            lastError = error;
-        }
-    }
-
-    return { suggestions: [], advice: `現在AIアドバイスを利用できません。(理由: ${lastError?.message || "All models failed"})` };
-};
 
 export const searchRecipesWithGemini = async (query, stockItems = []) => {
     const stockContext = stockItems.length > 0 ? `冷蔵庫・ストック: ${stockItems.map(i => i.name).join(', ')}` : "";

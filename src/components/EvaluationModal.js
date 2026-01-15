@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Sparkles, Trophy, AlertTriangle, Info } from 'lucide-react';
 import { evaluateDailyLog } from '@/app/actions';
 
-export default function EvaluationModal({ data, onClose, onEvaluationComplete, savedResult, onSave }) {
+export default function EvaluationModal({ data, onClose, onEvaluationComplete, savedResult, onSave, stockItems = [] }) {
     const [result, setResult] = useState(savedResult || null);
     const [loading, setLoading] = useState(!savedResult);
     const [error, setError] = useState(false);
@@ -13,7 +13,7 @@ export default function EvaluationModal({ data, onClose, onEvaluationComplete, s
         setLoading(true);
         setError(false);
         try {
-            const res = await evaluateDailyLog(data);
+            const res = await evaluateDailyLog(data, stockItems);
             if (res.error) {
                 setError(true);
             } else {
@@ -45,7 +45,7 @@ export default function EvaluationModal({ data, onClose, onEvaluationComplete, s
 
     return (
         <div className="fixed-overlay">
-            <div className="glass-panel zoom-in" style={{ width: '90%', maxWidth: '400px', padding: '0', overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+            <div className="glass-panel zoom-in" style={{ width: '90%', maxWidth: '400px', maxHeight: '85vh', padding: '0', overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative' }}>
 
                 {/* Close Button - FIXED POSITION relative to modal container */}
                 <button onClick={onClose} style={{ position: 'absolute', top: '15px', right: '15px', background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', zIndex: 50, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -53,7 +53,7 @@ export default function EvaluationModal({ data, onClose, onEvaluationComplete, s
                 </button>
 
                 {/* Content Container - Scrollable */}
-                <div style={{ overflowY: 'auto', flex: 1, position: 'relative', MaxHeight: '80vh' }}>
+                <div style={{ overflowY: 'auto', flex: 1, position: 'relative', paddingBottom: '20px' }}>
 
                     {/* --- LOADING STATE --- */}
                     {loading && (
@@ -96,6 +96,29 @@ export default function EvaluationModal({ data, onClose, onEvaluationComplete, s
                                         })}
                                     </div>
                                 </div>
+
+                                {/* Suggestions Section */}
+                                {result.suggestions && result.suggestions.length > 0 && (
+                                    <div style={{ marginBottom: '20px', borderTop: '1px solid var(--border-subtle)', paddingTop: '20px' }}>
+                                        <h4 style={{ margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>
+                                            <Sparkles size={18} color="#F59E0B" /> {result.mealCategory || '次の食事提案'}
+                                        </h4>
+                                        {result.detectedContext && (
+                                            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '12px', background: 'var(--bg-card)', padding: '8px 12px', borderRadius: '8px' }}>
+                                                {result.detectedContext}
+                                            </div>
+                                        )}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                            {result.suggestions.map((item, idx) => (
+                                                <div key={idx} style={{ background: 'var(--bg-card)', padding: '12px', borderRadius: '12px', border: '1px solid var(--border-subtle)' }}>
+                                                    <div style={{ fontWeight: 'bold', fontSize: '0.95rem', color: 'var(--text-primary)' }}>{item.name}</div>
+                                                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: 1.4 }}>{item.reason}</div>
+                                                    {item.calories && <div style={{ fontSize: '0.8rem', color: 'var(--primary)', marginTop: '6px', fontWeight: 600 }}>約{item.calories}kcal</div>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Gemini Badge */}
                                 <div style={{ textAlign: 'right', fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>

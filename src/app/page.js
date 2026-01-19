@@ -542,257 +542,260 @@ export default function Home() {
             </div>
           </div>
 
-          {/* --- Modals --- */}
+        </div>
+      </PullToRefresh>
 
-          {showWeightTracker && (
-            <div style={{ position: 'relative', zIndex: 1000 }}>
-              <WeightTracker
-                user={user}
-                userProfile={userProfile}
-                weights={weights}
-                activeDate={currentDate} // Pass current date for logging
-                onClose={() => {
-                  setShowWeightTracker(false);
-                  refreshWeights();
-                }}
-                onUpdateWeights={refreshWeights}
-              />
-            </div>
-          )}
+      {/* --- Modals --- */}
 
-          {showEvaluation && (
-            <div style={{ position: 'relative', zIndex: 1001 }}>
-              <EvaluationModal
-                data={evaluationData}
-                savedResult={dailyEvaluation} // Pass persisted result
-                onSave={setDailyEvaluation}   // Save result callback
-                onClose={() => setShowEvaluation(false)}
-                onEvaluationComplete={handleEvaluationComplete}
-                stockItems={stockItems}
-              />
-            </div>
-          )}
+      {showWeightTracker && (
+        <div style={{ position: 'relative', zIndex: 1000 }}>
+          <WeightTracker
+            user={user}
+            userProfile={userProfile}
+            weights={weights}
+            activeDate={currentDate} // Pass current date for logging
+            onClose={() => {
+              setShowWeightTracker(false);
+              refreshWeights();
+            }}
+            onUpdateWeights={refreshWeights}
+          />
+        </div>
+      )}
 
-          {showAdvisor && (
-            <div style={{ position: 'relative', zIndex: 1000 }}>
-              <AdvisorModal
-                targetType="auto"
-                history={meals}
-                dailyLog={{
-                  totalCalories,
-                  targetCalories,
-                  macros: {
-                    protein: displayMeals.reduce((acc, m) => acc + (m.macros?.protein || 0), 0),
-                    fat: displayMeals.reduce((acc, m) => acc + (m.macros?.fat || 0), 0),
-                    carbs: displayMeals.reduce((acc, m) => acc + (m.macros?.carbs || 0), 0)
-                  }
-                }}
-                savedState={advisorState}
-                onSave={setAdvisorState}
-                onClose={() => setShowAdvisor(false)}
-                onSuggestionClick={(query) => {
-                  setShowAdvisor(false);
-                  setInitialRecipeSearch(query);
-                  setShowLogger(true);
-                }}
-                stockItems={stockItems}
-              />
-            </div>
-          )}
+      {showEvaluation && (
+        <div style={{ position: 'relative', zIndex: 1001 }}>
+          <EvaluationModal
+            data={evaluationData}
+            savedResult={dailyEvaluation} // Pass persisted result
+            onSave={setDailyEvaluation}   // Save result callback
+            onClose={() => setShowEvaluation(false)}
+            onEvaluationComplete={handleEvaluationComplete}
+            stockItems={stockItems}
+          />
+        </div>
+      )}
 
-          {showStockManager && (
-            <div style={{ position: 'relative', zIndex: 1002 }}>
-              <StockManager
-                isOpen={showStockManager}
-                onClose={() => setShowStockManager(false)}
-                stockItems={stockItems}
-                onAdd={handleAddStock}
-                onDelete={handleDeleteStock}
-              />
-            </div>
-          )}
+      {showAdvisor && (
+        <div style={{ position: 'relative', zIndex: 1000 }}>
+          <AdvisorModal
+            targetType="auto"
+            history={meals}
+            dailyLog={{
+              totalCalories,
+              targetCalories,
+              macros: {
+                protein: displayMeals.reduce((acc, m) => acc + (m.macros?.protein || 0), 0),
+                fat: displayMeals.reduce((acc, m) => acc + (m.macros?.fat || 0), 0),
+                carbs: displayMeals.reduce((acc, m) => acc + (m.macros?.carbs || 0), 0)
+              }
+            }}
+            savedState={advisorState}
+            onSave={setAdvisorState}
+            onClose={() => setShowAdvisor(false)}
+            onSuggestionClick={(query) => {
+              setShowAdvisor(false);
+              setInitialRecipeSearch(query);
+              setShowLogger(true);
+            }}
+            stockItems={stockItems}
+          />
+        </div>
+      )}
 
-          {/* Delete Confirmation Modal */}
-          {
-            deleteConfirmation && (
-              <div className="fixed-overlay" style={{ zIndex: 2000 }}>
-                <div className="glass-panel" style={{ padding: '20px', width: '300px', textAlign: 'center' }}>
-                  <p style={{ marginBottom: '20px', fontWeight: 'bold' }}>記録を削除しますか？</p>
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <button onClick={() => setDeleteConfirmation(null)} disabled={isDeleting} style={{ flex: 1, padding: '10px', background: 'transparent', border: '1px solid var(--border-subtle)', borderRadius: '8px', cursor: isDeleting ? 'not-allowed' : 'pointer' }}>キャンセル</button>
-                    <button onClick={executeDeleteMeal} disabled={isDeleting} className="btn-primary" style={{ flex: 1, background: '#ff4d4d', borderColor: '#ff4d4d', cursor: isDeleting ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
-                      {isDeleting ? <Loader2 className="spin" size={16} /> : '削除'}
-                    </button>
-                  </div>
-                </div>
+      {showStockManager && (
+        <div style={{ position: 'relative', zIndex: 1002 }}>
+          <StockManager
+            isOpen={showStockManager}
+            onClose={() => setShowStockManager(false)}
+            stockItems={stockItems}
+            onAdd={handleAddStock}
+            onDelete={handleDeleteStock}
+          />
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {
+        deleteConfirmation && (
+          <div className="fixed-overlay" style={{ zIndex: 2000 }}>
+            <div className="glass-panel" style={{ padding: '20px', width: '300px', textAlign: 'center' }}>
+              <p style={{ marginBottom: '20px', fontWeight: 'bold' }}>記録を削除しますか？</p>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={() => setDeleteConfirmation(null)} disabled={isDeleting} style={{ flex: 1, padding: '10px', background: 'transparent', border: '1px solid var(--border-subtle)', borderRadius: '8px', cursor: isDeleting ? 'not-allowed' : 'pointer' }}>キャンセル</button>
+                <button onClick={executeDeleteMeal} disabled={isDeleting} className="btn-primary" style={{ flex: 1, background: '#ff4d4d', borderColor: '#ff4d4d', cursor: isDeleting ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                  {isDeleting ? <Loader2 className="spin" size={16} /> : '削除'}
+                </button>
               </div>
-            )
-          }
+            </div>
+          </div>
+        )
+      }
 
-          {/* Meal Timeline */}
-          <div style={{ marginBottom: '40px' }}>
-            <h3 style={{ fontSize: '1rem', color: 'var(--text-primary)', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Utensils size={18} /> 食事の記録
-            </h3>
+      {/* Meal Timeline */}
+      <div style={{ marginBottom: '40px' }}>
+        <h3 style={{ fontSize: '1rem', color: 'var(--text-primary)', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Utensils size={18} /> 食事の記録
+        </h3>
 
-            {displayMeals.length === 0 ? (
-              <div className="empty-state">
-                <p>記録がありません</p>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {displayMeals.map((meal) => {
-                  // Helper to get color and style from score (0: Red, 5: Neutral, 10: Green)
-                  const getMealScoreStyle = (meal) => {
-                    let score = null; // null means not evaluated yet
+        {displayMeals.length === 0 ? (
+          <div className="empty-state">
+            <p>記録がありません</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {displayMeals.map((meal) => {
+              // Helper to get color and style from score (0: Red, 5: Neutral, 10: Green)
+              const getMealScoreStyle = (meal) => {
+                let score = null; // null means not evaluated yet
 
-                    if (typeof meal.score === 'number') {
-                      score = meal.score;
-                    } else if (meal.assessment) {
-                      // Backward compatibility
-                      if (meal.assessment === 'positive') score = 8;
-                      if (meal.assessment === 'negative') score = 2;
-                      if (meal.assessment === 'neutral') score = 5;
-                    }
+                if (typeof meal.score === 'number') {
+                  score = meal.score;
+                } else if (meal.assessment) {
+                  // Backward compatibility
+                  if (meal.assessment === 'positive') score = 8;
+                  if (meal.assessment === 'negative') score = 2;
+                  if (meal.assessment === 'neutral') score = 5;
+                }
 
-                    // Not evaluated yet
-                    if (score === null) {
-                      return { background: 'white', borderLeft: 'none', scoreDisplay: null };
-                    }
+                // Not evaluated yet
+                if (score === null) {
+                  return { background: 'white', borderLeft: 'none', scoreDisplay: null };
+                }
 
-                    // Clamp score
-                    score = Math.max(0, Math.min(10, score));
+                // Clamp score
+                score = Math.max(0, Math.min(10, score));
 
-                    // Color calculation - more visible now!
-                    let bgColor, borderColor, scoreColor;
+                // Color calculation - more visible now!
+                let bgColor, borderColor, scoreColor;
 
-                    if (score >= 7) {
-                      // Good (7-10): Green shades
-                      const intensity = (score - 5) / 5; // 0.4 to 1
-                      bgColor = `rgba(72, 187, 120, ${0.1 + intensity * 0.2})`; // 0.1 to 0.3
-                      borderColor = `rgba(72, 187, 120, ${0.5 + intensity * 0.5})`;
-                      scoreColor = '#22543D';
-                    } else if (score <= 3) {
-                      // Bad (0-3): Red shades
-                      const intensity = (5 - score) / 5; // 0.4 to 1
-                      bgColor = `rgba(245, 101, 101, ${0.1 + intensity * 0.2})`;
-                      borderColor = `rgba(245, 101, 101, ${0.5 + intensity * 0.5})`;
-                      scoreColor = '#742A2A';
-                    } else {
-                      // Neutral (4-6): Light gray/yellow
-                      bgColor = 'rgba(237, 242, 247, 0.8)';
-                      borderColor = 'rgba(160, 174, 192, 0.5)';
-                      scoreColor = '#4A5568';
-                    }
+                if (score >= 7) {
+                  // Good (7-10): Green shades
+                  const intensity = (score - 5) / 5; // 0.4 to 1
+                  bgColor = `rgba(72, 187, 120, ${0.1 + intensity * 0.2})`; // 0.1 to 0.3
+                  borderColor = `rgba(72, 187, 120, ${0.5 + intensity * 0.5})`;
+                  scoreColor = '#22543D';
+                } else if (score <= 3) {
+                  // Bad (0-3): Red shades
+                  const intensity = (5 - score) / 5; // 0.4 to 1
+                  bgColor = `rgba(245, 101, 101, ${0.1 + intensity * 0.2})`;
+                  borderColor = `rgba(245, 101, 101, ${0.5 + intensity * 0.5})`;
+                  scoreColor = '#742A2A';
+                } else {
+                  // Neutral (4-6): Light gray/yellow
+                  bgColor = 'rgba(237, 242, 247, 0.8)';
+                  borderColor = 'rgba(160, 174, 192, 0.5)';
+                  scoreColor = '#4A5568';
+                }
 
-                    return {
-                      background: bgColor,
-                      borderLeft: `4px solid ${borderColor}`,
-                      scoreDisplay: score,
-                      scoreColor
-                    };
-                  };
+                return {
+                  background: bgColor,
+                  borderLeft: `4px solid ${borderColor}`,
+                  scoreDisplay: score,
+                  scoreColor
+                };
+              };
 
-                  const scoreStyle = getMealScoreStyle(meal);
+              const scoreStyle = getMealScoreStyle(meal);
 
-                  return (
-                    <div key={meal.id || meal.timestamp} className="glass-panel" style={{ padding: '15px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', background: scoreStyle.background, borderLeft: scoreStyle.borderLeft, transition: 'all 0.3s ease' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '45px' }}>
-                          <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>
-                            {new Date(meal.timestamp).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                          {/* Meal Type Badge (Click to Rotate) */}
-                          <button
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              const types = ['breakfast', 'lunch', 'dinner', 'snack'];
-                              const currentIdx = types.indexOf(meal.mealType || 'snack');
-                              const nextType = types[(currentIdx + 1) % types.length];
+              return (
+                <div key={meal.id || meal.timestamp} className="glass-panel" style={{ padding: '15px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', background: scoreStyle.background, borderLeft: scoreStyle.borderLeft, transition: 'all 0.3s ease' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '45px' }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>
+                        {new Date(meal.timestamp).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      {/* Meal Type Badge (Click to Rotate) */}
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const types = ['breakfast', 'lunch', 'dinner', 'snack'];
+                          const currentIdx = types.indexOf(meal.mealType || 'snack');
+                          const nextType = types[(currentIdx + 1) % types.length];
 
-                              // 1. Optimistic Update (Immediate UI Feedback)
-                              setMeals(prev => prev.map(m => m.id === meal.id ? { ...m, mealType: nextType } : m));
+                          // 1. Optimistic Update (Immediate UI Feedback)
+                          setMeals(prev => prev.map(m => m.id === meal.id ? { ...m, mealType: nextType } : m));
 
-                              // 2. Background Update
-                              try {
-                                await updateMealInFirestore(user.uid, meal.id, { mealType: nextType });
-                              } catch (err) {
-                                console.error("Failed to update meal type", err);
-                                // Revert if failed (optional, but good practice)
-                                setMeals(prev => prev.map(m => m.id === meal.id ? { ...m, mealType: meal.mealType } : m));
-                              }
-                            }}
-                            style={{ marginTop: '5px', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-subtle)', background: 'white', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                          >
-                            {{ breakfast: '🌅 朝食', lunch: '☀️ 昼食', dinner: '🌙 夕食', snack: '🍪 間食' }[meal.mealType] || '🍪 間食'}
-                          </button>
-                        </div>
+                          // 2. Background Update
+                          try {
+                            await updateMealInFirestore(user.uid, meal.id, { mealType: nextType });
+                          } catch (err) {
+                            console.error("Failed to update meal type", err);
+                            // Revert if failed (optional, but good practice)
+                            setMeals(prev => prev.map(m => m.id === meal.id ? { ...m, mealType: meal.mealType } : m));
+                          }
+                        }}
+                        style={{ marginTop: '5px', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-subtle)', background: 'white', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        {{ breakfast: '🌅 朝食', lunch: '☀️ 昼食', dinner: '🌙 夕食', snack: '🍪 間食' }[meal.mealType] || '🍪 間食'}
+                      </button>
+                    </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, marginLeft: '10px' }}>
-                          <div style={{ width: '36px', height: '36px', minWidth: '36px', minHeight: '36px', maxWidth: '36px', maxHeight: '36px', background: scoreStyle.scoreDisplay !== null ? scoreStyle.background : 'var(--bg-main)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: scoreStyle.scoreDisplay !== null ? scoreStyle.scoreColor : 'var(--primary)', fontWeight: 700, fontSize: '1rem', border: scoreStyle.scoreDisplay !== null ? `2px solid ${scoreStyle.scoreColor}` : 'none', flexShrink: 0 }}>
-                            {scoreStyle.scoreDisplay !== null ? scoreStyle.scoreDisplay : <Utensils size={16} />}
-                          </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, marginLeft: '10px' }}>
+                      <div style={{ width: '36px', height: '36px', minWidth: '36px', minHeight: '36px', maxWidth: '36px', maxHeight: '36px', background: scoreStyle.scoreDisplay !== null ? scoreStyle.background : 'var(--bg-main)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: scoreStyle.scoreDisplay !== null ? scoreStyle.scoreColor : 'var(--primary)', fontWeight: 700, fontSize: '1rem', border: scoreStyle.scoreDisplay !== null ? `2px solid ${scoreStyle.scoreColor}` : 'none', flexShrink: 0 }}>
+                        {scoreStyle.scoreDisplay !== null ? scoreStyle.scoreDisplay : <Utensils size={16} />}
+                      </div>
 
-                          <div>
-                            <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{meal.foodName}</div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', gap: '8px' }}>
-                              <span>P: {meal.macros?.protein || 0}g</span>
-                              <span>F: {meal.macros?.fat || 0}g</span>
-                              <span>C: {meal.macros?.carbs || 0}g</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-primary)' }}>
-                            {meal.calories} <span style={{ fontSize: '0.7rem', fontWeight: 400, color: 'var(--text-muted)' }}>kcal</span>
-                          </div>
-                          <button onClick={(e) => handleDeleteMeal(meal.id, e)} style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', opacity: 0.5 }}>
-                            <XCircle size={18} />
-                          </button>
+                      <div>
+                        <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{meal.foodName}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', gap: '8px' }}>
+                          <span>P: {meal.macros?.protein || 0}g</span>
+                          <span>F: {meal.macros?.fat || 0}g</span>
+                          <span>C: {meal.macros?.carbs || 0}g</span>
                         </div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )
-            }
-          </div>
 
-          {/* FAB */}
-          <div style={{ position: 'fixed', bottom: '30px', left: '50%', transform: 'translateX(-50%)', zIndex: 10 }}>
-            <button
-              className="btn-primary"
-              onClick={() => setShowLogger(true)}
-              style={{ padding: '14px 28px', borderRadius: '50px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 8px 24px rgba(74, 255, 176, 0.4)' }}
-            >
-              <Camera size={20} /> 記録する
-            </button>
-          </div>
-
-          {
-            showLogger && (
-              <React.Suspense fallback={null}>
-                <div style={{ position: 'relative', zIndex: 999 }}>
-                  <FoodLogger
-                    onLogMeal={handleLogMeal}
-                    onCancel={() => {
-                      setShowLogger(false);
-                      setInitialRecipeSearch(null);
-                    }}
-                    activeDate={currentDate}
-                    initialRecipeSearch={initialRecipeSearch}
-                    stockItems={stockItems}
-                    savedRecipeSearch={recipeSearchState} // Pass persisted search
-                    onSaveRecipeSearch={setRecipeSearchState} // Save search callback
-                  />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-primary)' }}>
+                        {meal.calories} <span style={{ fontSize: '0.7rem', fontWeight: 400, color: 'var(--text-muted)' }}>kcal</span>
+                      </div>
+                      <button onClick={(e) => handleDeleteMeal(meal.id, e)} style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', opacity: 0.5 }}>
+                        <XCircle size={18} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </React.Suspense>
-            )
-          }
+              );
+            })}
+          </div>
+        )
+        }
+      </div>
 
-          <style jsx global>{`
+      {/* FAB */}
+      <div style={{ position: 'fixed', bottom: '30px', left: '50%', transform: 'translateX(-50%)', zIndex: 10 }}>
+        <button
+          className="btn-primary"
+          onClick={() => setShowLogger(true)}
+          style={{ padding: '14px 28px', borderRadius: '50px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 8px 24px rgba(74, 255, 176, 0.4)' }}
+        >
+          <Camera size={20} /> 記録する
+        </button>
+      </div>
+
+      {
+        showLogger && (
+          <React.Suspense fallback={null}>
+            <div style={{ position: 'relative', zIndex: 999 }}>
+              <FoodLogger
+                onLogMeal={handleLogMeal}
+                onCancel={() => {
+                  setShowLogger(false);
+                  setInitialRecipeSearch(null);
+                }}
+                activeDate={currentDate}
+                initialRecipeSearch={initialRecipeSearch}
+                stockItems={stockItems}
+                savedRecipeSearch={recipeSearchState} // Pass persisted search
+                onSaveRecipeSearch={setRecipeSearchState} // Save search callback
+              />
+            </div>
+          </React.Suspense>
+        )
+      }
+
+      <style jsx global>{`
         body { background-color: #F7F9FC; color: #2D3748; }
         .title-gradient { background: linear-gradient(135deg, #2D3748 0%, #4A5568 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         .glass-panel { background: white; border: 1px solid rgba(0,0,0,0.04); border-radius: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02), 0 2px 4px -1px rgba(0,0,0,0.02); }
@@ -806,13 +809,11 @@ export default function Home() {
         .empty-state { text-align: center; color: #A0AEC0; padding: 40px; border: 2px dashed #E2E8F0; border-radius: 20px; }
       `}</style>
 
-          {/* Diet Shooter Game Overlay */}
-          {showGame && (
-            <DietShooter meals={meals} user={user} userProfile={userProfile} onClose={() => setShowGame(false)} />
-          )}
+      {/* Diet Shooter Game Overlay */}
+      {showGame && (
+        <DietShooter meals={meals} user={user} userProfile={userProfile} onClose={() => setShowGame(false)} />
+      )}
 
-        </div>
-      </PullToRefresh>
     </main >
   );
 }

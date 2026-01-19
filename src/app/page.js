@@ -38,6 +38,7 @@ export default function Home() {
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false); // New: Delete Loading State
   const [initialRecipeSearch, setInitialRecipeSearch] = useState(null);
+  const [selectedMeal, setSelectedMeal] = useState(null); // For Meal Detail Modal
 
   // AI Persistence State
   const [dailyEvaluation, setDailyEvaluation] = useState(null); // Persist Evaluation
@@ -610,7 +611,7 @@ export default function Home() {
                   const scoreStyle = getMealScoreStyle(meal);
 
                   return (
-                    <div key={meal.id || meal.timestamp} className="glass-panel" style={{ padding: '15px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', background: scoreStyle.background, borderLeft: scoreStyle.borderLeft, transition: 'all 0.3s ease' }}>
+                    <div key={meal.id || meal.timestamp} className="glass-panel hover-card" onClick={() => setSelectedMeal(meal)} style={{ padding: '15px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', background: scoreStyle.background, borderLeft: scoreStyle.borderLeft, transition: 'all 0.3s ease', cursor: 'pointer' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '45px' }}>
                           <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>
@@ -678,6 +679,39 @@ export default function Home() {
       </PullToRefresh>
 
       {/* --- Modals --- */}
+
+      {/* Meal Detail Modal */}
+      {selectedMeal && (
+        <div className="fixed-overlay" style={{ zIndex: 1500 }} onClick={() => setSelectedMeal(null)}>
+          <div className="glass-panel zoom-in" onClick={(e) => e.stopPropagation()} style={{ width: '90%', maxWidth: '400px', padding: '25px', textAlign: 'center' }}>
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontSize: '3rem', marginBottom: '10px' }}>
+                {selectedMeal.score >= 8 ? '🌟' : selectedMeal.score >= 5 ? '👍' : selectedMeal.score >= 3 ? '⚠️' : '💔'}
+              </div>
+              <h3 style={{ margin: '0 0 5px 0', fontSize: '1.2rem', color: 'var(--text-primary)' }}>{selectedMeal.foodName}</h3>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                <span>{selectedMeal.calories} kcal</span>
+                <span>P: {selectedMeal.macros?.protein || 0}g</span>
+                <span>F: {selectedMeal.macros?.fat || 0}g</span>
+                <span>C: {selectedMeal.macros?.carbs || 0}g</span>
+              </div>
+            </div>
+
+            <div style={{ background: 'var(--bg-main)', borderRadius: '12px', padding: '20px', marginBottom: '20px' }}>
+              <div style={{ fontSize: '2.5rem', fontWeight: 800, color: selectedMeal.score >= 7 ? '#48BB78' : selectedMeal.score >= 4 ? '#ECC94B' : '#F56565', marginBottom: '10px' }}>
+                {typeof selectedMeal.score === 'number' ? `${selectedMeal.score}/10` : '---'}
+              </div>
+              <p style={{ margin: 0, fontSize: '1rem', color: 'var(--text-primary)', fontWeight: 500 }}>
+                {selectedMeal.reason || (typeof selectedMeal.score !== 'number' ? '評価中...' : 'この食事の評価理由は記録されていません')}
+              </p>
+            </div>
+
+            <button onClick={() => setSelectedMeal(null)} className="btn-primary" style={{ width: '100%', padding: '12px', fontSize: '1rem' }}>
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
 
       {showWeightTracker && (
         <div style={{ position: 'relative', zIndex: 1000 }}>

@@ -704,6 +704,27 @@ export default function Home() {
               <p style={{ margin: 0, fontSize: '1rem', color: 'var(--text-primary)', fontWeight: 500 }}>
                 {selectedMeal.reason || (typeof selectedMeal.score !== 'number' ? '評価中...' : 'この食事の評価理由は記録されていません')}
               </p>
+              {!selectedMeal.reason && typeof selectedMeal.score === 'number' && (
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    try {
+                      const result = await evaluateSingleMeal(selectedMeal);
+                      if (result.reason) {
+                        await updateMealInFirestore(user.uid, selectedMeal.id, { score: result.score, reason: result.reason });
+                        setMeals(prev => prev.map(m => m.id === selectedMeal.id ? { ...m, score: result.score, reason: result.reason } : m));
+                        setSelectedMeal(prev => ({ ...prev, score: result.score, reason: result.reason }));
+                      }
+                    } catch (err) {
+                      console.error('Re-evaluation failed:', err);
+                    }
+                  }}
+                  style={{ marginTop: '15px', padding: '8px 16px', fontSize: '0.85rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
+                >
+                  <Sparkles size={14} style={{ marginRight: '5px', verticalAlign: 'middle' }} />
+                  理由を取得
+                </button>
+              )}
             </div>
 
             <button onClick={() => setSelectedMeal(null)} className="btn-primary" style={{ width: '100%', padding: '12px', fontSize: '1rem' }}>

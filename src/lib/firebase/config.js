@@ -1,7 +1,7 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
 
 // Your web app's Firebase configuration
 // REPLACE THESE WITH YOUR OWN FIREBASE KEYS
@@ -25,6 +25,9 @@ try {
     app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
     auth = getAuth(app);
     db = getFirestore(app);
+    if (typeof window !== "undefined") {
+      enableIndexedDbPersistence(db).catch(() => { });
+    }
   } else {
     // During build time (e.g. Vercel static generation), keys might be missing.
     // Return undefined to avoid build crash, but app will fail at runtime if keys are still missing.

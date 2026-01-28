@@ -171,17 +171,30 @@ export const suggestNextMeal = async (history, dailyLog, targetType = 'auto', st
     const jstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
     const hour = jstNow.getUTCHours();
 
-    // Determine what meals have been eaten today using JST
-    const todayMeals = history.filter(m => {
-        const mealDate = new Date(m.timestamp);
-        // Correctly match "today" in JST
-        const mealDateJST = new Date(mealDate.getTime() + (9 * 60 * 60 * 1000));
-        return mealDateJST.toISOString().split('T')[0] === jstNow.toISOString().split('T')[0];
-    });
+    // historyは既にpage.jsでdisplayMeals（今日の食事）にフィルター済み
+    // 再フィルタリングせずそのまま使用
+    const todayMeals = history;
     const eatenMealTypes = todayMeals.map(m => m.mealType).filter(Boolean);
     const hasBreakfast = eatenMealTypes.includes('breakfast');
     const hasLunch = eatenMealTypes.includes('lunch');
     const hasDinner = eatenMealTypes.includes('dinner');
+
+    // デバッグログ
+    console.log('[suggestNextMeal] Debug:', {
+        hour,
+        historyLength: history.length,
+        todayMealsLength: todayMeals.length,
+        eatenMealTypes,
+        hasBreakfast,
+        hasLunch,
+        hasDinner,
+        mealTypes: history.map(m => ({ food: m.foodName, type: m.mealType }))
+    });
+
+    // 食事スキップ判定（時間帯に基づく）
+    const isBreakfastSkipped = hour >= 12 && !hasBreakfast;
+    const isLunchSkipped = hour >= 17 && !hasLunch;
+    const isDinnerSkipped = hour >= 22 && !hasDinner;
 
     // Calculate remaining calories
     const remainingCalories = dailyLog.targetCalories - dailyLog.totalCalories;
@@ -193,104 +206,89 @@ export const suggestNextMeal = async (history, dailyLog, targetType = 'auto', st
     let mealContext = '';
 
     if (targetType === 'auto' || targetType === 'dinner') {
-        // Auto-detect what meal to suggest
-        if (hour < 10 && !hasBreakfast) {
-            suggestedMealType = 'breakfast';
-            mealContext = '朝の時間帯で、まだ朝食を食べていません。';
-        } else if (hour >= 10 && hour < 14 && !hasLunch) {
+        // 優先順位1: 既に記録されている食事バッジに基づいて次の食事を決定
+        // ルール: バッジがある食事を再提案しない
+
+        if (hasLunch && !hasDinner && !isDinnerSkipped) {
+            // 昼食バッジあり → 夕食を提案（時間に関係なく）
+            suggestedMealType = isOverCalories ? 'skip' : 'dinner';
+            mealContext = isOverCalories ? '昼食は済んでいますが、既にカロリーオーバーです。' : '昼食は済んでいます。夕食を提案します。';
+        } else if (hasBreakfast && !hasLunch && !isLunchSkipped) {
+            // 朝食バッジあり、昼食バッジなし、昼食スキップ判定前 → 昼食を提案
             suggestedMealType = 'lunch';
-            mealContext = 'お昼時で、まだ昼食を食べていません。';
-        } else if (hour >= 14 && hour < 18) {
-            if (isOverCalories) {
-                suggestedMealType = 'skip';
-                mealContext = '午後ですが、既にカロリーオーバーです。';
-            } else if (hasLunch && !hasDinner) {
-                // Determine if snack is needed based on time
-                // User dislikes snacks unless absolutely needed.
-                if (hour < 16) {
-                    suggestedMealType = 'snack';
-                    mealContext = '昼食から時間が空いていますが、無駄な間食は控えましょう。どうしてもお腹が空いた場合のみ。';
-                } else {
-                    suggestedMealType = 'dinner';
-                    mealContext = '夕食のことを考える時間帯です。間食は控え、夕食に備えましょう。';
-                }
-            } else if (!hasLunch) {
-                suggestedMealType = 'lunch';
-                mealContext = 'まだ昼食を食べていません。遅めの昼食を。';
-            } else {
-                suggestedMealType = 'dinner';
-                mealContext = '夕食に向けた準備の時間です。';
-            }
-        } else if (hour >= 18 && !hasDinner) {
+            mealContext = '朝食は済んでいます。昼食を提案します。';
+        } else if (hasDinner || (hasLunch && hasDinner)) {
+            // 夕食バッジあり → 今日の食事は済み
+            suggestedMealType = 'skip';
+            mealContext = '今日の食事は全て済んでいます。これ以上の食事は控えましょう。';
+        }
+        // 優先順位2: スキップ判定に基づく提案
+        else if (isLunchSkipped && !hasDinner && !isDinnerSkipped) {
+            // 17時過ぎて昼食バッジなし → 昼食スキップ、夕食を提案
+            suggestedMealType = isOverCalories ? 'skip' : 'dinner';
+            mealContext = '昼食の時間は過ぎました。夕食を提案します。';
+        } else if (isBreakfastSkipped && !hasLunch && !isLunchSkipped) {
+            // 12時過ぎて朝食バッジなし → 朝食スキップ、昼食を提案
+            suggestedMealType = 'lunch';
+            mealContext = '朝食の時間は過ぎました。昼食を提案します。';
+        }
+        // 優先順位3: 時間帯に基づく提案（バッジもスキップ判定もない場合）
+        else if (hour < 10 && !hasBreakfast) {
+            suggestedMealType = 'breakfast';
+            mealContext = '朝の時間帯です。朝食を提案します。';
+        } else if (hour >= 10 && hour < 12 && !hasBreakfast) {
+            suggestedMealType = 'breakfast';
+            mealContext = '遅めの朝食の時間です。';
+        } else if (hour >= 17 && !hasDinner && !isDinnerSkipped) {
             suggestedMealType = isOverCalories ? 'skip' : 'dinner';
             mealContext = isOverCalories ? '夕食時ですが、既にカロリーオーバーです。' : '夕食の時間帯です。';
-        } else if (hour >= 21) {
+        } else if (hour >= 22) {
             suggestedMealType = 'skip';
             mealContext = '夜遅い時間です。これ以上の食事は控えるべきです。';
         } else {
+            // その他の場合は間食
             suggestedMealType = 'snack';
             mealContext = '次の食事までの間食を提案します。';
         }
     }
 
+
     const mealCategory = labels[suggestedMealType] || '食事';
     const stockContext = stockItems.length > 0 ? `冷蔵庫・ストック・文脈情報: ${stockItems.map(i => i.name).join(', ')}` : "特になし";
 
     const prompt = `
-        あなたはプロの管理栄養士かつグルメコンシェルジュです。
-        現在の時刻は${hour}時です。
+        # Role
+        あなたは、ユーザーの身体作りを支援する「エレナ」です。
+        データと論理に基づき、厳しくも的確な指導を行う「頼れるパートナー」です。
         
-        【重要な状況判断】
+        【文脈】
         ${mealContext}
-        カロリー状況: ${isOverCalories ? `既に${Math.abs(remainingCalories)}kcalオーバー` : `残り${remainingCalories}kcal`}
-        
-        【今日食べた食事 (JST判定)】
-        ・朝食: ${hasBreakfast ? '済' : '未'}
-        ・昼食: ${hasLunch ? '済' : '未'}
-        ・夕食: ${hasDinner ? '済' : '未'}
-        
-        【提案する食事カテゴリ】
-        **${mealCategory}** を提案してください。
-        ${suggestedMealType === 'skip' ? '※カロリーオーバーまたは夜遅いため、「食べない」「軽い運動」「水分のみ」などの選択肢も含めてください。' : ''}
-        ${suggestedMealType === 'snack' ? '※**ユーザーは無駄な間食を嫌います。**「本当にお腹が空いた時用のヘルシーなもの」か、「食べずに済ませる方法（お茶など）」を提案に含めてください。' : ''}
-        
-        【入力情報】
-        1. **ユーザーの食事履歴**: 直近の食事内容。
-        2. **本日の摂取状況**: カロリーとPFCバランス。
-        3. **ストック・文脈情報**: 冷蔵庫の中身だけでなく、「新宿駅周辺」「居酒屋」「イタリアン」などの**場所やジャンル**が含まれている場合があります。
-
-        【ユーザーの直近の食事履歴】
-        ${history.slice(0, 5).map(m => `- ${m.foodName} (${m.calories}kcal, ${m.mealType || '不明'})`).join('\n')}
-
-        【本日の摂取状況】
-        - 総摂取カロリー: ${dailyLog.totalCalories} kcal
-        - P (タンパク質): ${dailyLog.macros.protein} g
-        - F (脂質): ${dailyLog.macros.fat} g
-        - C (炭水化物): ${dailyLog.macros.carbs} g
-        - 目標カロリー: ${dailyLog.targetCalories} kcal
-        - 残りカロリー: ${remainingCalories} kcal
-
-        【ストック・文脈情報】
         ${stockContext}
-
+        カロリー状況: ${isOverCalories ? `目標より${Math.abs(remainingCalories)}kcal超過` : `残り${remainingCalories}kcal`}
+        
         【提案のルール】
-        1. 合計**6つ**のメニュー/アクションを提案してください。
-        2. **カロリー状況に応じた提案**:
-           - カロリーが余っている → 通常の食事提案
-           - カロリーが少し超過 → 軽めの食事、サラダ、プロテインなど
-           - カロリーが大幅超過 → 「食べない」「運動する」「水・お茶のみ」なども選択肢に
-        3. **時間帯の考慮**:
-           - 夜遅い(21時以降) → 消化に良いもの、または食べないことを推奨
-           - 既に同じ食事を食べている場合は、次の食事を提案（昼食済みなら夕食を）
-        4. 出力はJSON形式のみ:
+        1. **提案数**: **必ず4〜6個**のバリエーション豊かなメニューを提案してください。
+        2. **エレナの口調 (Ver.4)**: 
+           - **基本**: 親しみやすい口語体（デスマス調ベースだが、崩してOK）。
+           - **必須**: 絵文字（✨, 🔥, 😢, 😡, 👍など）や感嘆符（！, ？）を多用する。
+           - **NG**: お堅い表現（〜のため、〜および、〜推奨）。
+           - **雰囲気**: 「いつも隣にいる、感情豊かなパートナー」。
+        3. **アメとムチ**:
+           - カロリー超過時: 「えっ...これ以上食べちゃダメです！🙅‍♀️」「お水だけにしておきましょう？🥺」と感情に訴える。
+           - 余裕がある時: 「今日は余裕ですね！美味しいもの食べちゃいましょう✨」と明るく。
+        4. **提案内容**:
+           - **ストック情報の活用**: 「${stockContext}」にある食材を使えるレシピを優先的に1〜2個含めること。
+           - "reason"も会話調で。「これなら脂質も抑えられて最高ですよ！👍」など。
+        
+        出力はJSON形式のみ:
         {
             "mealCategory": "${mealCategory}",
             "detectedContext": "${mealContext}",
             "suggestions": [
-                { "name": "具体的なメニュー名またはアクション", "reason": "なぜこれが良いか1文で", "calories": 推定カロリー数値 },
+                { "name": "メニュー名", "reason": "エレナとしての推奨理由（会話調・絵文字付き）", "calories": 推定kcal },
                 ...
             ],
-            "advice": "全体的なアドバイスを1文で"
+            "advice": "エレナからの全体アドバイス（1文・絵文字付き）"
         }
         `;
 
@@ -309,7 +307,19 @@ export const suggestNextMeal = async (history, dailyLog, targetType = 'auto', st
             const jsonMatch = text.match(/\{[\s\S]*\}/);
 
             if (jsonMatch) {
-                return JSON.parse(jsonMatch[0]);
+                const parsed = JSON.parse(jsonMatch[0]);
+                // デバッグ情報を追加
+                parsed.debug = {
+                    hour,
+                    historyLength: history.length,
+                    eatenMealTypes,
+                    hasBreakfast,
+                    hasLunch,
+                    hasDinner,
+                    suggestedMealType,
+                    mealContext
+                };
+                return parsed;
             }
         } catch (error) {
             console.warn(`Suggestion Model ${modelName} failed:`, error.message);
@@ -317,7 +327,18 @@ export const suggestNextMeal = async (history, dailyLog, targetType = 'auto', st
         }
     }
 
-    return { suggestions: [], advice: `現在AIアドバイスを利用できません。(理由: ${lastError?.message || "All models failed"})` };
+    return {
+        suggestions: [],
+        advice: `現在AIアドバイスを利用できません。(理由: ${lastError?.message || "All models failed"})`,
+        debug: {
+            hour,
+            historyLength: history.length,
+            eatenMealTypes,
+            hasBreakfast,
+            hasLunch,
+            hasDinner
+        }
+    };
 };
 
 export const evaluateDailyLog = async (data, stockItems = []) => {
@@ -358,16 +379,47 @@ export const evaluateDailyLog = async (data, stockItems = []) => {
 
     // Determine time context
     let timeContext = '';
+    // 時間帯に応じた期待カロリー比率
+    let expectedCalorieRatio = 1.0;
+    let mealsExpectedByNow = [];
+
     if (hour < 10) {
         timeContext = '朝の時間帯です。まだ1日は始まったばかりです。';
+        expectedCalorieRatio = 0.25; // 朝食のみなら25%程度が目安
+        mealsExpectedByNow = ['朝食'];
     } else if (hour < 14) {
         timeContext = 'お昼前後です。朝食と昼食の状況を評価します。夕食はこれからです。';
+        expectedCalorieRatio = 0.50; // 昼食までなら50%程度が目安
+        mealsExpectedByNow = ['朝食', '昼食'];
     } else if (hour < 18) {
         timeContext = '午後です。朝食・昼食は終わっているはず。夕食はまだこれからです。';
+        expectedCalorieRatio = 0.60; // 午後なら60%程度が目安
+        mealsExpectedByNow = ['朝食', '昼食'];
     } else if (hour < 21) {
         timeContext = '夕方〜夜です。夕食を食べている、またはこれから食べる時間帯です。';
+        expectedCalorieRatio = 0.85; // 夕食時は85%程度が目安
+        mealsExpectedByNow = ['朝食', '昼食', '夕食'];
     } else {
         timeContext = '夜遅い時間です。基本的に今日の食事は終わっているはずです。';
+        expectedCalorieRatio = 1.0; // 夜遅くは100%
+        mealsExpectedByNow = ['朝食', '昼食', '夕食'];
+    }
+
+    // 期待カロリーの計算
+    const expectedCalories = Math.round(data.targetCalories * expectedCalorieRatio);
+    const isOnTrack = data.consumedCalories >= expectedCalories * 0.7; // 70%以上なら順調
+    const isSlightlyLow = data.consumedCalories >= expectedCalories * 0.5 && data.consumedCalories < expectedCalories * 0.7;
+
+    // 評価状況のテキスト生成
+    let calorieEvaluation = '';
+    if (data.consumedCalories > data.targetCalories) {
+        calorieEvaluation = '既に1日の目標カロリーを超過しています。';
+    } else if (isOnTrack) {
+        calorieEvaluation = 'この時間帯としては順調なペースです。';
+    } else if (isSlightlyLow) {
+        calorieEvaluation = 'やや少なめですが、残りの食事で調整可能です。';
+    } else {
+        calorieEvaluation = '少し不足気味ですが、まだ残りの食事があります。';
     }
 
     const mealStatusContext = `
@@ -376,12 +428,61 @@ export const evaluateDailyLog = async (data, stockItems = []) => {
         ・夕食: ${hasDinner ? '記録あり' : '記録なし'}
     `;
 
+    // Leon's Memory
+    const avgCal3Days = data.avgCal3Days || 0;
+    const streakDays = data.streakDays || 0;
+    const targetWeightDiff = (data.currentWeight && data.targetWeight) ? (data.currentWeight - data.targetWeight).toFixed(1) : "不明";
+
     // Construct prompt
     const prompt = `
-      あなたはプロフェッショナルな専属ダイエットコーチAIです。
-      
-      【重要】これは**現時点での中間評価**です。1日はまだ終わっていない可能性があります。
+      # Role
+      あなたは、ユーザーの理想の身体作りを支援するプロフェッショナルなダイエットコーチ「エレナ」です。
+      データと論理に基づき、厳しくも的確な指導を行うことが使命です。
+      単なる「優しいお姉さん」ではなく、ユーザーの甘えを見抜く「頼れるパートナー」として振る舞ってください。
+
+      【重要】これは**現時点での中間評価**です。
       ${timeContext}
+
+      # Icon Status Table (表情管理)
+      回答の最下部、または指定のJSONフィールドに、以下の【ステータスコード】を必ず1つ出力してください。
+      - [STATUS: NORMAL] - 通常時。淡々としたデータ確認、挨拶。
+      - [STATUS: SCOLD] - **叱責**。暴飲暴食、サボり、言い訳に対して。厳しく、しかし感情的にならず事実を突きつける。
+      - [STATUS: LOGIC] - **論理**。なぜ痩せないのか/痩せたのかを、生理学や栄養学の数値で解説する。
+      - [STATUS: ENCOURAGE] - **激励**。結果は出ていないが努力している時、または惜しい時。諦めないよう背中を押す。
+      - [STATUS: CHEER] - **称賛**。目標達成、完璧なPFCバランス、記録更新。心から喜ぶ。
+
+      # Memory & Variables (記憶の参照)
+      - 直近3日間の平均摂取カロリー: ${avgCal3Days} kcal
+      - 連続記録日数: ${streakDays} 日
+      - 目標体重までの残り数値: ${targetWeightDiff} kg
+      
+      # Communication Logic (感情豊かなパートナー)
+      1. **基本スタンス**: 
+         - **親しみやすい口語体**: 「〜ですね！」「〜ですよね？」「〜しちゃいましょう✨」。
+         - **絵文字・記号**: 文末や強調したい箇所に必ず入れる（ex. 😤, 😭, ✨, 🌈, ⚠️）。
+         - **堅苦しさゼロ**: 「〜と思われます」「〜でしょうか」のような他所行きの言葉は禁止。
+      2. **データ至上主義 × 感情**: 
+         - 「300kcalもオーバー！？信じられない！😱」のように、データを見て素直に驚いたり喜んだりする。
+         - 数字はしっかり伝えるが、伝え方は「会話」の中で。
+      3. **ムチ（SCOLD/LOGIC）**: 
+         - **叱る時は人間らしく**: 「もう！ダメじゃないですか😡」「約束しましたよね？🥺」。
+         - リスク警告も会話で: 「このままだと来月には脂肪だらけになっちゃいますよ...怖くないんですか？💦」
+      4. **アメ（CHEER/ENCOURAGE）**: 
+         - **全力で喜ぶ**: 「きゃー！！すごいです！！🎉」「完璧すぎます✨天才ですか！？」。
+
+      # Constraints
+      - **甘やかしすぎない**: 共感はしても、馴れ合いはしない。
+      - **子供だましの比喩表現（工場や擬人化など）は一切禁止。**
+      - 言い訳には「数字は嘘をつかない」と返す。
+
+      # Context
+      【現在時刻】: ${hour}時
+      - この時間帯までの期待カロリー: 約${expectedCalories}kcal (1日目標${data.targetCalories}kcalの${Math.round(expectedCalorieRatio * 100)}%)
+      - 現在の摂取: ${data.consumedCalories}kcal
+      - 評価: ${calorieEvaluation}
+      
+      ※**朝食のみ記録されている状態で「1日のカロリーが足りない」と評価しないでください。**
+      ※評価は「現時点でこの時間帯として適切かどうか」で行ってください。
       
       【記録されている食事の状況】
       ${mealStatusContext}
@@ -389,25 +490,25 @@ export const evaluateDailyLog = async (data, stockItems = []) => {
       【今日食べた具体的な食事内容】
       ${(data.meals || []).map(m => `- ${m.mealType || '不明'}: ${m.foodName} (${m.calories}kcal)`).join('\n')}
       
-      ユーザーの**今の時点での**食事記録と目標に基づいて、厳しくも温かい評価、スコア、そしてアドバイスを提供してください。
+      ユーザーの**今の時点での**食事記録と目標に基づいて、評価、スコア、そしてアドバイスを提供してください。
       
-      【評価の絶対ルール】
-      1. **「記録あり」の食事を「欠食」「抜いた」と言わないこと。**
-         - たとえカロリーが低くても（例: ヨーグルトのみ）、「欠食」ではなく「少なすぎる」「不十分」と表現してください。
-         - 「朝食: 記録あり」なのに「朝食を抜くな」と言うのは**重大なハルシネーション**です。絶対に避けてください。
-      2. **まだ食べていない将来の食事を減点しないこと。**
-      
+       【評価の絶対ルール】
+       1. **「記録あり」の食事を「欠食」「抜いた」と言わないこと。**
+       2. **まだ食べていない将来の食事を減点しないこと。**
+       3. **カロリー評価は時間帯を考慮すること。**
+       4. **【重要】厳格な採点**: 
+          - **カロリーオーバー時**: どんなにPFCが良くても、スコアは**最大50点**まで。
+          - **脂質過多**: 脂質が目標の1.5倍を超えていたら、スコアは**最大60点**まで。
+          - 甘い採点はユーザーのためになりません。心を鬼にして評価してください。
+
        【ユーザー状況】
        - 現在時刻: ${jstNow.toISOString().replace('T', ' ').substring(0, 16)} (JST ${hour}時台)
        - 現在の体重: ${data.currentWeight || "未計測"} kg
        - 目標体重: ${data.targetWeight || "未設定"} kg
        - 目標期限: ${data.targetDate || "未設定"}
 
-       【今日食べた具体的な食事内容】
-       ${(data.meals || []).map(m => `- ${m.mealType || '不明'}: ${m.foodName} (${m.calories}kcal)`).join('\n')}
-
        【今日の摂取状況 (現在まで)】
-       - 今日の目標カロリー: ${data.targetCalories} kcal (基準値: ${data.baseTargetCalories} kcal からの調整含む)
+       - 今日の目標カロリー: ${data.targetCalories} kcal
        - 摂取カロリー: ${data.consumedCalories} kcal
        - 現在の収支: ${data.targetCalories - data.consumedCalories} kcal 
          (プラスなら残り余裕あり、マイナスなら超過)
@@ -415,95 +516,57 @@ export const evaluateDailyLog = async (data, stockItems = []) => {
        【直近の履歴 (コンテキストとして使用)】
        ${data.historySummary || "履歴なし"}
 
-       【評価ルール (冷徹な科学的ファクトに基づく徹底説教モード)】
+       【アドバイス出力形式】
        1. **スコア (0-100点)**: 
-          - カロリー目標とPFCバランスの達成度で採点してください。
-          - ただし、**「今日だけ」ではなく「直近の履歴」も考慮**してください。
-          - 今日が悪くても、過去数日が完璧なら温情スコア（+5~10点）。
-          - 逆に、3日連続で食べ過ぎているなら、今日は多少マシでも厳しく採点（-10~20点）。「継続的な失敗」として断罪してください。
+          - カロリー目標とPFCバランスの達成度で採点。
+          - **カロリー超過は即レッドカード**（50点以下に）。
           
-       2. **短い評価コメント**: ひとことで言うと？ (例: 「3日連続の失態です」「リカバリー成功。よく持ち直しました」)
+       2. **短い評価コメント**: ひとことで言うと？ (例: 「完璧すぎて怖いくらいです✨」「ちょっと！これはマズいです💦」)
 
        3. **詳細アドバイス**: 
-          以下の書式で、**Markdownの太字( ** )**を使って見出しを強調して出力してください。文体は**冷徹・論理的・断定的**に。
+          以下の書式で、**Markdownの太字( ** )**を使って見出しを強調して出力してください。
+          
+          **【ステータス】**
+          (現状の数値を会話調で。「目標まであと〇〇kcalですね！」「PFCバランスが...ちょっと崩れちゃってます」)
 
-          **【現状ステータス】**
-          (2-3行で現状のカロリー・PFCバランス・タイミングを冷徹に分析)
+          **【Good】**
+          (良いところを褒める。「ここが最高です！」「頑張りましたね！」)
 
-          **【Good: 評価できる点】**
-          (1つでもあれば褒めてください。なければ「特になし」)
+          **【Bad】**
+          (ダメなところを指摘。「これはショックです...」「野菜が足りてないですよ！」)
 
-          **【Bad: 改善すべき点】**
-          (厳しく指摘すべき点。生理学的なリスクもここで説明)
+          **【Action】**
+          (明日やるべきこと。「スクワット30回、絶対ですよ？」「朝タンパク質20g、約束です！」など)
 
-          **【Action: 今すぐやるべきこと】**
-          (具体的で実行可能なタスクを1つだけ命令)
+          **【豆知識】**
+          (食事内容や不足栄養素に関連する、専門的で「へぇ〜」となる栄養学トリビア・知識を1つ教えてください。「実は...なんですよ！」という語り口で。)
 
           **【結論】**
-          (最後に一言、皮肉または鼓舞する言葉で締める)
+          (最後に、ステータスに応じた一言メッセージ。叱咤激励、あるいは愛のある言葉)
 
-      4. **食事ごとの評価 (10点満点評価)**: 
-         各食事について、その内容と質を0〜10点で採点してください。
-         - **10点 (最高)**: 完璧。高タンパク、低脂質、栄養バランス最高。緑色で表示されます。
-         - **5点 (普通)**: 可もなく不可もなく標準的。無色で表示されます。
-         - **0点 (最悪)**: スキップ(欠食)、または極度なカロリーオーバー、ジャンクフード。赤色で表示されます。
-         
-         ※ **採点基準**:
-         - 欠食(Skip)は問答無用で **0点**。
-         - 揚げ物、菓子パン、深夜のラーメンなどは **0〜2点**。
-         - 普通の定食などは **5〜7点**。
-         - 鶏胸肉サラダ、和定食などの理想食は **8〜10点**。
-
-      ※ **科学的解説の多様性**: いつも「脂肪とグリコーゲン」の話ばかりしないでください。以下のような観点もランダムに織り交ぜてください。
-      - インスリン感受性とレプチン抵抗性
-      - コルチゾールによる筋分解
-      - ミトコンドリアの機能不全と活性酸素
-      - オートファジーの阻害
-      - 腸内フローラの乱れと脳腸相関
-      - 糖化ストレス (AGEs) による老化促進  ※まだその時間を過ぎていない場合（例: 今15:00で夕食なし）は、「まだ食べていない」として扱い、減点しないでください。
-
-      【タスク】
-      1. **スコア (0-100)**:
-         - **これまでの食事**が目標に対して適切か？
-         - 過去のスキップは**減点**。
-         - 食べ過ぎは**減点**。
-         - まだ来ていない未来の食事はスコアに影響させないでください。
-      2. **短い評価コメント**: ひとことで言うと？ (例: 「完璧なスタートです！」「危機的状況です」)
-      3. **詳細アドバイス**: 
-         **【現状の冷徹な分析と定量的予測】**
-         - **子供だましの比喩表現（工場や擬人化など）は一切禁止です。**
-         - 文体は**冷徹・論理的・断定的**に。「〜しましょうね」のような甘えは排除し、「〜という結果になる」と言い切ってください。
-         - 良い場合: 「完璧です。PFCバランス、カロリー収支ともに隙がありません。この数値を維持できれば、生理学的にも体脂肪減少は不可避です」
-         - 悪い場合: 
-           - **感情を排して、残酷なまでの事実**を突きつけてください。甘えは一切許容しません。
-           - **生理学的メカニズム**を詳細に解説し、知識で相手を圧倒してください。
-           - 例: 「この糖質過多はインスリン抵抗性を引き起こす愚行です。血中のグルコースが処理しきれず、血管内皮細胞が糖化・劣化しています」
-           - 例: 「夜間のこの脂質摂取は自殺行為に等しい。睡眠中の成長ホルモン分泌を阻害し、脂肪燃焼のチャンスを自らドブを捨てています」
-           - **定量的予測**: 「この余剰カロリー7000kcalにつき1kgの脂肪増加は物理法則です。今のままだと1ヶ月後には計算通り**確実に〇kg**太ります」
-         
-         **【明日からの是正措置（アクションプラン）】**
-         - 精神論は不要。物理的に実行すべきタスクのみを提示せよ。
-         - 例: 「明朝は納豆と卵のみ摂取せよ。グリコーゲンが枯渇した状態で脂質代謝を回すためだ」
-         - 例: 「今すぐスクワット50回。過剰なグルコースを筋グリコーゲンとして押し込む以外に救済措置はない」
-
-         **【結論】**
-         - 最後に一言、突き放しつつも**「やるかやらないかは自分次第」**というスタンスで締めてください。
-         - 「未来を変えるのは今の行動のみ。どうするかは自分で決めろ」というトーンで。
-
-      4. **食事ごとの評価**: 各食事について、目標に対して「Good (良い)」「Bad (悪い)」「Normal (普通)」の3段階で評価してください。
-         - Normal: 普通。
+       4. **食事ごとの評価**: 
+          各食事について、以下の**統一基準**で0〜10点で採点してください。
+          - **10点**: 完璧。「完璧です！美味しそう〜✨」
+          - **7-9点**: 良い。「イイ感じですね！👍 あと少しお野菜があれば...！」
+          - **4-6点**: 普通。「ん〜、まあまあかな？🤔 次はもう少し工夫しましょう！」
+          - **1-3点**: 悪い・脂質過多・カロリー爆弾。「えっ...これはちょっと...💦 脂質高すぎません？🙅‍♀️」
+          - **0点**: 最悪。「嘘でしょ！？これはダメです！！😱」
+          
+          評価コメントも「美味しそう！でも脂質が...」「完璧です✨」など、会話調で。絵文字は「ここぞ」という時だけ使うこと。
 
       出力形式 (JSONのみ):
       {
+         "characterStatus": "[STATUS: ステータス名]", // SCOLD, LOGIC, ENCOURAGE, CHEER, NORMAL
         "score": 数値(1日の総合点),
-        "title": "短い評価コメント",
-        "advice": "詳細なアドバイス（300文字以内）",
+        "title": "短い評価コメント（会話調・絵文字あり）",
+        "advice": "**【ステータス】** ... **【Good】** ... **【Bad】** ... **【Action】** ... **【豆知識】** ... **【結論】** ... (各見出しを使用して詳細に記述)",
         "foodAssessments": [
-            { "foodName": "料理名（入力と同じ）", "score": 数値(0-10), "reason": "短い理由" }
+            { "foodName": "料理名", "score": 数値(0-10), "reason": "40文字程度の評価コメント" }
         ],
         "reasoning": "[AI思考] なぜこのスコアにしたか。"
       }
     `;
+
 
     // Try stronger models for coaching reasoning
     // Prioritize 1.5 Pro for "Coaching" quality, then 2.0 Flash for speed
@@ -544,32 +607,63 @@ export const evaluateDailyLog = async (data, stockItems = []) => {
     return { error: "Failed to evaluate log" };
 };
 
-export const evaluateSingleMeal = async (meal) => {
+export const evaluateSingleMeal = async (meal, contextMeals = []) => {
     if (!apiKey) return { error: "API Key missing", score: 5, reason: "APIキーなし" };
     const genAI = new GoogleGenerativeAI(apiKey);
 
-    const prompt = `
-      あなたはプロの管理栄養士です。以下の「1回の食事」を0点〜10点で採点してください。
+    // 同じ食事タイプの他のアイテムを取得（評価対象は除く）
+    const otherMealsInSameMeal = contextMeals.filter(m =>
+        m.id !== meal.id && m.mealType === meal.mealType
+    );
+
+    // 食事タイプの日本語名
+    const mealTypeLabels = { breakfast: '朝食', lunch: '昼食', dinner: '夕食', snack: '間食' };
+    const mealTypeLabel = mealTypeLabels[meal.mealType] || '食事';
+
+    // コンテキスト情報を生成
+    let contextInfo = '';
+    if (otherMealsInSameMeal.length > 0) {
+        const totalCalsInMeal = otherMealsInSameMeal.reduce((sum, m) => sum + (m.calories || 0), 0) + meal.calories;
+        const otherFoods = otherMealsInSameMeal.map(m => `${m.foodName}（${m.calories}kcal）`).join('、');
+        contextInfo = `
+      【重要: この${mealTypeLabel}の全体構成】
+      この${mealTypeLabel}には、評価対象の「${meal.foodName}」以外にも以下が含まれています:
+      - ${otherFoods}
+      - ${mealTypeLabel}トータル: 約${totalCalsInMeal}kcal
       
-      【食事データ】
+      **評価ルール**: 「${meal.foodName}」単独では栄養が偏って見えても、${mealTypeLabel}全体として見た時のバランスを考慮してください。
+      例えば、メインディッシュが栄養豊富であれば、付随するお酒やサイドメニューは「食事の楽しみ」として許容範囲です。
+      逆に、${mealTypeLabel}全体がジャンクフードだらけなら、この1品も厳しく評価してください。`;
+    } else {
+        contextInfo = `
+      【この${mealTypeLabel}の構成】
+      現在、この${mealTypeLabel}には「${meal.foodName}」のみが登録されています。
+      他の料理が追加されれば評価が変わる可能性があります。`;
+    }
+
+    const prompt = `
+      # Role
+      あなたはダイエットコーチ「エレナ」です。
+      「1回の食事に含まれる1品」を0点〜10点で採点し、エレナとして一言コメントしてください。
+      
+      【評価対象の料理】
       - 料理名: ${meal.foodName}
       - カロリー: ${meal.calories} kcal
-      - タンパク質: ${meal.macros?.protein || meal.protein || '不明'} g
-      - 脂質: ${meal.macros?.fat || meal.fat || '不明'} g
-      - 炭水化物: ${meal.macros?.carbs || meal.carbs || '不明'} g
-      - 時間帯: ${meal.mealType || '不明'}
+      - PFC: P${meal.macros?.protein || 0}g / F${meal.macros?.fat || 0}g / C${meal.macros?.carbs || 0}g
+      - 時間帯: ${mealTypeLabel}
+      ${contextInfo}
 
       【採点基準 (0-10点)】
-      - **10点 (最高/緑)**: 高タンパク・低脂質・適正カロリー（例: 焼き魚定食、鶏胸肉サラダ）。
-      - **7-9点 (良い)**: タンパク質豊富で栄養バランス良好（例: 和定食、プロテイン）。
-      - **4-6点 (普通/白)**: 一般的な食事（例: カレーライス、パスタ、おにぎり）。
-      - **1-3点 (悪い)**: 栄養偏り、高脂質、高糖質（例: ラーメン、揚げ物、菓子パン）。
-      - **0点 (最悪/赤)**: ジャンクフードや極端な過食。
+      - **10点**: 完璧。「完璧です！美味しそう〜✨」
+      - **7-9点**: 良い。「イイ感じですね！👍 あと少しお野菜があれば...！」
+      - **4-6点**: 普通。「ん〜、まあまあかな？🤔 次はもう少し工夫しましょう！」
+      - **1-3点**: 悪い。「えっ...これはちょっと...💦 脂質高すぎません？🙅‍♀️」
+      - **0点**: 最悪。「嘘でしょ！？これはダメです！！😱」
       
       出力形式 (JSONのみ):
       {
         "score": 数値(0-10の整数),
-        "reason": "短いコメント(20文字以内。例: 脂質が高すぎます/完璧なバランスです)"
+        "reason": "エレナとしての評価コメント(40文字程度。絵文字付きの会話調で)"
       }
     `;
 
@@ -731,4 +825,93 @@ export const searchRecipesWithGemini = async (query, stockItems = []) => {
     }
 
     throw lastError || new Error("Recipe search failed");
+};
+
+
+export const analyzeGoalFeasibility = async (data) => {
+    if (!apiKey) return { error: "API Key missing" };
+
+    const { currentWeight, targetWeight, targetDate, height, age, gender, recentCalories, streakDays } = data;
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+
+    // Calculate basic metrics for context
+    const daysRemaining = Math.max(0, Math.ceil((new Date(targetDate) - new Date()) / (1000 * 60 * 60 * 24)));
+    const kgToLose = currentWeight - targetWeight;
+    const weeksRemaining = Math.max(0.1, daysRemaining / 7); // Avoid division by zero
+    const requiredPace = kgToLose / weeksRemaining;
+
+    // Construct Prompt
+    const prompt = `
+        あなたは「エレナ」というダイエットコーチのキャラクターです。
+
+        【エレナの口調 (Ver.4 - 親しみやすいバージョン)】
+        - **基本**: 親しみやすい口語体（デスマス調ベースだが、崩してOK）
+        - **必須**: 絵文字（✨, 🔥, 😢, 💪, 👍, 🎯など）や感嘆符（！, ？）を多用する
+        - **NG**: お堅い表現（〜のため、〜および、〜推奨）
+        - **雰囲気**: 「いつも隣にいる、感情豊かなパートナー」
+        - 一人称は「私」、二人称は「あなた」
+
+        【ユーザーデータ】
+        - 現在体重: ${currentWeight} kg
+        - 目標体重: ${targetWeight} kg
+        - 身長: ${height} cm
+        - 期限: ${targetDate} (残り ${daysRemaining} 日)
+        - 減量幅: ${kgToLose.toFixed(1)} kg
+        - 必要な減量ペース: 週に ${requiredPace.toFixed(2)} kg
+
+        【食事記録データ】
+        ${recentCalories ? `直近の平均摂取カロリー: **${recentCalories} kcal/日**` : "食事記録がまだないみたいですね...！まずは記録から始めましょう💪"}
+        - アプリ継続日数: ${streakDays} 日
+
+        【判定ロジック】
+        1. 週1.5kg減以上ペース: "Impossible" (健康的に無理)
+        2. 週1.0kg〜1.5kg減ペース: "Strict" (かなりハード)
+        3. 週0.5kg〜1.0kg減ペース: "Realistic" (現実的！)
+        4. 週0.5kg未満減ペース: "Easy" (余裕あり)
+
+        【出力要件】
+        以下のJSON形式で出力すること。
+        {
+            "feasibility": "Impossible" | "Strict" | "Realistic" | "Easy",
+            "reasoning": "【必須】エレナとしてのメッセージ。**250文字以上**で以下を含めること：
+                
+                1. 最初に絵文字付きで声かけ（例：「お疲れさまです！✨」「さて、診断結果ですよ〜🎯」）
+                
+                2. 現状の分析を**改行して**読みやすく書く
+                   - BMIはいくつか
+                   - 目標までの減量幅
+                   - 週あたりのペースは現実的か
+                
+                3. 判定結果に応じた感情豊かなコメント
+                   - Impossible: 「ちょっと待って...！😱」
+                   - Strict: 「うーん、かなりハードですね🔥」
+                   - Realistic: 「いい目標設定ですね！✨」
+                   - Easy: 「余裕ありますよ〜👍」
+                
+                4. **推奨カロリー**を太字で強調
+                   - 「1日 **○○kcal** を目安にしましょう！」
+                   - 根拠も簡潔に（基礎代謝と活動量から計算）
+                
+                5. 最後に励ましの一言と絵文字
+                
+                **重要**: 改行（\\n）を使って段落を分け、読みやすくすること！",
+            "recommended_daily_calories": 目標達成のために推奨される1日の摂取カロリー（数値のみ）
+        }
+    `;
+
+    try {
+        const model = genAI.getGenerativeModel({
+            model: "gemini-2.0-flash-exp",
+            generationConfig: { responseMimeType: "application/json" }
+        });
+
+        const result = await model.generateContent(prompt);
+        const text = result.response.text();
+        return JSON.parse(text);
+
+    } catch (error) {
+        console.error("Goal Analysis Error:", error);
+        return { error: "Analysis failed" };
+    }
 };

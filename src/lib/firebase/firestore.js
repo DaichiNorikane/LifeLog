@@ -132,8 +132,12 @@ const getWeightsRef = (userId) => collection(db, "users", userId, "weights");
 
 export const addWeightToFirestore = async (userId, weight, date) => {
     try {
-        // Use date string YYYY-MM-DD as ID to enforce one entry per day
-        const dateId = date.toISOString().split('T')[0];
+        // Use Local Date string YYYY-MM-DD as ID to match UI
+        const d = new Date(date);
+        const offset = d.getTimezoneOffset() * 60000;
+        const localDate = new Date(d.getTime() - offset);
+        const dateId = localDate.toISOString().split('T')[0];
+
         const weightDoc = doc(db, "users", userId, "weights", dateId);
 
         await setDoc(weightDoc, {
@@ -315,5 +319,39 @@ export const resetLeaderboard = async () => {
         await batch.commit();
     } catch (e) {
         console.error("Error resetting leaderboard:", e);
+    }
+};
+
+// ========== Daily Evaluation (日付ごとの評価) ==========
+
+// Save daily evaluation for a specific date
+export const saveDailyEvaluation = async (userId, dateKey, evaluation) => {
+    try {
+        const docRef = doc(db, "users", userId, "dailyEvaluations", dateKey);
+        const payload = cleanData({
+            ...evaluation,
+            dateKey,
+            savedAt: Timestamp.now()
+        });
+        await setDoc(docRef, payload);
+        console.log(`[Firestore] Saved evaluation for ${dateKey}`);
+    } catch (e) {
+        console.error("Error saving daily evaluation:", e);
+        throw e;
+    }
+};
+
+// Get daily evaluation for a specific date
+export const getDailyEvaluation = async (userId, dateKey) => {
+    try {
+        const docRef = doc(db, "users", userId, "dailyEvaluations", dateKey);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return docSnap.data();
+        }
+        return null;
+    } catch (e) {
+        console.error("Error fetching daily evaluation:", e);
+        return null;
     }
 };

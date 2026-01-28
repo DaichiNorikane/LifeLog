@@ -16,7 +16,7 @@ import { Camera, XCircle, ChevronLeft, ChevronRight, Calculator, Weight, Utensil
 import PullToRefresh from 'react-simple-pull-to-refresh';
 
 import { useAuth } from '@/lib/contexts/AuthContext';
-import { addMealToFirestore, getMealsFromFirestore, deleteMealFromFirestore, getWeightsFromFirestore, getUserProfile, updateMealInFirestore, addStockItem, getStockItems, deleteStockItem } from '@/lib/firebase/firestore';
+import { addMealToFirestore, getMealsFromFirestore, deleteMealFromFirestore, getWeightsFromFirestore, getUserProfile, updateMealInFirestore, addStockItem, getStockItems, deleteStockItem, saveDailyEvaluation, getDailyEvaluation } from '@/lib/firebase/firestore';
 
 export default function Home() {
   const { user, logOut, googleSignIn, loading } = useAuth();
@@ -41,7 +41,7 @@ export default function Home() {
   const [selectedMeal, setSelectedMeal] = useState(null); // For Meal Detail Modal
 
   // AI Persistence State
-  const [dailyEvaluation, setDailyEvaluation] = useState(null); // Persist Evaluation
+  const [evaluationsCache, setEvaluationsCache] = useState({}); // 日付キー -> 評価結果のキャッシュ
   const [advisorState, setAdvisorState] = useState({ suggestions: [], advice: null, targetType: 'dinner' }); // Persist Advisor
   const [recipeSearchState, setRecipeSearchState] = useState({ query: '', results: [] }); // Persist Recipe Search
 
@@ -51,18 +51,12 @@ export default function Home() {
     if (!user) return;
     const uid = user.uid;
 
-    // 1. Load from Cache (Immediate)
-    if (!forceRefresh) {
-      try {
-        const cachedMeals = localStorage.getItem(`lifelog_meals_${uid}`);
-        const cachedWeights = localStorage.getItem(`lifelog_weights_${uid}`);
-        const cachedStock = localStorage.getItem(`lifelog_stock_${uid}`);
-
-        if (cachedMeals) setMeals(JSON.parse(cachedMeals));
-        if (cachedWeights) setWeights(JSON.parse(cachedWeights));
-        if (cachedStock) setStockItems(JSON.parse(cachedStock));
-      } catch (e) { console.warn('Cache load failed', e); }
-    }
+    // 1. 古いキャッシュをクリア（容量超過対策）
+    try {
+      localStorage.removeItem(`lifelog_meals_${uid}`);
+      localStorage.removeItem(`lifelog_weights_${uid}`);
+      localStorage.removeItem(`lifelog_stock_${uid}`);
+    } catch (e) { /* ignore */ }
 
     try {
       const [firestoreMeals, firestoreWeights, profile, firestoreStock] = await Promise.all([
@@ -76,10 +70,14 @@ export default function Home() {
       setStockItems(firestoreStock || []);
       setUserProfile(profile || { targetCalories: 2200 });
 
-      // Update Cache
-      localStorage.setItem(`lifelog_meals_${uid}`, JSON.stringify(firestoreMeals));
-      localStorage.setItem(`lifelog_weights_${uid}`, JSON.stringify(firestoreWeights));
-      localStorage.setItem(`lifelog_stock_${uid}`, JSON.stringify(firestoreStock || []));
+      // キャッシュは一時的に無効化（容量超過対策済みまで）
+      // try {
+      //   localStorage.setItem(`lifelog_meals_${uid}`, JSON.stringify(firestoreMeals.slice(0, 50)));
+      //   localStorage.setItem(`lifelog_weights_${uid}`, JSON.stringify(firestoreWeights.slice(0, 90)));
+      //   localStorage.setItem(`lifelog_stock_${uid}`, JSON.stringify(firestoreStock || []));
+      // } catch (cacheError) {
+      //   console.warn('Cache save failed:', cacheError);
+      // }
 
       // Auto-evaluate meals without scores (batch process)
       const unevaluatedMeals = firestoreMeals.filter(m => typeof m.score !== 'number');
@@ -89,7 +87,15 @@ export default function Home() {
         for (const meal of unevaluatedMeals) {
           try {
             console.log(`[AutoEval] Evaluating: ${meal.foodName}`);
-            const result = await evaluateSingleMeal(meal);
+            // 同じ日の食事をcontextとして渡す
+            const mealDate = new Date(meal.timestamp);
+            const sameDayMeals = firestoreMeals.filter(m => {
+              const d = new Date(m.timestamp);
+              return d.getFullYear() === mealDate.getFullYear() &&
+                d.getMonth() === mealDate.getMonth() &&
+                d.getDate() === mealDate.getDate();
+            });
+            const result = await evaluateSingleMeal(meal, sameDayMeals);
             if (typeof result.score === 'number') {
               // Update Firestore
               await updateMealInFirestore(user.uid, meal.id, { score: result.score, reason: result.reason });
@@ -122,6 +128,31 @@ export default function Home() {
     return () => document.body.classList.remove('modal-open'); // Cleanup
   }, [showLogger, showWeightTracker, showEvaluation, showAdvisor, deleteConfirmation]);
 
+  // 日付変更時にFirestoreから評価を読み込む
+  useEffect(() => {
+    const loadEvaluationForDate = async () => {
+      if (!user) return;
+      // Use Local Date Key
+      const d = new Date(currentDate);
+      const offset = d.getTimezoneOffset() * 60000;
+      const localDate = new Date(d.getTime() - offset);
+      const dateKey = localDate.toISOString().split('T')[0];
+
+      // キャッシュにあればスキップ
+      if (evaluationsCache[dateKey] !== undefined) return;
+
+      // Firestoreから読み込み
+      const saved = await getDailyEvaluation(user.uid, dateKey);
+      if (saved) {
+        setEvaluationsCache(prev => ({ ...prev, [dateKey]: saved }));
+      } else {
+        // nullを設定してFirestoreへの再問い合わせを防ぐ
+        setEvaluationsCache(prev => ({ ...prev, [dateKey]: null }));
+      }
+    };
+    loadEvaluationForDate();
+  }, [user, currentDate]);
+
   const refreshWeights = async () => {
     if (user) {
       const w = await getWeightsFromFirestore(user.uid);
@@ -139,6 +170,14 @@ export default function Home() {
   };
   const isToday = (date) => isSameDay(date, new Date());
 
+  // Date Utilities for Local Time Key
+  const getLocalDateKey = (date) => {
+    const d = new Date(date);
+    const offset = d.getTimezoneOffset() * 60000;
+    const localDate = new Date(d.getTime() - offset);
+    return localDate.toISOString().split('T')[0];
+  };
+
   const handlePrevDay = () => {
     const newDate = new Date(currentDate);
     newDate.setDate(currentDate.getDate() - 1);
@@ -153,7 +192,7 @@ export default function Home() {
 
   const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][currentDate.getDay()];
   const dateString = `${currentDate.getMonth() + 1}/${currentDate.getDate()} (${dayOfWeek})`;
-  const currentDateKey = currentDate.toISOString().split('T')[0];
+  const currentDateKey = getLocalDateKey(currentDate);
 
   // Calculate Totals for Today
   const getDailyTotals = (date) => {
@@ -230,8 +269,47 @@ export default function Home() {
   const targetCalories = userProfile?.targetCalories || 2200;
   const remaining = Math.max(0, targetCalories - totalCalories);
 
+  // Statistics for Leon
+  const getRecentStats = () => {
+    // 1. Avg Cal 3 Days (excluding today)
+    let totalCal3Days = 0;
+    let daysWithData = 0;
+    for (let i = 1; i <= 3; i++) {
+      const d = new Date(currentDate);
+      d.setDate(d.getDate() - i);
+      const hasData = meals.some(m => isSameDay(new Date(m.timestamp), d));
+      if (hasData) {
+        totalCal3Days += getDailyTotals(d).calories;
+        daysWithData++;
+      }
+    }
+    const avgCal3Days = daysWithData > 0 ? Math.round(totalCal3Days / daysWithData) : 0;
+
+    // 2. Streak Days (including today if has data, backwards)
+    let streak = 0;
+    // Check today first
+    if (displayMeals.length > 0) streak++;
+
+    // Check past days
+    for (let i = 1; i <= 365; i++) { // Limit to 1 year
+      const d = new Date(currentDate);
+      d.setDate(d.getDate() - i);
+      const hasData = meals.some(m => isSameDay(new Date(m.timestamp), d));
+      if (hasData) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+    return { avgCal3Days, streakDays: streak };
+  };
+
+  const { avgCal3Days, streakDays } = getRecentStats();
+
   // Evaluation Data Prep
   const evaluationData = {
+    avgCal3Days, // Added for Leon
+    streakDays,  // Added for Leon
     date: currentDate.toISOString(),
     consumedCalories: dayTotals.calories,
     macros: {
@@ -247,6 +325,7 @@ export default function Home() {
       calories: m.calories,
       macros: m.macros,
       timestamp: m.timestamp, // string
+      mealType: m.mealType, // 重要: AIが朝食/昼食/夕食を認識するために必要
       // Exclude 'createdAt' or convert it if needed. AI doesn't need it.
     })),
     currentWeight: selectedWeightEntry?.weight,
@@ -282,10 +361,15 @@ export default function Home() {
 
       // 3. Background Evaluation (Fire and Forget)
       // Iterate using the captured IDs
+      // 同じ日の既存の食事 + 新規追加した食事を合わせてcontextを作成
+      const existingMealsToday = meals.filter(meal => isSameDay(new Date(meal.timestamp), currentDate));
+      const allMealsForContext = [...existingMealsToday, ...newMeals];
+
       adjustedMeals.forEach(async (m, index) => {
         // Eval
         console.log('[MealColorDebug] Evaluating meal:', m.foodName);
-        const evalResult = await evaluateSingleMeal(m);
+        // 同じ日の食事をcontextとして渡す
+        const evalResult = await evaluateSingleMeal({ ...m, id: addedIds[index] }, allMealsForContext);
         console.log('[MealColorDebug] Eval result:', evalResult);
         if (evalResult && typeof evalResult.score === 'number') {
           const targetId = addedIds[index]; // Guaranteed match by index order
@@ -294,6 +378,7 @@ export default function Home() {
             // Update Firestore
             const updates = {
               score: evalResult.score,
+              reason: evalResult.reason,
               assessment: evalResult.score >= 8 ? 'positive' : (evalResult.score <= 3 ? 'negative' : 'neutral') // Legacy compat
             };
             await updateMealInFirestore(user.uid, targetId, updates);
@@ -709,7 +794,8 @@ export default function Home() {
                   onClick={async (e) => {
                     e.stopPropagation();
                     try {
-                      const result = await evaluateSingleMeal(selectedMeal);
+                      // 同じ日の食事をcontextとして渡す
+                      const result = await evaluateSingleMeal(selectedMeal, displayMeals);
                       if (result.reason) {
                         await updateMealInFirestore(user.uid, selectedMeal.id, { score: result.score, reason: result.reason });
                         setMeals(prev => prev.map(m => m.id === selectedMeal.id ? { ...m, score: result.score, reason: result.reason } : m));
@@ -734,19 +820,48 @@ export default function Home() {
         </div>
       )}
 
+      {/* Weight Tracker Modal */}
       {showWeightTracker && (
-        <div style={{ position: 'relative', zIndex: 1000 }}>
-          <WeightTracker
-            user={user}
-            userProfile={userProfile}
-            weights={weights}
-            activeDate={currentDate} // Pass current date for logging
-            onClose={() => {
-              setShowWeightTracker(false);
-              refreshWeights();
-            }}
-            onUpdateWeights={refreshWeights}
-          />
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '600px', width: '95%', padding: '0', background: 'transparent', boxShadow: 'none' }}>
+            <WeightTracker
+              user={user}
+              userProfile={userProfile}
+              weights={weights}
+              activeDate={new Date()}
+              onClose={() => setShowWeightTracker(false)}
+              onUpdateWeights={loadData}
+              recentCalories={(() => {
+                // Calculate average of last 7 days including today
+                let total = 0;
+                let count = 0;
+                for (let i = 0; i <= 7; i++) {
+                  const d = new Date();
+                  d.setDate(d.getDate() - i);
+                  const t = getDailyTotals(d);
+                  if (meals.some(m => isSameDay(new Date(m.timestamp), d))) {
+                    total += t.calories;
+                    count++;
+                  }
+                }
+                return count > 0 ? Math.round(total / count) : null;
+              })()}
+              streakDays={(() => {
+                // Simple streak calculation
+                let streak = 0;
+                for (let i = 0; i < 30; i++) {
+                  const d = new Date();
+                  d.setDate(d.getDate() - i);
+                  if (meals.some(m => isSameDay(new Date(m.timestamp), d))) {
+                    streak++;
+                  } else {
+                    break;
+                  }
+                }
+                return streak;
+              })()}
+            />
+          </div>
         </div>
       )}
 
@@ -754,11 +869,20 @@ export default function Home() {
         <div style={{ position: 'relative', zIndex: 1001 }}>
           <EvaluationModal
             data={evaluationData}
-            savedResult={dailyEvaluation} // Pass persisted result
-            onSave={setDailyEvaluation}   // Save result callback
+            savedResult={evaluationsCache[currentDateKey]} // 日付ベースのキャッシュを渡す
+            onSave={async (result) => {
+              // メモリキャッシュを更新
+              setEvaluationsCache(prev => ({ ...prev, [currentDateKey]: result }));
+              // Firestoreに保存
+              if (user) {
+                await saveDailyEvaluation(user.uid, currentDateKey, result);
+              }
+            }}
             onClose={() => setShowEvaluation(false)}
             onEvaluationComplete={handleEvaluationComplete}
             stockItems={stockItems}
+            isToday={isToday(currentDate)} // 今日かどうかのフラグ
+            dateLabel={`${currentDate.getMonth() + 1}/${currentDate.getDate()}`} // 日付ラベル
           />
         </div>
       )}
@@ -767,7 +891,7 @@ export default function Home() {
         <div style={{ position: 'relative', zIndex: 1000 }}>
           <AdvisorModal
             targetType="auto"
-            history={meals}
+            history={displayMeals}
             dailyLog={{
               totalCalories,
               targetCalories,

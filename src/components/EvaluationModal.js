@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Sparkles, Trophy, AlertTriangle, Info } from 'lucide-react';
 import { evaluateDailyLog } from '@/app/actions';
 
-export default function EvaluationModal({ data, onClose, onEvaluationComplete, savedResult, onSave, stockItems = [] }) {
+export default function EvaluationModal({ data, onClose, onEvaluationComplete, savedResult, onSave, stockItems = [], isToday = true, dateLabel = '' }) {
     const [result, setResult] = useState(savedResult || null);
     const [loading, setLoading] = useState(!savedResult);
     const [error, setError] = useState(false);
@@ -74,10 +74,54 @@ export default function EvaluationModal({ data, onClose, onEvaluationComplete, s
                     {!loading && result && (
                         <>
                             {/* Header / Score */}
-                            <div style={{ background: `linear-gradient(135deg, ${getScoreColor(result.score)} 0%, ${getScoreColor(result.score)}aa 100%)`, padding: '40px 20px 30px', textAlign: 'center', color: 'white' }}>
-                                <div style={{ fontSize: '1rem', opacity: 0.9 }}>今日のスコア</div>
-                                <div style={{ fontSize: '4rem', fontWeight: 800, lineHeight: 1 }}>{result.score}</div>
-                                <div style={{ marginTop: '10px', fontSize: '1.2rem', fontWeight: 'bold' }}>{result.title}</div>
+                            <div style={{ background: `linear-gradient(135deg, ${getScoreColor(result.score)} 0%, ${getScoreColor(result.score)}aa 100%)`, padding: '40px 20px 30px', color: 'white', position: 'relative', overflow: 'hidden', textAlign: 'left' }}>
+
+                                {/* Character Image (Absolute) */}
+                                <img
+                                    src="/images/elena.png"
+                                    alt="Elena"
+                                    style={{
+                                        position: 'absolute',
+                                        bottom: '-40px',
+                                        right: '-160px',
+                                        width: '600px',
+                                        height: 'auto',
+                                        zIndex: 0,
+                                        opacity: 1,
+                                        pointerEvents: 'none',
+                                    }}
+                                />
+
+                                {/* Content (Relative with Z-Index) */}
+                                <div style={{ position: 'relative', zIndex: 1, paddingRight: '20px', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
+                                    {/* Status Icon & Label */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                                        <div style={{ fontSize: '1.5rem', background: 'rgba(255,255,255,0.2)', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            {(() => {
+                                                const status = result.characterStatus || '';
+                                                if (status.includes('SCOLD') || status.includes('STRICT')) return '⚡';
+                                                if (status.includes('LOGIC') || status.includes('ANALYSIS')) return '📉';
+                                                if (status.includes('CHEER') || status.includes('APPROVAL')) return '✨';
+                                                if (status.includes('ENCOURAGE')) return '🔥';
+                                                return '📋';
+                                            })()}
+                                        </div>
+                                        <div style={{ fontSize: '0.75rem', opacity: 0.9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                            Elena's Eye
+                                        </div>
+                                    </div>
+
+                                    <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>{isToday ? '今日のスコア' : `${dateLabel}のスコア`}</div>
+                                    <div style={{ fontSize: '3.5rem', fontWeight: 800, lineHeight: 1, margin: '5px 0' }}>{result.score}</div>
+                                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', lineHeight: 1.4 }}>{result.title}</div>
+
+                                    {/* Re-eval Button */}
+                                    {isToday && (
+                                        <button onClick={runEvaluation} style={{ marginTop: '15px', background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.5)', color: 'white', padding: '6px 12px', borderRadius: '20px', fontSize: '0.75rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                                            <Sparkles size={12} /> 再評価
+                                        </button>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Content */}
@@ -88,7 +132,7 @@ export default function EvaluationModal({ data, onClose, onEvaluationComplete, s
                                     </h4>
                                     <div style={{ lineHeight: 1.8, color: 'var(--text-secondary)', fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}>
                                         {/* Simple parser for **bold** text */}
-                                        {result.advice.split(/(\*\*.*?\*\*)/).map((part, index) => {
+                                        {String(result.advice || '').split(/(\*\*.*?\*\*)/).map((part, index) => {
                                             if (part.startsWith('**') && part.endsWith('**')) {
                                                 return <strong key={index} style={{ color: 'var(--primary)', fontWeight: 700 }}>{part.slice(2, -2)}</strong>;
                                             }
@@ -123,13 +167,6 @@ export default function EvaluationModal({ data, onClose, onEvaluationComplete, s
                                 {/* Gemini Badge */}
                                 <div style={{ textAlign: 'right', fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
                                     <Sparkles size={12} /> Analyzed by {result.model}
-                                </div>
-
-                                {/* Re-eval Button */}
-                                <div style={{ marginTop: '20px', textAlign: 'center' }}>
-                                    <button onClick={runEvaluation} style={{ background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', padding: '8px 16px', borderRadius: '20px', fontSize: '0.8rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                                        <Sparkles size={14} /> 最新の状態で再評価する
-                                    </button>
                                 </div>
                             </div>
                         </>

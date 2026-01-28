@@ -17,17 +17,33 @@ export default function AdvisorModal({ history, dailyLog, targetType, onClose, o
         setSuggestions(result.suggestions || []);
         setAdvice(result.advice || "アドバイスを取得できませんでした。");
 
-        // Save state
+        // Save state with meal count for cache invalidation
         if (onSave) {
-            onSave({ suggestions: result.suggestions || [], advice: result.advice, targetType });
+            onSave({
+                suggestions: result.suggestions || [],
+                advice: result.advice,
+                targetType,
+                mealCount: history.length, // キャッシュ無効化用
+                mealTypes: history.map(m => m.mealType).join(',') // 食事タイプの変更を検知
+            });
         }
 
         setLoading(false);
     };
 
     useEffect(() => {
-        // Run only if no saved state or target type changed
-        if (!savedState?.suggestions?.length || savedState.targetType !== targetType) {
+        // キャッシュ無効化条件:
+        // 1. savedStateがない
+        // 2. targetTypeが変わった
+        // 3. 食事の数が変わった
+        // 4. 食事タイプが変わった
+        const shouldRefetch =
+            !savedState?.suggestions?.length ||
+            savedState.targetType !== targetType ||
+            savedState.mealCount !== history.length ||
+            savedState.mealTypes !== history.map(m => m.mealType).join(',');
+
+        if (shouldRefetch) {
             fetchAdvice();
         }
     }, []);

@@ -78,13 +78,21 @@ export default function EvaluationModal({ data, onClose, onEvaluationComplete, s
 
                                 {/* Character Image (Absolute) */}
                                 <img
-                                    src="/images/elena.png"
+                                    src={(() => {
+                                        const s = result.score;
+                                        if (s === 100) return "/images/elena/elena_score_100.png";
+                                        if (s >= 90) return "/images/elena/elena_score_90_99.png";
+                                        if (s >= 75) return "/images/elena/elena_score_75_90.png";
+                                        if (s >= 50) return "/images/elena.png"; // Normal 50-74
+                                        if (s >= 20) return "/images/elena/elena_score_20_50.png";
+                                        return "/images/elena/elena_score_0_20.png";
+                                    })()}
                                     alt="Elena"
                                     style={{
                                         position: 'absolute',
-                                        bottom: '-40px',
-                                        right: '-160px',
-                                        width: '600px',
+                                        bottom: '-10px',
+                                        right: '-20px',
+                                        width: '280px',
                                         height: 'auto',
                                         zIndex: 0,
                                         opacity: 1,

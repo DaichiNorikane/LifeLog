@@ -39,6 +39,7 @@ export default function Home() {
   const [isDeleting, setIsDeleting] = useState(false); // New: Delete Loading State
   const [initialRecipeSearch, setInitialRecipeSearch] = useState(null);
   const [selectedMeal, setSelectedMeal] = useState(null); // For Meal Detail Modal
+  const [mealTypeMenu, setMealTypeMenu] = useState(null); // For Meal Type Selector: { mealId, x, y }
 
   // AI Persistence State
   const [evaluationsCache, setEvaluationsCache] = useState({}); // 日付キー -> 評価結果のキャッシュ
@@ -629,7 +630,7 @@ export default function Home() {
           </div>
 
 
-          {/* Meal Timeline */}
+          {/* Meal Timeline - Grouped by Meal Type */}
           <div style={{ marginBottom: '40px' }}>
             <h3 style={{ fontSize: '1rem', color: 'var(--text-primary)', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Utensils size={18} /> 食事の記録
@@ -640,8 +641,16 @@ export default function Home() {
                 <p>記録がありません</p>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {displayMeals.map((meal) => {
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {/* Group meals by type */}
+                {(() => {
+                  const mealCategories = [
+                    { type: 'breakfast', label: '🌅 朝食', color: '#F6AD55' },
+                    { type: 'lunch', label: '☀️ 昼食', color: '#68D391' },
+                    { type: 'dinner', label: '🌙 夕食', color: '#805AD5' },
+                    { type: 'snack', label: '🍪 間食', color: '#FC8181' }
+                  ];
+
                   // Helper to get color and style from score (0: Red, 5: Neutral, 10: Green)
                   const getMealScoreStyle = (meal) => {
                     let score = null; // null means not evaluated yet
@@ -693,77 +702,172 @@ export default function Home() {
                     };
                   };
 
-                  const scoreStyle = getMealScoreStyle(meal);
+                  return mealCategories.map(category => {
+                    const categoryMeals = displayMeals.filter(m => (m.mealType || 'snack') === category.type);
+                    if (categoryMeals.length === 0) return null;
 
-                  return (
-                    <div key={meal.id || meal.timestamp} className="glass-panel hover-card" onClick={() => setSelectedMeal(meal)} style={{ padding: '15px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', background: scoreStyle.background, borderLeft: scoreStyle.borderLeft, transition: 'all 0.3s ease', cursor: 'pointer' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '45px' }}>
-                          <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>
-                            {new Date(meal.timestamp).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                          {/* Meal Type Badge (Click to Rotate) */}
-                          <button
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              const types = ['breakfast', 'lunch', 'dinner', 'snack'];
-                              const currentIdx = types.indexOf(meal.mealType || 'snack');
-                              const nextType = types[(currentIdx + 1) % types.length];
+                    const categoryTotalCal = categoryMeals.reduce((acc, m) => acc + (m.calories || 0), 0);
+                    const categoryTotalP = categoryMeals.reduce((acc, m) => acc + (m.macros?.protein || 0), 0);
+                    const categoryTotalF = categoryMeals.reduce((acc, m) => acc + (m.macros?.fat || 0), 0);
+                    const categoryTotalC = categoryMeals.reduce((acc, m) => acc + (m.macros?.carbs || 0), 0);
 
-                              // 1. Optimistic Update (Immediate UI Feedback)
-                              setMeals(prev => prev.map(m => m.id === meal.id ? { ...m, mealType: nextType } : m));
-
-                              // 2. Background Update
-                              try {
-                                await updateMealInFirestore(user.uid, meal.id, { mealType: nextType });
-                              } catch (err) {
-                                console.error("Failed to update meal type", err);
-                                // Revert if failed (optional, but good practice)
-                                setMeals(prev => prev.map(m => m.id === meal.id ? { ...m, mealType: meal.mealType } : m));
-                              }
-                            }}
-                            style={{ marginTop: '5px', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-subtle)', background: 'white', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                          >
-                            {{ breakfast: '🌅 朝食', lunch: '☀️ 昼食', dinner: '🌙 夕食', snack: '🍪 間食' }[meal.mealType] || '🍪 間食'}
-                          </button>
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, marginLeft: '10px' }}>
-                          <div style={{ width: '36px', height: '36px', minWidth: '36px', minHeight: '36px', maxWidth: '36px', maxHeight: '36px', background: scoreStyle.scoreDisplay !== null ? scoreStyle.background : 'var(--bg-main)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: scoreStyle.scoreDisplay !== null ? scoreStyle.scoreColor : 'var(--primary)', fontWeight: 700, fontSize: '1rem', border: scoreStyle.scoreDisplay !== null ? `2px solid ${scoreStyle.scoreColor}` : 'none', flexShrink: 0 }}>
-                            {scoreStyle.scoreDisplay !== null ? scoreStyle.scoreDisplay : <Utensils size={16} />}
+                    return (
+                      <div key={category.type} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {/* Category Header */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 15px', background: `linear-gradient(135deg, ${category.color}15, ${category.color}08)`, borderRadius: '12px', borderLeft: `4px solid ${category.color}` }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{category.label}</span>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', background: 'white', padding: '2px 8px', borderRadius: '10px' }}>{categoryMeals.length}品</span>
                           </div>
-
-                          <div>
-                            <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{meal.foodName}</div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', gap: '8px' }}>
-                              <span>P: {meal.macros?.protein || 0}g</span>
-                              <span>F: {meal.macros?.fat || 0}g</span>
-                              <span>C: {meal.macros?.carbs || 0}g</span>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-primary)' }}>
+                              {categoryTotalCal} <span style={{ fontSize: '0.7rem', fontWeight: 400, color: 'var(--text-muted)' }}>kcal</span>
+                            </div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                              <span>P:{categoryTotalP.toFixed(0)}g</span>
+                              <span>F:{categoryTotalF.toFixed(0)}g</span>
+                              <span>C:{categoryTotalC.toFixed(0)}g</span>
                             </div>
                           </div>
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-primary)' }}>
-                            {meal.calories} <span style={{ fontSize: '0.7rem', fontWeight: 400, color: 'var(--text-muted)' }}>kcal</span>
-                          </div>
-                          <button onClick={(e) => handleDeleteMeal(meal.id, e)} style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', opacity: 0.5 }}>
-                            <XCircle size={18} />
-                          </button>
+                        {/* Meal Items */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingLeft: '10px' }}>
+                          {categoryMeals.map((meal) => {
+                            const scoreStyle = getMealScoreStyle(meal);
+
+                            return (
+                              <div key={meal.id || meal.timestamp} className="glass-panel hover-card" onClick={() => setSelectedMeal(meal)} style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '14px', boxShadow: '0 2px 6px rgba(0,0,0,0.03)', background: scoreStyle.background, borderLeft: scoreStyle.borderLeft || `3px solid ${category.color}40`, transition: 'all 0.3s ease', cursor: 'pointer' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                                  {/* Time */}
+                                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', minWidth: '40px' }}>
+                                    {new Date(meal.timestamp).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+
+                                  {/* Score Badge */}
+                                  <div style={{ width: '32px', height: '32px', minWidth: '32px', background: scoreStyle.scoreDisplay !== null ? scoreStyle.background : 'var(--bg-main)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: scoreStyle.scoreDisplay !== null ? scoreStyle.scoreColor : 'var(--primary)', fontWeight: 700, fontSize: '0.9rem', border: scoreStyle.scoreDisplay !== null ? `2px solid ${scoreStyle.scoreColor}` : 'none', flexShrink: 0 }}>
+                                    {scoreStyle.scoreDisplay !== null ? scoreStyle.scoreDisplay : <Utensils size={14} />}
+                                  </div>
+
+                                  {/* Food Name & Macros */}
+                                  <div style={{ flex: 1 }}>
+                                    <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>{meal.foodName}</div>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', gap: '6px' }}>
+                                      <span>P:{meal.macros?.protein || 0}g</span>
+                                      <span>F:{meal.macros?.fat || 0}g</span>
+                                      <span>C:{meal.macros?.carbs || 0}g</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Calories & Delete */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>
+                                    {meal.calories} <span style={{ fontSize: '0.65rem', fontWeight: 400, color: 'var(--text-muted)' }}>kcal</span>
+                                  </div>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      setMealTypeMenu({ mealId: meal.id, currentType: meal.mealType || 'snack', x: rect.left, y: rect.bottom + 5 });
+                                    }}
+                                    style={{ fontSize: '0.65rem', padding: '3px 6px', borderRadius: '6px', border: '1px solid var(--border-subtle)', background: 'white', cursor: 'pointer', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}
+                                    title="食事タイプを変更"
+                                  >
+                                    変更
+                                  </button>
+                                  <button onClick={(e) => handleDeleteMeal(meal.id, e)} style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', opacity: 0.5, padding: '4px' }}>
+                                    <XCircle size={16} />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  }).filter(Boolean); // Remove nulls (empty categories)
+                })()}
               </div>
-            )
-            }
+            )}
           </div>
 
         </div>
       </PullToRefresh>
 
       {/* --- Modals --- */}
+
+      {/* Meal Type Selector Popup */}
+      {mealTypeMenu && (
+        <div className="fixed-overlay" style={{ zIndex: 2500, background: 'rgba(0,0,0,0.2)' }} onClick={() => setMealTypeMenu(null)}>
+          <div
+            className="glass-panel zoom-in"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'fixed',
+              left: Math.min(mealTypeMenu.x, window.innerWidth - 160),
+              top: Math.min(mealTypeMenu.y, window.innerHeight - 200),
+              padding: '8px',
+              minWidth: '140px',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.15)'
+            }}
+          >
+            {[
+              { type: 'breakfast', label: '🌅 朝食', color: '#F6AD55' },
+              { type: 'lunch', label: '☀️ 昼食', color: '#68D391' },
+              { type: 'dinner', label: '🌙 夕食', color: '#805AD5' },
+              { type: 'snack', label: '🍪 間食', color: '#FC8181' }
+            ].map((option) => (
+              <button
+                key={option.type}
+                onClick={async () => {
+                  const targetMealId = mealTypeMenu.mealId;
+                  const previousType = mealTypeMenu.currentType;
+                  const newType = option.type;
+
+                  // Close menu immediately
+                  setMealTypeMenu(null);
+
+                  if (newType === previousType) return; // No change
+
+                  // 1. Optimistic Update
+                  setMeals(prev => prev.map(m => m.id === targetMealId ? { ...m, mealType: newType } : m));
+
+                  // 2. Background Update
+                  try {
+                    await updateMealInFirestore(user.uid, targetMealId, { mealType: newType });
+                  } catch (err) {
+                    console.error("Failed to update meal type", err);
+                    // Revert
+                    setMeals(prev => prev.map(m => m.id === targetMealId ? { ...m, mealType: previousType } : m));
+                  }
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: mealTypeMenu.currentType === option.type ? `${option.color}20` : 'transparent',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: mealTypeMenu.currentType === option.type ? 600 : 400,
+                  color: 'var(--text-primary)',
+                  textAlign: 'left',
+                  transition: 'background 0.15s'
+                }}
+              >
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: option.color }}></span>
+                {option.label}
+                {mealTypeMenu.currentType === option.type && <span style={{ marginLeft: 'auto', color: option.color }}>✓</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
 
       {/* Meal Detail Modal */}
       {selectedMeal && (

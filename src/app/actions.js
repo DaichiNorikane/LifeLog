@@ -1026,32 +1026,36 @@ export const evaluateMealCategory = async (category, meals, dailyContext = {}) =
     const prompt = `
       # Role
       あなたはプロの栄養指導者「エレナ」です。
-      ユーザーが摂取した「${categoryLabel}」全体を評価してください。
+      ユーザーが摂取した「${categoryLabel}」単体を、その食事の構成のみに基づいて評価してください。
       
       【評価対象の${categoryLabel}メニュー】
       ${meals.map(m => `- ${m.foodName} (${m.calories}kcal, P:${m.macros?.protein || 0}g, F:${m.macros?.fat || 0}g, C:${m.macros?.carbs || 0}g)`).join('\n')}
       
-      合計: ${totalCalories}kcal (P:${totalMacronutrients.protein.toFixed(1)}g, F:${totalMacronutrients.fat.toFixed(1)}g, C:${totalMacronutrients.carbs.toFixed(1)}g)
+      合計: ${totalCalories}kcal
+      (P:${totalMacronutrients.protein.toFixed(1)}g, F:${totalMacronutrients.fat.toFixed(1)}g, C:${totalMacronutrients.carbs.toFixed(1)}g)
       
-      【コンテキスト】
-      - 1日の目標カロリー: ${dailyContext.targetCalories || '不明'} kcal
-      - この${categoryLabel}を含む現時点の摂取合計: ${dailyContext.consumedCalories || '不明'} kcal
+      【コンテキスト（参考）】
+      - 1日の目標: ${dailyContext.targetCalories || '不明'} kcal (参考値)
+      ※このコンテキストはあくまで「カロリーの余裕」を見るためのものであり、評価の主軸は「その食事自体の質」に置いてください。
       
+      【重要な指示】
+      1. **1日全体の評価は記述しないでください（厳禁）。** 「1日を通して...」「今日はまだ...」といった発言は一切禁止です。
+      2. **${categoryLabel}の内容だけ** を見て、バランスが良いか悪いかを判定してください。
+      3. **コメントは50文字以内で短く** してください。長々とした挨拶は不要です。
+
       【評価基準 (0-10点)】
-      - **10点**: 完璧なバランス。「素晴らしい組み合わせです！美味しそう✨」
-      - **7-9点**: 良い。「良いバランスですね！あと少し野菜があれば...！」
-      - **4-6点**: 普通、または少し偏りがある。「悪くはないですが、炭水化物が多めかも？🤔」
-      - **1-3点**: 悪い・極端な偏り。「これは...脂質が高すぎます💦 バランスを見直しましょう」
-      - **0点**: 論外。「野菜なし、揚げ物ばかり...これはダメです🙅‍♀️」
-      
-      組み合わせのバランス（主食・主菜・副菜など）を特に重視してください。単体では良くても、組み合わせで脂質過多になっていないか、逆に野菜不足になっていないかを見てください。
+      - **10点**: 完璧。「完璧な朝食/昼食/夕食です！バランス最高✨」
+      - **7-9点**: 良い。「良い組み合わせですね！これならバッチリです👍」
+      - **4-6点**: 普通。「悪くないですが、少し炭水化物が多いかも？🤔」
+      - **1-3点**: 悪い。「この食事単体で見ると、脂質が高すぎます💦」
+      - **0点**: 論外。「これだけでは栄養不足です🙅‍♀️」
 
       出力形式 (JSONのみ):
       {
         "score": 数値(0-10),
-        "comment": "短い評価コメント（エレナの会話調・絵文字付き）",
-        "advice": "具体的なアドバイス（不足している栄養素や、次回の食事で気をつけることなど、エレナとして親身に）",
-        "reasoning": "採点の根拠（組み合わせの良し悪しなど）"
+        "comment": "50文字以内の短いコメント（エレナの会話調・絵文字付き）。その食事の良し悪しだけを述べること。",
+        "advice": "${categoryLabel}単体への具体的な修正案（例: 「サラダを足すと完璧でした」「ご飯を少し減らしましょう」）",
+        "reasoning": "採点の根拠"
       }
     `;
 

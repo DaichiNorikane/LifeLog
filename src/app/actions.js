@@ -554,6 +554,12 @@ export const evaluateDailyLog = async (data, stockItems = []) => {
           
           評価コメントも「美味しそう！でも脂質が...」「完璧です✨」など、会話調で。絵文字は「ここぞ」という時だけ使うこと。
 
+       5. **食事区分ごとの評価 (重要)**: 
+          朝食・昼食・夕食・間食の各カテゴリについて、まとめて評価してください。
+          - そのカテゴリに食事が記録されていない場合は \`null\` としてください。
+          - 評価基準は全体スコアと同様（0-10点）。
+          - コメントはエレナの会話調で。
+
       出力形式 (JSONのみ):
       {
          "characterStatus": "[STATUS: ステータス名]", // SCOLD, LOGIC, ENCOURAGE, CHEER, NORMAL
@@ -563,6 +569,12 @@ export const evaluateDailyLog = async (data, stockItems = []) => {
         "foodAssessments": [
             { "foodName": "料理名", "score": 数値(0-10), "reason": "40文字程度の評価コメント" }
         ],
+        "mealTypeEvaluations": {
+            "breakfast": { "score": 数値(0-10) or null, "comment": "評価コメント" },
+            "lunch": { "score": 数値(0-10) or null, "comment": "評価コメント" },
+            "dinner": { "score": 数値(0-10) or null, "comment": "評価コメント" },
+            "snack": { "score": 数値(0-10) or null, "comment": "評価コメント" }
+        },
         "reasoning": "[AI思考] なぜこのスコアにしたか。"
       }
     `;
@@ -914,4 +926,154 @@ export const analyzeGoalFeasibility = async (data) => {
         console.error("Goal Analysis Error:", error);
         return { error: "Analysis failed" };
     }
+};
+
+export const generateMealRanking = async (meals) => {
+    if (!apiKey) return { error: "API Key missing" };
+    const genAI = new GoogleGenerativeAI(apiKey);
+
+    // Filter last 14 days to keep context manageable
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+
+    // Sort by date desc
+    const recentMeals = meals
+        .filter(m => new Date(m.timestamp) >= twoWeeksAgo)
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    if (recentMeals.length === 0) return { error: "No recent meals found" };
+
+    // Summarize for prompt
+    // Include Date, MealType, FoodName, Calories, Macros, Score (if any)
+    const summary = recentMeals.map(m => {
+        const d = new Date(m.timestamp);
+        const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
+        return `- [${dateStr} ${m.mealType || 'unknown'}] ${m.foodName} (${m.calories}kcal) Score:${m.score || 'N/A'}`;
+    }).join('\n');
+
+    const prompt = `
+        # Role
+        あなたはダイエットコーチ「エレナ」です。
+        ユーザーの直近2週間の食事記録から、**朝食・昼食・夕食**それぞれの部門で、
+        **ベスト（Best）**な食事と**ワースト（Worst）**な食事を選出し、ランキング形式で発表してください。
+
+        【食事履歴】
+        ${summary}
+
+        【選出基準】
+        - **Best**: P（タンパク質）F（脂質）C（炭水化物）バランスが良く、カロリーも適切なもの。野菜が多い、自炊など。
+        - **Worst**: 脂質過多、カロリーオーバー、栄養の偏り（炭水化物のみなど）、ジャンクフード。
+        
+        【出力ルール】
+        - 理由（reason）はエレナの口調で。
+        - Bestな理由は褒めちぎる（「完璧です！✨」）。
+        - Worstな理由は愛のある叱咤（「これはダメですよ！🙅‍♀️」）。
+        - 該当する食事が履歴にない場合は null にしてください。
+        - **date**は履歴の日付をそのまま使ってください。
+
+        出力形式 (JSONのみ):
+        {
+            "breakfast": {
+                "best": { "foodName": "料理名", "date": "日付", "reason": "理由" } or null,
+                "worst": { "foodName": "料理名", "date": "日付", "reason": "理由" } or null
+            },
+            "lunch": { ... },
+            "dinner": { ... }
+        }
+    `;
+
+    let lastError = null;
+    // Fallback list if MODELS_TO_TRY is not available, but it should be.
+    // Also adding gemini-pro explicitly.
+    const models = ["gemini-1.5-flash", "gemini-flash-latest", "gemini-pro", "gemini-1.5-pro"];
+
+    for (const modelName of models) {
+        try {
+            console.log(`Generating Ranking with model: ${modelName}`);
+            const model = genAI.getGenerativeModel({ model: modelName });
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text().replace(/```json\n?|\n?```/g, "").trim();
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+
+            if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                parsed.model = modelName;
+                return parsed;
+            }
+        } catch (e) {
+            console.warn(`Ranking Model ${modelName} failed:`, e.message);
+            lastError = e;
+        }
+    }
+    return { error: `Ranking generation failed. Last error: ${lastError?.message}` };
+};
+
+export const evaluateMealCategory = async (category, meals, dailyContext = {}) => {
+    if (!apiKey) return { error: "API Key missing" };
+    const genAI = new GoogleGenerativeAI(apiKey);
+
+    const mealTypeLabels = { breakfast: '朝食', lunch: '昼食', dinner: '夕食', snack: '間食' };
+    const categoryLabel = mealTypeLabels[category] || '食事';
+
+    const totalCalories = meals.reduce((sum, m) => sum + (m.calories || 0), 0);
+    const totalMacronutrients = meals.reduce((acc, m) => ({
+        protein: acc.protein + (m.macros?.protein || 0),
+        fat: acc.fat + (m.macros?.fat || 0),
+        carbs: acc.carbs + (m.macros?.carbs || 0)
+    }), { protein: 0, fat: 0, carbs: 0 });
+
+    const prompt = `
+      # Role
+      あなたはプロの栄養指導者「エレナ」です。
+      ユーザーが摂取した「${categoryLabel}」全体を評価してください。
+      
+      【評価対象の${categoryLabel}メニュー】
+      ${meals.map(m => `- ${m.foodName} (${m.calories}kcal, P:${m.macros?.protein || 0}g, F:${m.macros?.fat || 0}g, C:${m.macros?.carbs || 0}g)`).join('\n')}
+      
+      合計: ${totalCalories}kcal (P:${totalMacronutrients.protein.toFixed(1)}g, F:${totalMacronutrients.fat.toFixed(1)}g, C:${totalMacronutrients.carbs.toFixed(1)}g)
+      
+      【コンテキスト】
+      - 1日の目標カロリー: ${dailyContext.targetCalories || '不明'} kcal
+      - この${categoryLabel}を含む現時点の摂取合計: ${dailyContext.consumedCalories || '不明'} kcal
+      
+      【評価基準 (0-10点)】
+      - **10点**: 完璧なバランス。「素晴らしい組み合わせです！美味しそう✨」
+      - **7-9点**: 良い。「良いバランスですね！あと少し野菜があれば...！」
+      - **4-6点**: 普通、または少し偏りがある。「悪くはないですが、炭水化物が多めかも？🤔」
+      - **1-3点**: 悪い・極端な偏り。「これは...脂質が高すぎます💦 バランスを見直しましょう」
+      - **0点**: 論外。「野菜なし、揚げ物ばかり...これはダメです🙅‍♀️」
+      
+      組み合わせのバランス（主食・主菜・副菜など）を特に重視してください。単体では良くても、組み合わせで脂質過多になっていないか、逆に野菜不足になっていないかを見てください。
+
+      出力形式 (JSONのみ):
+      {
+        "score": 数値(0-10),
+        "comment": "短い評価コメント（エレナの会話調・絵文字付き）",
+        "advice": "具体的なアドバイス（不足している栄養素や、次回の食事で気をつけることなど、エレナとして親身に）",
+        "reasoning": "採点の根拠（組み合わせの良し悪しなど）"
+      }
+    `;
+
+    const MODELS = ["gemini-1.5-pro", "gemini-2.0-flash-exp", "gemini-flash-latest"];
+    let lastError = null;
+
+    for (const modelName of MODELS) {
+        try {
+            const model = genAI.getGenerativeModel({ model: modelName });
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                return JSON.parse(jsonMatch[0]);
+            }
+        } catch (e) {
+            console.warn(`Category Eval Model ${modelName} failed:`, e.message);
+            lastError = e;
+        }
+    }
+
+    return { error: "Failed to evaluate category", details: lastError?.message };
 };

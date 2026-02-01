@@ -12,7 +12,9 @@ import EvaluationModal from '@/components/EvaluationModal';
 import AdvisorModal from '@/components/AdvisorModal';
 import StockManager from '@/components/StockManager'; // Imported
 import DietShooter from '@/components/DietShooter';
-import { Camera, XCircle, ChevronLeft, ChevronRight, Calculator, Weight, Utensils, Flame, Activity, Sparkles, Loader2, LogIn, Refrigerator, Gamepad2 } from 'lucide-react';
+import MealRankingModal from '@/components/MealRankingModal';
+import CategoryEvaluationModal from '@/components/CategoryEvaluationModal';
+import { Camera, XCircle, ChevronLeft, ChevronRight, Calculator, Weight, Utensils, Flame, Activity, Sparkles, Loader2, LogIn, Refrigerator, Gamepad2, Trophy } from 'lucide-react';
 import PullToRefresh from 'react-simple-pull-to-refresh';
 
 import { useAuth } from '@/lib/contexts/AuthContext';
@@ -33,6 +35,8 @@ export default function Home() {
   const [targetMealType, setTargetMealType] = useState('dinner'); // For Advisor
   const [showStockManager, setShowStockManager] = useState(false); // Stock Manager
   const [showGame, setShowGame] = useState(false); // Mini Game
+  const [showRanking, setShowRanking] = useState(false); // Meal Ranking
+  const [selectedCategory, setSelectedCategory] = useState(null); // 'breakfast', 'lunch', 'dinner', 'snack'
   const [stockItems, setStockItems] = useState([]); // Stock Items
 
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
@@ -545,6 +549,9 @@ export default function Home() {
                 <button onClick={() => setShowGame(true)} style={{ background: 'white', border: '1px solid var(--border-subtle)', padding: '6px 10px', borderRadius: '20px', fontSize: '0.8rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <Gamepad2 size={14} /> Game
                 </button>
+                <button onClick={() => setShowRanking(true)} style={{ background: 'white', border: '1px solid var(--border-subtle)', padding: '6px 10px', borderRadius: '20px', fontSize: '0.8rem', color: '#805AD5', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <Trophy size={14} /> Ranking
+                </button>
 
                 <button onClick={() => logOut && logOut()} style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Sign Out</button>
               </div>
@@ -714,7 +721,9 @@ export default function Home() {
                     return (
                       <div key={category.type} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         {/* Category Header */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 15px', background: `linear-gradient(135deg, ${category.color}15, ${category.color}08)`, borderRadius: '12px', borderLeft: `4px solid ${category.color}` }}>
+                        <div
+                          onClick={() => setSelectedCategory(category.type)}
+                          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 15px', background: `linear-gradient(135deg, ${category.color}15, ${category.color}08)`, borderRadius: '12px', borderLeft: `4px solid ${category.color}`, cursor: 'pointer', transition: 'transform 0.1s ease', ':active': { transform: 'scale(0.98)' } }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{category.label}</span>
                             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', background: 'white', padding: '2px 8px', borderRadius: '10px' }}>{categoryMeals.length}品</span>
@@ -796,6 +805,19 @@ export default function Home() {
       </PullToRefresh>
 
       {/* --- Modals --- */}
+
+      {showRanking && <MealRankingModal meals={meals} onClose={() => setShowRanking(false)} />}
+
+      {selectedCategory && (
+        <CategoryEvaluationModal
+          category={selectedCategory}
+          meals={displayMeals}
+          stockItems={stockItems}
+          savedResult={evaluationsCache[getLocalDateKey(currentDate)]}
+          onSave={(newRes) => setEvaluationsCache(prev => ({ ...prev, [getLocalDateKey(currentDate)]: newRes }))}
+          onClose={() => setSelectedCategory(null)}
+        />
+      )}
 
       {/* Meal Type Selector Popup */}
       {mealTypeMenu && (

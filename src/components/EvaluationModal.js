@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { X, Sparkles, Trophy, AlertTriangle, Info } from 'lucide-react';
+import { X, Sparkles, Trophy, AlertTriangle, Info, Utensils } from 'lucide-react';
 import { evaluateDailyLog } from '@/app/actions';
 
 export default function EvaluationModal({ data, onClose, onEvaluationComplete, savedResult, onSave, stockItems = [], isToday = true, dateLabel = '' }) {
@@ -149,6 +149,34 @@ export default function EvaluationModal({ data, onClose, onEvaluationComplete, s
                                     </div>
                                 </div>
 
+
+                                {/* Meal Type Evaluations */}
+                                {result.mealTypeEvaluations && (
+                                    <div style={{ marginBottom: '20px', borderTop: '1px solid var(--border-subtle)', paddingTop: '20px' }}>
+                                        <h4 style={{ margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>
+                                            <Utensils size={18} color="var(--primary)" /> 食事別評価
+                                        </h4>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                            {['breakfast', 'lunch', 'dinner', 'snack'].map(type => {
+                                                const ev = result.mealTypeEvaluations[type];
+                                                if (!ev || ev.score === null) return null;
+                                                const label = { breakfast: '朝食', lunch: '昼食', dinner: '夕食', snack: '間食' }[type];
+                                                const scoreColor = ev.score >= 8 ? '#48BB78' : (ev.score <= 3 ? '#F56565' : '#ECC94B');
+
+                                                return (
+                                                    <div key={type} style={{ background: 'var(--bg-card)', padding: '12px', borderRadius: '12px', border: '1px solid var(--border-subtle)' }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', alignItems: 'center' }}>
+                                                            <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--text-primary)' }}>{label}</span>
+                                                            <span style={{ fontWeight: 'bold', color: scoreColor, background: 'rgba(255,255,255,0.5)', padding: '2px 8px', borderRadius: '10px', fontSize: '0.85rem' }}>{ev.score}点</span>
+                                                        </div>
+                                                        <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{ev.comment}</div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Suggestions Section */}
                                 {result.suggestions && result.suggestions.length > 0 && (
                                     <div style={{ marginBottom: '20px', borderTop: '1px solid var(--border-subtle)', paddingTop: '20px' }}>
@@ -197,6 +225,6 @@ export default function EvaluationModal({ data, onClose, onEvaluationComplete, s
         .sparkle-spin { animation: spin 2s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
       `}</style>
-        </div>
+        </div >
     );
 }

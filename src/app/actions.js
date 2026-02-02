@@ -5,10 +5,10 @@ const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_
 
 // Models to try in order of preference
 const MODELS_TO_TRY = [
-    "gemini-3-flash-preview",
-    "gemini-2.0-flash-exp",   // Added 2.0 Flash Experimental as high-quality backup
+    "gemini-2.0-flash",       // Latest stable flash model
+    "gemini-1.5-flash",       // Fast fallback
     "gemini-1.5-pro",         // High reasoning backup
-    "gemini-flash-latest"     // Fast fallback
+    "gemini-pro"              // Legacy fallback
 ];
 
 export const analyzeImageWithGemini = async (base64Image, context = "") => {
@@ -584,8 +584,8 @@ export const evaluateDailyLog = async (data, stockItems = []) => {
     // Prioritize 1.5 Pro for "Coaching" quality, then 2.0 Flash for speed
     const COACHING_MODELS = [
         "gemini-1.5-pro",
-        "gemini-2.0-flash-exp",
-        "gemini-flash-latest"
+        "gemini-2.0-flash",
+        "gemini-1.5-flash"
     ];
 
     for (const modelName of COACHING_MODELS) {
@@ -680,7 +680,7 @@ export const evaluateSingleMeal = async (meal, contextMeals = []) => {
     `;
 
     // Try multiple models for reliability
-    const FAST_MODELS = ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-flash-latest"];
+    const FAST_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"];
 
     for (const modelName of FAST_MODELS) {
         try {
@@ -912,20 +912,40 @@ export const analyzeGoalFeasibility = async (data) => {
         }
     `;
 
-    try {
-        const model = genAI.getGenerativeModel({
-            model: "gemini-2.0-flash-exp",
-            generationConfig: { responseMimeType: "application/json" }
-        });
+    // Models to try in order of preference for goal analysis
+    const GOAL_ANALYSIS_MODELS = [
+        "gemini-2.0-flash",       // Latest stable flash model
+        "gemini-1.5-flash",       // Fallback flash model
+        "gemini-1.5-pro",         // High quality fallback
+        "gemini-pro"              // Legacy fallback
+    ];
 
-        const result = await model.generateContent(prompt);
-        const text = result.response.text();
-        return JSON.parse(text);
+    let lastError = null;
 
-    } catch (error) {
-        console.error("Goal Analysis Error:", error);
-        return { error: "Analysis failed" };
+    for (const modelName of GOAL_ANALYSIS_MODELS) {
+        try {
+            console.log(`[GoalAnalysis] Trying model: ${modelName}`);
+            const model = genAI.getGenerativeModel({
+                model: modelName,
+                generationConfig: { responseMimeType: "application/json" }
+            });
+
+            const result = await model.generateContent(prompt);
+            const text = result.response.text();
+            const parsed = JSON.parse(text);
+            parsed.model = modelName; // Add model info for debugging
+            console.log(`[GoalAnalysis] Success with model: ${modelName}`);
+            return parsed;
+
+        } catch (error) {
+            console.warn(`[GoalAnalysis] Model ${modelName} failed:`, error.message);
+            lastError = error;
+            // Continue to next model
+        }
     }
+
+    console.error("Goal Analysis Error: All models failed. Last error:", lastError);
+    return { error: `分析に失敗しました。(${lastError?.message || "All models failed"})` };
 };
 
 export const generateMealRanking = async (meals) => {
@@ -995,7 +1015,7 @@ export const generateMealRanking = async (meals) => {
     `;
 
     let lastError = null;
-    const models = ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-flash-latest", "gemini-pro"];
+    const models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"];
 
     for (const modelName of models) {
         try {
@@ -1073,7 +1093,7 @@ export const evaluateMealCategory = async (category, meals, dailyContext = {}) =
       }
     `;
 
-    const MODELS = ["gemini-1.5-pro", "gemini-2.0-flash-exp", "gemini-flash-latest"];
+    const MODELS = ["gemini-1.5-pro", "gemini-2.0-flash", "gemini-1.5-flash"];
     let lastError = null;
 
     for (const modelName of MODELS) {

@@ -127,7 +127,7 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
     const [targetDateForEntry, setTargetDateForEntry] = useState(activeDate ? new Date(activeDate) : new Date());
 
     // Set initial daily weight if exists for targetDateForEntry
-    useMemo(() => {
+    useEffect(() => {
         if (!targetDateForEntry) return;
 
         const d = new Date(targetDateForEntry);
@@ -140,7 +140,75 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
         setDailyWeight(initial || '');
     }, [targetDateForEntry, weights]);
 
-    // ... (rest of code)
+    // Prepare Graph Data
+    const chartData = useMemo(() => {
+        // Sort weights by date ascending
+        const sorted = [...weights].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+        const data = sorted.map(w => ({
+            x: new Date(w.date).getTime(),
+            date: w.date.substring(5), // Keep for tooltip if needed, but main x is number
+            weight: w.weight,
+            isTarget: false
+        }));
+
+        // Add Target Point if valid and in future
+        if (targetDate && targetWeight && sorted.length > 0) {
+            const lastDate = new Date(sorted[sorted.length - 1].date);
+            const tDate = new Date(targetDate);
+            if (tDate > lastDate) {
+                data.push({
+                    x: tDate.getTime(),
+                    date: targetDate.substring(5),
+                    weight: parseFloat(targetWeight),
+                    isTarget: true
+                });
+            }
+        }
+        return data;
+    }, [weights, targetDate, targetWeight]);
+
+    // Calculate Insights
+    const currentWeight = weights.length > 0 ? weights[0].weight : null;
+    // In firestore.js `getWeights` sorts by date desc. So weights[0] is latest.
+
+    const remainingKg = (currentWeight && targetWeight) ? (currentWeight - targetWeight).toFixed(1) : null;
+
+    // Days Remaining
+    const daysRemaining = targetDate ? Math.ceil((new Date(targetDate) - new Date()) / (1000 * 60 * 60 * 24)) : null;
+
+    // Required Pace (kg / week)
+    const requiredPace = (remainingKg && daysRemaining && daysRemaining > 0)
+        ? (remainingKg / (daysRemaining / 7)).toFixed(2)
+        : null;
+
+    // BMI計算
+    const currentBMI = calculateBMI(currentWeight, height);
+    const targetWeightBMI = calculateBMI(targetWeight, height);
+    const bmiCategory = getBMICategory(currentBMI);
+
+    // 目標BMIから算出される体重
+    const targetBMIWeight = getWeightFromBMI(targetBMI, height);
+
+    const handleSaveGoal = async () => {
+        if (!user) return;
+        setIsSaving(true);
+        try {
+            await saveUserProfile(user.uid, {
+                targetWeight: parseFloat(targetWeight),
+                targetDate: targetDate,
+                height: parseFloat(height),
+                targetBMI: parseFloat(targetBMI)
+            });
+            onUpdateWeights(); // Refresh goals
+            alert('目標を保存しました');
+        } catch (e) {
+            console.error(e);
+            alert('保存に失敗しました');
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     const handleLogWeight = async () => {
         if (!dailyWeight || !user || !targetDateForEntry) return;

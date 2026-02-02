@@ -5,8 +5,8 @@ import { db } from '@/lib/firebase/config'; // Direct use for now if export is t
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 // Note: Client-side firestore usage is fine here as per existing pattern
 
-export default function LineConnector({ userId, profile }) {
-    console.log('[LineConnector] Rendered with:', { userId, profile });
+export default function LineConnector({ userId, profile, variant = 'default' }) {
+    console.log('[LineConnector] Rendered with:', { userId, profile, variant });
     const [code, setCode] = useState(null);
     const [loading, setLoading] = useState(false);
 
@@ -29,10 +29,40 @@ export default function LineConnector({ userId, profile }) {
         }
     };
 
+    if (variant === 'header') {
+        if (profile?.lineUserId) {
+            return (
+                <div style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.5)', color: 'white', padding: '6px 12px', borderRadius: '20px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span style={{ fontWeight: 'bold' }}>LINE済 ✅</span>
+                </div>
+            );
+        }
+        return (
+            <div style={{ position: 'relative' }}>
+                {!code ? (
+                    <button
+                        onClick={(e) => { e.stopPropagation(); generateCode(); }}
+                        disabled={loading}
+                        style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.5)', color: 'white', padding: '6px 12px', borderRadius: '20px', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                    >
+                        {loading ? '発行中...' : 'LINE連携'}
+                    </button>
+                ) : (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '10px', background: 'white', padding: '10px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 50, minWidth: '150px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.75rem', color: '#718096', marginBottom: '5px' }}>LINEに送信:</div>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 'bold', fontFamily: 'monospace', color: '#2D3748', background: '#EDF2F7', padding: '4px', borderRadius: '4px' }}>
+                            {code}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
     if (profile?.lineUserId) {
         return (
             <div className="bg-emerald-900/30 border border-emerald-500/30 p-4 rounded-xl flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#06C755] flex items-center justify-center text-white font-bold text-xl">L</div>
+                <div className="w-10 h-10 rounded-full bg-[#06C755] flex items-center justify-center text-white font-bold text-xl"></div>
                 <div>
                     <h3 className="font-bold text-emerald-100">LINE連携済み</h3>
                     <p className="text-xs text-emerald-400">毎日の通知を受け取れます✅</p>

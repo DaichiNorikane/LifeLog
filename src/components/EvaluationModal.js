@@ -2,8 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { X, Sparkles, Trophy, AlertTriangle, Info, Utensils } from 'lucide-react';
 import { evaluateDailyLog } from '@/app/actions';
+import LineConnector from './LineConnector'; // Added import
 
-export default function EvaluationModal({ data, onClose, onEvaluationComplete, savedResult, onSave, stockItems = [], isToday = true, dateLabel = '' }) {
+export default function EvaluationModal({ data, onClose, onEvaluationComplete, savedResult, onSave, stockItems = [], isToday = true, dateLabel = '', userId, userProfile }) {
     const [result, setResult] = useState(savedResult || null);
     const [loading, setLoading] = useState(!savedResult);
     const [error, setError] = useState(false);
@@ -74,34 +75,42 @@ export default function EvaluationModal({ data, onClose, onEvaluationComplete, s
                     {!loading && result && (
                         <>
                             {/* Header / Score */}
-                            <div style={{ background: `linear-gradient(135deg, ${getScoreColor(result.score)} 0%, ${getScoreColor(result.score)}aa 100%)`, padding: '40px 20px 30px', color: 'white', position: 'relative', overflow: 'hidden', textAlign: 'left' }}>
+                            <div style={{ position: 'relative' }}>
+                                {/* Background & Image Container (Clipped) */}
+                                <div style={{
+                                    position: 'absolute',
+                                    inset: 0,
+                                    overflow: 'hidden',
+                                    background: `linear-gradient(135deg, ${getScoreColor(result.score)} 0%, ${getScoreColor(result.score)}aa 100%)`,
+                                    zIndex: 0
+                                }}>
+                                    {/* Character Image (Absolute) */}
+                                    <img
+                                        src={(() => {
+                                            const s = result.score;
+                                            if (s === 100) return "/images/elena/elena_score_100.png";
+                                            if (s >= 90) return "/images/elena/elena_score_90_99.png";
+                                            if (s >= 75) return "/images/elena/elena_score_75_90.png";
+                                            if (s >= 50) return "/images/elena.png"; // Normal 50-74
+                                            if (s >= 20) return "/images/elena/elena_score_20_50.png";
+                                            return "/images/elena/elena_score_0_20.png";
+                                        })()}
+                                        alt="Elena"
+                                        style={{
+                                            position: 'absolute',
+                                            bottom: '-10px',
+                                            right: '-20px',
+                                            width: '280px',
+                                            height: 'auto',
+                                            zIndex: 0,
+                                            opacity: 1,
+                                            pointerEvents: 'none',
+                                        }}
+                                    />
+                                </div>
 
-                                {/* Character Image (Absolute) */}
-                                <img
-                                    src={(() => {
-                                        const s = result.score;
-                                        if (s === 100) return "/images/elena/elena_score_100.png";
-                                        if (s >= 90) return "/images/elena/elena_score_90_99.png";
-                                        if (s >= 75) return "/images/elena/elena_score_75_90.png";
-                                        if (s >= 50) return "/images/elena.png"; // Normal 50-74
-                                        if (s >= 20) return "/images/elena/elena_score_20_50.png";
-                                        return "/images/elena/elena_score_0_20.png";
-                                    })()}
-                                    alt="Elena"
-                                    style={{
-                                        position: 'absolute',
-                                        bottom: '-10px',
-                                        right: '-20px',
-                                        width: '280px',
-                                        height: 'auto',
-                                        zIndex: 0,
-                                        opacity: 1,
-                                        pointerEvents: 'none',
-                                    }}
-                                />
-
-                                {/* Content (Relative with Z-Index) */}
-                                <div style={{ position: 'relative', zIndex: 1, paddingRight: '20px', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
+                                {/* Content (Relative with Z-Index, Overflow Visible) */}
+                                <div style={{ position: 'relative', zIndex: 1, padding: '40px 20px 30px', color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
                                     {/* Status Icon & Label */}
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
                                         <div style={{ fontSize: '1.5rem', background: 'rgba(255,255,255,0.2)', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -123,17 +132,50 @@ export default function EvaluationModal({ data, onClose, onEvaluationComplete, s
                                     <div style={{ fontSize: '3.5rem', fontWeight: 800, lineHeight: 1, margin: '5px 0' }}>{result.score}</div>
                                     <div style={{ fontSize: '1.1rem', fontWeight: 'bold', lineHeight: 1.4 }}>{result.title}</div>
 
-                                    {/* Re-eval Button */}
-                                    {isToday && (
-                                        <button onClick={runEvaluation} style={{ marginTop: '15px', background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.5)', color: 'white', padding: '6px 12px', borderRadius: '20px', fontSize: '0.75rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                                            <Sparkles size={12} /> 再評価
-                                        </button>
-                                    )}
+                                    {/* Buttons Row */}
+                                    <div style={{ marginTop: '15px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                        {/* LINE Link Button */}
+                                        <LineConnector userId={userId} profile={userProfile} variant="header" />
+
+                                        {/* Re-eval Button */}
+                                        {isToday && (
+                                            <button onClick={runEvaluation} style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.5)', color: 'white', padding: '6px 12px', borderRadius: '20px', fontSize: '0.75rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                                                <Sparkles size={12} /> 再評価
+                                            </button>
+                                        )}
+
+                                        {/* Manual LINE Notification Button */}
+                                        {userProfile?.lineUserId && (
+                                            <button
+                                                onClick={async (e) => {
+                                                    e.stopPropagation();
+                                                    if (confirm('この評価結果をLINEに送りますか？')) {
+                                                        try {
+                                                            const res = await fetch('/api/line/push', {
+                                                                method: 'POST',
+                                                                headers: { 'Content-Type': 'application/json' },
+                                                                body: JSON.stringify({ userId, evaluation: result })
+                                                            });
+                                                            if (res.ok) alert('LINEに送信しました！');
+                                                            else alert('送信に失敗しました');
+                                                        } catch (err) {
+                                                            alert('エラーが発生しました');
+                                                        }
+                                                    }
+                                                }}
+                                                style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.5)', color: 'white', padding: '6px 12px', borderRadius: '20px', fontSize: '0.75rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                                            >
+                                                <span style={{ fontSize: '12px' }}>📤</span> LINEに通知
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
                             {/* Content */}
                             <div style={{ padding: '25px' }}>
+
+
                                 <div style={{ marginBottom: '20px' }}>
                                     <h4 style={{ margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>
                                         <Info size={18} color="var(--primary)" /> アドバイス

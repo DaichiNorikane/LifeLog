@@ -736,19 +736,7 @@ export default function Home() {
               }}
             />
 
-            {/* New AI Advisor Card (Small one or integrate? Let's add a small button below stats or a new card row) */}
-            <div className="glass-panel" style={{ gridColumn: '1 / -1', padding: '15px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }} onClick={() => setShowAdvisor(true)}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ background: 'rgba(255,255,255,0.2)', padding: '8px', borderRadius: '50%' }}>
-                  <Sparkles size={20} color="white" />
-                </div>
-                <div>
-                  <div style={{ fontWeight: 'bold' }}>AIアドバイスを受ける</div>
-                  <div style={{ fontSize: '0.8rem', opacity: 0.9 }}>次の食事の提案や評価を聞く</div>
-                </div>
-              </div>
-              <ChevronRight size={20} />
-            </div>
+
 
             <StatCard
               title="Weight"
@@ -1185,6 +1173,8 @@ export default function Home() {
             stockItems={stockItems}
             isToday={isToday(currentDate)} // 今日かどうかのフラグ
             dateLabel={`${currentDate.getMonth() + 1}/${currentDate.getDate()}`} // 日付ラベル
+            userId={user?.uid}
+            userProfile={userProfile}
           />
         </div>
       )}

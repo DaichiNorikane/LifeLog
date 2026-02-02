@@ -6,6 +6,7 @@ import { FieldValue } from 'firebase-admin/firestore'; // For serverTimestamp
 export async function POST(request) {
     const body = await request.text();
     const signature = request.headers.get('x-line-signature');
+    console.log("Debug: Webhook triggered");
     const channelSecret = process.env.LINE_CHANNEL_SECRET;
 
     if (!channelSecret) {
@@ -13,9 +14,16 @@ export async function POST(request) {
         return NextResponse.json({ error: 'Config error' }, { status: 500 });
     }
 
+    console.log(`Debug: Secret detected (Length: ${channelSecret.length}, Starts with: ${channelSecret.substring(0, 4)})`);
+    console.log(`Debug: Signature header: ${signature}`);
+    console.log(`Debug: Body length: ${body.length}`);
+
     if (!validateSignature(body, signature, channelSecret)) {
+        console.error("Signature validation FAILED");
+        // Log calculated signature manually if needed for deep debug, but simple log first.
         return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
     }
+    console.log("Signature validation PASSED");
 
     const events = JSON.parse(body).events;
 

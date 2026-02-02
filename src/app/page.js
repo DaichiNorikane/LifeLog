@@ -954,7 +954,7 @@ export default function Home() {
               user={user}
               userProfile={userProfile}
               weights={weights}
-              activeDate={new Date()}
+              activeDate={currentDate} // Use currently selected date
               onClose={() => setShowWeightTracker(false)}
               onUpdateWeights={loadData}
               recentCalories={(() => {

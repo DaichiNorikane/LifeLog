@@ -46,6 +46,9 @@ export default function MealRankingModal({ meals, onClose }) {
     const RenderRankingCard = ({ type, data }) => {
         if (!data) return null;
         const { best, worst } = data;
+        // If both are null, return null (nothing to show for this category)
+        if (!best && !worst) return null;
+
         const label = { breakfast: '朝食', lunch: '昼食', dinner: '夕食' }[type];
         const color = { breakfast: '#F6AD55', lunch: '#68D391', dinner: '#805AD5' }[type];
 
@@ -56,32 +59,36 @@ export default function MealRankingModal({ meals, onClose }) {
                 </h3>
 
                 {/* Best */}
-                <div style={{ marginBottom: '15px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#48BB78', fontWeight: 'bold', marginBottom: '8px' }}>
-                        <Trophy size={18} /> Best Selection
-                    </div>
-                    <div style={{ background: '#F0FFF4', padding: '15px', borderRadius: '12px', border: '1px solid #C6F6D5' }}>
-                        <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '5px', color: '#2F855A' }}>{best.foodName}</div>
-                        <div style={{ fontSize: '0.85rem', color: '#48BB78', marginBottom: '8px' }}>{best.date}</div>
-                        <div style={{ fontSize: '0.9rem', lineHeight: 1.5, color: '#276749' }}>
-                            <span style={{ marginRight: '6px' }}>👍</span>{best.reason}
+                {best && (
+                    <div style={{ marginBottom: '15px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#48BB78', fontWeight: 'bold', marginBottom: '8px' }}>
+                            <Trophy size={18} /> Best Selection
+                        </div>
+                        <div style={{ background: '#F0FFF4', padding: '15px', borderRadius: '12px', border: '1px solid #C6F6D5' }}>
+                            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '5px', color: '#2F855A' }}>{best.foodName}</div>
+                            <div style={{ fontSize: '0.85rem', color: '#48BB78', marginBottom: '8px' }}>{best.date}</div>
+                            <div style={{ fontSize: '0.9rem', lineHeight: 1.5, color: '#276749' }}>
+                                <span style={{ marginRight: '6px' }}>👍</span>{best.reason}
+                            </div>
                         </div>
                     </div>
-                </div>
+                )}
 
                 {/* Worst */}
-                <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#F56565', fontWeight: 'bold', marginBottom: '8px' }}>
-                        <AlertTriangle size={18} /> Worst Selection
-                    </div>
-                    <div style={{ background: '#FFF5F5', padding: '15px', borderRadius: '12px', border: '1px solid #FED7D7' }}>
-                        <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '5px', color: '#C53030' }}>{worst.foodName}</div>
-                        <div style={{ fontSize: '0.85rem', color: '#F56565', marginBottom: '8px' }}>{worst.date}</div>
-                        <div style={{ fontSize: '0.9rem', lineHeight: 1.5, color: '#9B2C2C' }}>
-                            <span style={{ marginRight: '6px' }}>👎</span>{worst.reason}
+                {worst && (
+                    <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#F56565', fontWeight: 'bold', marginBottom: '8px' }}>
+                            <AlertTriangle size={18} /> Worst Selection
+                        </div>
+                        <div style={{ background: '#FFF5F5', padding: '15px', borderRadius: '12px', border: '1px solid #FED7D7' }}>
+                            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '5px', color: '#C53030' }}>{worst.foodName}</div>
+                            <div style={{ fontSize: '0.85rem', color: '#F56565', marginBottom: '8px' }}>{worst.date}</div>
+                            <div style={{ fontSize: '0.9rem', lineHeight: 1.5, color: '#9B2C2C' }}>
+                                <span style={{ marginRight: '6px' }}>👎</span>{worst.reason}
+                            </div>
                         </div>
                     </div>
-                </div>
+                )}
             </div>
         );
     };

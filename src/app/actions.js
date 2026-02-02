@@ -938,75 +938,89 @@ export const generateMealRanking = async (meals) => {
 
     // Sort by date desc
     const recentMeals = meals
-        .filter(m => new Date(m.timestamp) >= twoWeeksAgo)
+        .filter(m => {
+            try {
+                return new Date(m.timestamp) >= twoWeeksAgo;
+            } catch {
+                return false;
+            }
+        })
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-    if (recentMeals.length === 0) return { error: "No recent meals found" };
+    console.log(`[MealRanking] Total meals: ${meals.length}, Recent (14d): ${recentMeals.length}`);
+
+    if (recentMeals.length === 0) {
+        return { error: "直近2週間の食事記録がありません。" };
+    }
 
     // Summarize for prompt
-    // Include Date, MealType, FoodName, Calories, Macros, Score (if any)
-    const summary = recentMeals.map(m => {
+    const summary = recentMeals.slice(0, 50).map(m => {
         const d = new Date(m.timestamp);
         const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
-        return `- [${dateStr} ${m.mealType || 'unknown'}] ${m.foodName} (${m.calories}kcal) Score:${m.score || 'N/A'}`;
+        const mealTypeLabel = { breakfast: '朝', lunch: '昼', dinner: '夜', snack: '間食' }[m.mealType] || '';
+        return `- [${dateStr} ${mealTypeLabel}] ${m.foodName} (${m.calories}kcal, P:${m.macros?.protein || 0}g F:${m.macros?.fat || 0}g C:${m.macros?.carbs || 0}g)`;
     }).join('\n');
 
     const prompt = `
         # Role
         あなたはダイエットコーチ「エレナ」です。
-        ユーザーの直近2週間の食事記録から、**朝食・昼食・夕食**それぞれの部門で、
-        **ベスト（Best）**な食事と**ワースト（Worst）**な食事を選出し、ランキング形式で発表してください。
+        ユーザーの直近2週間の食事記録から、**ベスト3**と**ワースト3**を選出してください。
 
-        【食事履歴】
+        【食事履歴（最大50件）】
         ${summary}
 
         【選出基準】
-        - **Best**: P（タンパク質）F（脂質）C（炭水化物）バランスが良く、カロリーも適切なもの。野菜が多い、自炊など。
-        - **Worst**: 脂質過多、カロリーオーバー、栄養の偏り（炭水化物のみなど）、ジャンクフード。
-        
+        - **ベスト**: PFC（タンパク質・脂質・炭水化物）バランスが良い、カロリー適切、健康的な食材、野菜が多い、自炊など。
+        - **ワースト**: 脂質過多、カロリーオーバー、栄養偏り（炭水化物のみなど）、ジャンクフード、お酒のみなど。
+
         【出力ルール】
-        - 理由（reason）はエレナの口調で。
-        - Bestな理由は褒めちぎる（「完璧です！✨」）。
-        - Worstな理由は愛のある叱咤（「これはダメですよ！🙅‍♀️」）。
-        - 該当する食事が履歴にない場合は null にしてください。
-        - **date**は履歴の日付をそのまま使ってください。
+        - ベスト3、ワースト3をそれぞれ配列で出力してください。
+        - 各アイテムには必ず「foodName」「date」「calories」「reason」を含めてください。
+        - 理由（reason）はエレナの口調で、絵文字付きで褒めるor叱ってください。
+        - 同じ料理が複数回記録されていても、それぞれ別の日付として扱ってください。
 
         出力形式 (JSONのみ):
         {
-            "breakfast": {
-                "best": { "foodName": "料理名", "date": "日付", "reason": "理由" } or null,
-                "worst": { "foodName": "料理名", "date": "日付", "reason": "理由" } or null
-            },
-            "lunch": { ... },
-            "dinner": { ... }
+            "best": [
+                { "foodName": "料理名", "date": "M/D", "calories": 数値, "reason": "褒めるコメント✨" },
+                { "foodName": "料理名", "date": "M/D", "calories": 数値, "reason": "褒めるコメント✨" },
+                { "foodName": "料理名", "date": "M/D", "calories": 数値, "reason": "褒めるコメント✨" }
+            ],
+            "worst": [
+                { "foodName": "料理名", "date": "M/D", "calories": 数値, "reason": "叱るコメント💦" },
+                { "foodName": "料理名", "date": "M/D", "calories": 数値, "reason": "叱るコメント💦" },
+                { "foodName": "料理名", "date": "M/D", "calories": 数値, "reason": "叱るコメント💦" }
+            ]
         }
     `;
 
     let lastError = null;
-    // Fallback list if MODELS_TO_TRY is not available, but it should be.
-    // Also adding gemini-pro explicitly.
-    const models = ["gemini-1.5-flash", "gemini-flash-latest", "gemini-pro", "gemini-1.5-pro"];
+    const models = ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-flash-latest", "gemini-pro"];
 
     for (const modelName of models) {
         try {
-            console.log(`Generating Ranking with model: ${modelName}`);
+            console.log(`[MealRanking] Trying model: ${modelName}`);
             const model = genAI.getGenerativeModel({ model: modelName });
             const result = await model.generateContent(prompt);
             const response = await result.response;
             const text = response.text().replace(/```json\n?|\n?```/g, "").trim();
+
+            console.log(`[MealRanking] ${modelName} raw response:`, text.substring(0, 300));
+
             const jsonMatch = text.match(/\{[\s\S]*\}/);
 
             if (jsonMatch) {
                 const parsed = JSON.parse(jsonMatch[0]);
                 parsed.model = modelName;
+                console.log(`[MealRanking] Success with ${modelName}:`, parsed);
                 return parsed;
             }
         } catch (e) {
-            console.warn(`Ranking Model ${modelName} failed:`, e.message);
+            console.warn(`[MealRanking] Model ${modelName} failed:`, e.message);
             lastError = e;
         }
     }
-    return { error: `Ranking generation failed. Last error: ${lastError?.message}` };
+    return { error: `ランキング生成に失敗しました。(${lastError?.message})` };
 };
 
 export const evaluateMealCategory = async (category, meals, dailyContext = {}) => {

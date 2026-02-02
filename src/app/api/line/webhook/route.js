@@ -18,7 +18,8 @@ export async function POST(request) {
     console.log(`Debug: Signature header: ${signature}`);
     console.log(`Debug: Body length: ${body.length}`);
 
-    if (!validateSignature(body, signature, channelSecret)) {
+    // SDK expects: validateSignature(body, channelSecret, signature)
+    if (!validateSignature(body, channelSecret, signature)) {
         console.error("Signature validation FAILED");
         // Log calculated signature manually if needed for deep debug, but simple log first.
         return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });

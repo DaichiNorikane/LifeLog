@@ -470,19 +470,143 @@ export default function Home() {
     setStockItems(items);
   };
 
-  const StatCard = ({ title, value, unit, icon, color, onClick, subtext }) => (
-    <div onClick={onClick} className="glass-panel hover-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '5px', cursor: onClick ? 'pointer' : 'default', position: 'relative', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{title}</span>
-        {icon && React.cloneElement(icon, { size: 18, color: color || 'var(--text-muted)' })}
+  const StatCard = ({ title, value, unit, icon, color, onClick, subtext, current, target, weightProgress }) => {
+    // Calculate progress for calorie gauge
+    const showGauge = typeof current === 'number' && typeof target === 'number' && target > 0;
+    const progress = showGauge ? Math.min((current / target) * 100, 150) : 0;
+    const isOver = showGauge && current > target;
+    const remaining = showGauge ? target - current : 0;
+
+    // Weight progress (reduction goal)
+    const showWeightProgress = weightProgress && typeof weightProgress.current === 'number' && typeof weightProgress.target === 'number';
+    const weightRemaining = showWeightProgress ? (weightProgress.current - weightProgress.target).toFixed(1) : 0;
+    const weightStart = weightProgress?.start || weightProgress?.current;
+    const totalToLose = showWeightProgress ? (weightStart - weightProgress.target) : 0;
+    const alreadyLost = showWeightProgress ? (weightStart - weightProgress.current) : 0;
+    const weightProgressPercent = totalToLose > 0 ? Math.min(100, (alreadyLost / totalToLose) * 100) : 0;
+    const isWeightAchieved = showWeightProgress && weightProgress.current <= weightProgress.target;
+
+    // SVG gauge parameters
+    const size = 70;
+    const strokeWidth = 8;
+    const radius = (size - strokeWidth) / 2;
+    const circumference = 2 * Math.PI * radius;
+
+    // For calorie gauge
+    const progressOffset = circumference - (Math.min(progress, 100) / 100) * circumference;
+    // For weight gauge
+    const weightProgressOffset = circumference - (Math.min(weightProgressPercent, 100) / 100) * circumference;
+
+    // Color based on progress
+    const getGaugeColor = () => {
+      if (isOver) return '#F56565';
+      if (progress >= 85) return '#48BB78';
+      if (progress >= 50) return '#ECC94B';
+      return '#4299E1';
+    };
+
+    // Color for weight progress
+    const getWeightGaugeColor = () => {
+      if (isWeightAchieved) return '#48BB78'; // Green - goal achieved!
+      if (weightProgressPercent >= 75) return '#48BB78'; // Green - close to goal
+      if (weightProgressPercent >= 40) return '#4ECDC4'; // Teal - good progress
+      if (weightProgressPercent >= 10) return '#ECC94B'; // Yellow - some progress
+      return '#4299E1'; // Blue - just starting
+    };
+
+    return (
+      <div onClick={onClick} className="glass-panel hover-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '5px', cursor: onClick ? 'pointer' : 'default', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: (showGauge || showWeightProgress) ? '0' : '8px' }}>
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{title}</span>
+          {!showGauge && !showWeightProgress && icon && React.cloneElement(icon, { size: 18, color: color || 'var(--text-muted)' })}
+        </div>
+
+        {showWeightProgress ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {/* Circular Gauge for Weight */}
+            <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+              <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+                <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#EDF2F7" strokeWidth={strokeWidth} />
+                <circle
+                  cx={size / 2} cy={size / 2} r={radius} fill="none"
+                  stroke={getWeightGaugeColor()}
+                  strokeWidth={strokeWidth}
+                  strokeDasharray={circumference}
+                  strokeDashoffset={weightProgressOffset}
+                  strokeLinecap="round"
+                  style={{ transition: 'stroke-dashoffset 0.5s ease, stroke 0.3s ease' }}
+                />
+              </svg>
+              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: getWeightGaugeColor() }}>
+                  {Math.round(weightProgressPercent)}%
+                </span>
+              </div>
+            </div>
+
+            {/* Weight Values */}
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                <span style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)' }}>{value}</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{unit}</span>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                目標: {weightProgress.target} {unit}
+              </div>
+              <div style={{ fontSize: '0.8rem', fontWeight: 600, color: isWeightAchieved ? '#48BB78' : '#4ECDC4', marginTop: '2px' }}>
+                {isWeightAchieved ? '🎉 目標達成！' : `あと ${weightRemaining} ${unit}`}
+              </div>
+            </div>
+          </div>
+        ) : showGauge ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {/* Circular Gauge for Calories */}
+            <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+              <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+                <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#EDF2F7" strokeWidth={strokeWidth} />
+                <circle
+                  cx={size / 2} cy={size / 2} r={radius} fill="none"
+                  stroke={getGaugeColor()}
+                  strokeWidth={strokeWidth}
+                  strokeDasharray={circumference}
+                  strokeDashoffset={progressOffset}
+                  strokeLinecap="round"
+                  style={{ transition: 'stroke-dashoffset 0.5s ease, stroke 0.3s ease' }}
+                />
+              </svg>
+              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: getGaugeColor() }}>
+                  {Math.round(progress)}%
+                </span>
+              </div>
+            </div>
+
+            {/* Calorie Values */}
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                <span style={{ fontSize: '1.6rem', fontWeight: 800, color: isOver ? '#F56565' : 'var(--text-primary)' }}>{value}</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{unit}</span>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                目標: {target} {unit}
+              </div>
+              <div style={{ fontSize: '0.8rem', fontWeight: 600, color: isOver ? '#F56565' : '#48BB78', marginTop: '2px' }}>
+                {isOver ? `+${Math.abs(remaining)} ${unit} オーバー` : `残り ${remaining} ${unit}`}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+              <span style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-primary)' }}>{value}</span>
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{unit}</span>
+            </div>
+            {subtext && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>{subtext}</div>}
+          </>
+        )}
       </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-        <span style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-primary)' }}>{value}</span>
-        <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{unit}</span>
-      </div>
-      {subtext && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>{subtext}</div>}
-    </div>
-  );
+    );
+  };
 
 
   if (loading) {
@@ -579,11 +703,12 @@ export default function Home() {
               unit="kcal"
               icon={<Flame />}
               color="#FF6B6B"
+              current={totalCalories}
+              target={targetCalories}
               onClick={() => {
                 // Always open evaluation, regardless of meal completion
                 setShowEvaluation(true);
               }}
-              subtext="タップして現在の状況をAI評価"
             />
 
             {/* New AI Advisor Card (Small one or integrate? Let's add a small button below stats or a new card row) */}
@@ -599,7 +724,16 @@ export default function Home() {
               icon={<Weight />}
               color="#4ECDC4"
               onClick={() => setShowWeightTracker(true)}
-              subtext={selectedWeightEntry ? '記録済み' : 'タップして管理'}
+              weightProgress={
+                selectedWeightEntry && userProfile?.targetWeight
+                  ? {
+                    current: selectedWeightEntry.weight,
+                    target: userProfile.targetWeight,
+                    start: userProfile.startWeight || selectedWeightEntry.weight // Use start weight if available
+                  }
+                  : null
+              }
+              subtext={!selectedWeightEntry ? 'タップして管理' : undefined}
             />
           </div>
 

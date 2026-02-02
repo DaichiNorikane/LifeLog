@@ -486,6 +486,22 @@ export default function Home() {
     const weightProgressPercent = totalToLose > 0 ? Math.min(100, (alreadyLost / totalToLose) * 100) : 0;
     const isWeightAchieved = showWeightProgress && weightProgress.current <= weightProgress.target;
 
+    // Days remaining and required pace calculation
+    let daysRemaining = null;
+    let requiredPacePerWeek = null;
+    if (showWeightProgress && weightProgress.targetDate) {
+      const targetDateObj = new Date(weightProgress.targetDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const diffTime = targetDateObj.getTime() - today.getTime();
+      daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+
+      if (daysRemaining > 0 && parseFloat(weightRemaining) > 0) {
+        const weeksRemaining = daysRemaining / 7;
+        requiredPacePerWeek = (parseFloat(weightRemaining) / weeksRemaining).toFixed(2);
+      }
+    }
+
     // SVG gauge parameters
     const size = 70;
     const strokeWidth = 8;
@@ -522,41 +538,50 @@ export default function Home() {
         </div>
 
         {showWeightProgress ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {/* Circular Gauge for Weight */}
-            <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-              <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-                <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#EDF2F7" strokeWidth={strokeWidth} />
-                <circle
-                  cx={size / 2} cy={size / 2} r={radius} fill="none"
-                  stroke={getWeightGaugeColor()}
-                  strokeWidth={strokeWidth}
-                  strokeDasharray={circumference}
-                  strokeDashoffset={weightProgressOffset}
-                  strokeLinecap="round"
-                  style={{ transition: 'stroke-dashoffset 0.5s ease, stroke 0.3s ease' }}
-                />
-              </svg>
-              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: getWeightGaugeColor() }}>
-                  {Math.round(weightProgressPercent)}%
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {/* Current Weight - Large Display */}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+              <span style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)' }}>{value}</span>
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{unit}</span>
+            </div>
+
+            {/* Progress Arrow: Current → Target */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: isWeightAchieved ? 'rgba(72, 187, 120, 0.1)' : 'rgba(78, 205, 196, 0.1)', borderRadius: '10px' }}>
+              {/* Remaining kg badge */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minWidth: '50px',
+                padding: '4px 8px',
+                background: isWeightAchieved ? '#48BB78' : '#4ECDC4',
+                borderRadius: '8px',
+                color: 'white',
+                fontWeight: 700,
+                fontSize: '0.85rem'
+              }}>
+                {isWeightAchieved ? '✓' : `-${weightRemaining}`}
+              </div>
+
+              {/* Arrow and target */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1 }}>
+                <svg width="20" height="12" viewBox="0 0 20 12" fill="none">
+                  <path d="M0 6H18M18 6L13 1M18 6L13 11" stroke={isWeightAchieved ? '#48BB78' : '#4ECDC4'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span style={{ fontSize: '1rem', fontWeight: 700, color: isWeightAchieved ? '#48BB78' : '#4ECDC4' }}>
+                  {weightProgress.target} {unit}
                 </span>
+                {isWeightAchieved && <span style={{ fontSize: '0.8rem' }}>🎉</span>}
               </div>
             </div>
 
-            {/* Weight Values */}
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-                <span style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)' }}>{value}</span>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{unit}</span>
+            {/* Days remaining and required pace */}
+            {daysRemaining !== null && !isWeightAchieved && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-muted)', paddingTop: '4px' }}>
+                <span>📅 あと {daysRemaining} 日</span>
+                {requiredPacePerWeek && <span>⚡ 週 {requiredPacePerWeek} kg/週</span>}
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                目標: {weightProgress.target} {unit}
-              </div>
-              <div style={{ fontSize: '0.8rem', fontWeight: 600, color: isWeightAchieved ? '#48BB78' : '#4ECDC4', marginTop: '2px' }}>
-                {isWeightAchieved ? '🎉 目標達成！' : `あと ${weightRemaining} ${unit}`}
-              </div>
-            </div>
+            )}
           </div>
         ) : showGauge ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -729,7 +754,8 @@ export default function Home() {
                   ? {
                     current: selectedWeightEntry.weight,
                     target: userProfile.targetWeight,
-                    start: userProfile.startWeight || selectedWeightEntry.weight // Use start weight if available
+                    start: userProfile.startWeight || selectedWeightEntry.weight,
+                    targetDate: userProfile.targetDate // Add target date for days remaining calculation
                   }
                   : null
               }

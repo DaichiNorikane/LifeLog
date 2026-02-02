@@ -813,8 +813,8 @@ export default function Home() {
           category={selectedCategory}
           meals={displayMeals}
           stockItems={stockItems}
-          savedResult={evaluationsCache[getLocalDateKey(currentDate)]}
-          onSave={(newRes) => setEvaluationsCache(prev => ({ ...prev, [getLocalDateKey(currentDate)]: newRes }))}
+          savedResult={evaluationsCache[`${getLocalDateKey(currentDate)}_${selectedCategory}`]}
+          onSave={(newRes) => setEvaluationsCache(prev => ({ ...prev, [`${getLocalDateKey(currentDate)}_${selectedCategory}`]: newRes }))}
           onClose={() => setSelectedCategory(null)}
         />
       )}

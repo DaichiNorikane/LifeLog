@@ -503,8 +503,8 @@ export default function Home() {
     }
 
     // SVG gauge parameters
-    const size = 70;
-    const strokeWidth = 8;
+    const size = 60; // Reduced from 70 for mobile fit
+    const strokeWidth = 6; // Slightly thinner
     const radius = (size - strokeWidth) / 2;
     const circumference = 2 * Math.PI * radius;
 
@@ -531,7 +531,7 @@ export default function Home() {
     };
 
     return (
-      <div onClick={onClick} className="glass-panel hover-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '5px', cursor: onClick ? 'pointer' : 'default', position: 'relative', overflow: 'hidden' }}>
+      <div onClick={onClick} className="glass-panel hover-card" style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '5px', cursor: onClick ? 'pointer' : 'default', position: 'relative', overflow: 'hidden' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: (showGauge || showWeightProgress) ? '0' : '8px' }}>
           <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{title}</span>
           {!showGauge && !showWeightProgress && icon && React.cloneElement(icon, { size: 18, color: color || 'var(--text-muted)' })}
@@ -750,13 +750,21 @@ export default function Home() {
               color="#4ECDC4"
               onClick={() => setShowWeightTracker(true)}
               weightProgress={
-                selectedWeightEntry && userProfile?.targetWeight
-                  ? {
-                    current: selectedWeightEntry.weight,
-                    target: userProfile.targetWeight,
-                    start: userProfile.startWeight || selectedWeightEntry.weight,
-                    targetDate: userProfile.targetDate // Add target date for days remaining calculation
-                  }
+                userProfile?.targetWeight
+                  ? (() => {
+                    const latestWeight = selectedWeightEntry
+                      ? selectedWeightEntry.weight
+                      : (weights.length > 0 ? [...weights].sort((a, b) => new Date(b.date) - new Date(a.date))[0].weight : null);
+
+                    if (!latestWeight) return null;
+
+                    return {
+                      current: latestWeight,
+                      target: userProfile.targetWeight,
+                      start: userProfile.startWeight || latestWeight,
+                      targetDate: userProfile.targetDate
+                    };
+                  })()
                   : null
               }
               subtext={!selectedWeightEntry ? 'タップして管理' : undefined}

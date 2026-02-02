@@ -1,4 +1,4 @@
-import { messagingApi, webhook } from '@line/bot-sdk';
+import { messagingApi, validateSignature } from '@line/bot-sdk';
 
 const { MessagingApiClient } = messagingApi;
 
@@ -48,7 +48,4 @@ export const replyMessage = async (replyToken, messages) => {
 };
 
 // Helper to validate signature
-export const validateSignature = (body, signature, channelSecret) => {
-    if (!channelSecret) return false;
-    return webhook.validateSignature(body, channelSecret, signature);
-};
+export { validateSignature };

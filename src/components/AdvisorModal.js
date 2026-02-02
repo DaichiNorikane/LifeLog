@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2, Sparkles, Utensils, Search } from 'lucide-react';
 import { suggestNextMeal } from '@/app/actions';
+import LineConnector from './LineConnector'; // Added import
 
-export default function AdvisorModal({ history, dailyLog, targetType, onClose, onSuggestionClick, stockItems = [], savedState, onSave }) {
+export default function AdvisorModal({ history, dailyLog, targetType, onClose, onSuggestionClick, stockItems = [], savedState, onSave, userId, profile }) {
+    console.log('[AdvisorModal] Rendered with:', { userId, profile, historyLen: history.length });
     const [suggestions, setSuggestions] = useState(savedState?.suggestions || []);
     const [advice, setAdvice] = useState(savedState?.advice || '');
     const [loading, setLoading] = useState(!savedState?.suggestions?.length);
@@ -68,6 +70,11 @@ export default function AdvisorModal({ history, dailyLog, targetType, onClose, o
                 </div>
 
                 <div style={{ padding: '25px', minHeight: '300px', overflowY: 'auto' }}>
+                    {/* LINE Link Connector */}
+                    <div className="mb-6">
+                        <LineConnector userId={userId} profile={profile} />
+                    </div>
+
                     {loading ? (
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '15px', color: 'var(--text-muted)' }}>
                             <Loader2 className="spin" size={40} color="var(--primary)" />

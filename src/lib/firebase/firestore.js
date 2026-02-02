@@ -355,3 +355,19 @@ export const getDailyEvaluation = async (userId, dateKey) => {
         return null;
     }
 };
+
+// ========== LINE Linking ==========
+
+// Save a temporary 6-digit link code
+export const saveLinkCode = async (userId, code) => {
+    try {
+        await addDoc(collection(db, "linkCodes"), {
+            userId,
+            code, // 6 digit string
+            createdAt: Timestamp.now(),
+        });
+    } catch (e) {
+        console.error("Error saving link code:", e);
+        throw e;
+    }
+};

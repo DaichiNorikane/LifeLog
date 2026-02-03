@@ -88,20 +88,11 @@ async function handleTextMessage(event) {
                     .where('timestamp', '>=', startJST.toISOString())
                     .where('timestamp', '<=', endJST.toISOString())
                     .get(),
-                db.collection('users').doc(appUserId).collection('stock').get()
+                db.collection('users').doc(appUserId).collection('stockItems').get()
             ]);
 
             const meals = mealsSnap.docs.map(d => d.data());
             const stockItems = stockSnap.docs.map(d => ({ name: d.data().name }));
-
-            // User Preferences (Environment info etc.)
-            const preferences = userData.preferences || {};
-            const environmentRaw = preferences.environment || '';
-
-            const contextItems = [...stockItems];
-            if (environmentRaw) {
-                contextItems.push({ name: `【環境・近隣情報】: ${environmentRaw}` });
-            }
 
             // 4. Calculate Calories
             const consumedCalories = meals.reduce((acc, m) => acc + (Number(m.calories) || 0), 0);
@@ -111,7 +102,7 @@ async function handleTextMessage(event) {
             };
 
             // 5. Generate Suggestion
-            const result = await suggestNextMeal(meals, dailyLog, targetType, contextItems);
+            const result = await suggestNextMeal(meals, dailyLog, targetType, stockItems);
 
             // 6. Reply
             // Format: Advice + Top 3 suggestions

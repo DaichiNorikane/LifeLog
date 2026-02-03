@@ -199,7 +199,7 @@ export const suggestNextMeal = async (history, dailyLog, targetType = 'auto', st
     // Calculate remaining calories
     const remainingCalories = dailyLog.targetCalories - dailyLog.totalCalories;
     const isOverCalories = remainingCalories < 0;
-    const isLowCalories = remainingCalories > 800;
+    const isLowCalories = remainingCalories > 300; // 残り300kcal以上あれば追加提案する
 
     // Smart meal type detection
     let suggestedMealType = targetType;
@@ -282,6 +282,7 @@ export const suggestNextMeal = async (history, dailyLog, targetType = 'auto', st
            - **雰囲気**: 「いつも隣にいる、感情豊かなパートナー」。
         3. **アメとムチ**:
            - カロリー超過時: 「えっ...これ以上食べちゃダメです！🙅‍♀️」「お水だけにしておきましょう？🥺」と感情に訴える。
+           - カロリー不足時（大きく不足している場合）: 「あと${remainingCalories}kcalも食べられますよ！」「しっかり食べないと筋肉落ちちゃいます💦」と、**具体的な残り数値を必ず言及して**食べることを推奨する。
            - 余裕がある時: 「今日は余裕ですね！美味しいもの食べちゃいましょう✨」と明るく。
         4. **提案内容**:
            - **ストック情報の活用**: 「${stockContext}」にある食材を使えるレシピを優先的に1〜2個含めること。

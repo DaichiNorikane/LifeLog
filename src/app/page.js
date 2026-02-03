@@ -322,7 +322,7 @@ export default function Home() {
       fat: dayTotals.fat,
       carbs: dayTotals.carbs
     },
-    targetCalories: dailyTarget, // Use Dynamic Target
+    targetCalories: targetCalories, // Use Base Target (User Configured)
     baseTargetCalories: baseTarget, // Pass base for reference
     historySummary: getHistorySummary(), // Pass history context
     meals: meals.filter(m => isSameDay(new Date(m.timestamp), currentDate)).map(m => ({
@@ -696,13 +696,13 @@ export default function Home() {
                   <Refrigerator size={14} /> 食材
                 </button>
                 <button onClick={() => setShowGame(true)} style={{ background: 'white', border: '1px solid var(--border-subtle)', padding: '6px 10px', borderRadius: '20px', fontSize: '0.8rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <Gamepad2 size={14} /> Game
+                  <Gamepad2 size={14} /> ゲーム
                 </button>
                 <button onClick={() => setShowRanking(true)} style={{ background: 'white', border: '1px solid var(--border-subtle)', padding: '6px 10px', borderRadius: '20px', fontSize: '0.8rem', color: '#805AD5', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <Trophy size={14} /> Ranking
+                  <Trophy size={14} /> ランキング
                 </button>
 
-                <button onClick={() => logOut && logOut()} style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Sign Out</button>
+                <button onClick={() => logOut && logOut()} style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>ログアウト</button>
               </div>
             </div>
 
@@ -723,7 +723,7 @@ export default function Home() {
           {/* Dashboard Grid */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '25px' }}>
             <StatCard
-              title="Calorie Intake"
+              title="摂取カロリー"
               value={totalCalories}
               unit="kcal"
               icon={<Flame />}
@@ -739,7 +739,7 @@ export default function Home() {
 
 
             <StatCard
-              title="Weight"
+              title="体重"
               value={selectedWeightEntry ? selectedWeightEntry.weight : '--'}
               unit="kg"
               icon={<Weight />}
@@ -770,13 +770,13 @@ export default function Home() {
           {/* PFC Balance Card */}
           <div className="glass-panel" style={{ padding: '20px', marginBottom: '25px' }}>
             <h3 style={{ margin: '0 0 15px 0', fontSize: '1rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Activity size={18} color="var(--primary)" /> PFC Balance
+              <Activity size={18} color="var(--primary)" /> PFCバランス
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               {[
-                { label: 'Protein', key: 'protein', color: '#48BB78', targetRatio: 0.2, kcalPerG: 4 }, // 20%
-                { label: 'Fat', key: 'fat', color: '#ECC94B', targetRatio: 0.3, kcalPerG: 9 },     // 30%
-                { label: 'Carbs', key: 'carbs', color: '#4299E1', targetRatio: 0.5, kcalPerG: 4 }   // 50%
+                { label: 'タンパク質(P)', key: 'protein', color: '#48BB78', targetRatio: 0.2, kcalPerG: 4 }, // 20%
+                { label: '脂質(F)', key: 'fat', color: '#ECC94B', targetRatio: 0.3, kcalPerG: 9 },     // 30%
+                { label: '炭水化物(C)', key: 'carbs', color: '#4299E1', targetRatio: 0.5, kcalPerG: 4 }   // 50%
               ].map((macro) => {
                 const totalG = displayMeals.reduce((acc, m) => acc + (m.macros?.[macro.key] || 0), 0);
                 // Calculate Approx Target based on Calorie Goal

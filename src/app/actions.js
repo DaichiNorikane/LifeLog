@@ -218,9 +218,16 @@ export const suggestNextMeal = async (history, dailyLog, targetType = 'auto', st
             suggestedMealType = 'lunch';
             mealContext = '朝食は済んでいます。昼食を提案します。';
         } else if (hasDinner || (hasLunch && hasDinner)) {
-            // 夕食バッジあり → 今日の食事は済み
-            suggestedMealType = 'skip';
-            mealContext = '今日の食事は全て済んでいます。これ以上の食事は控えましょう。';
+            // 夕食バッジあり
+            if (isLowCalories) {
+                // カロリーが大幅に不足している場合 → 夕食の追加提案
+                suggestedMealType = 'dinner';
+                mealContext = '夕食は済んでいますが、1日のカロリーが大幅に不足しています。追加で何か食べることを提案します。';
+            } else {
+                // 通常通り終了
+                suggestedMealType = 'skip';
+                mealContext = '今日の食事は全て済んでいます。これ以上の食事は控えましょう。';
+            }
         }
         // 優先順位2: スキップ判定に基づく提案
         else if (isLunchSkipped && !hasDinner && !isDinnerSkipped) {
@@ -412,12 +419,16 @@ export const evaluateDailyLog = async (data, stockItems = []) => {
 
     // 評価状況のテキスト生成
     let calorieEvaluation = '';
+    const isVeryLow = data.consumedCalories < expectedCalories * 0.5;
+
     if (data.consumedCalories > data.targetCalories) {
         calorieEvaluation = '既に1日の目標カロリーを超過しています。';
     } else if (isOnTrack) {
         calorieEvaluation = 'この時間帯としては順調なペースです。';
     } else if (isSlightlyLow) {
         calorieEvaluation = 'やや少なめですが、残りの食事で調整可能です。';
+    } else if (isVeryLow && (hasDinner || hour >= 21)) {
+        calorieEvaluation = '【重要】カロリーが大幅に不足しています。健康のためにもう少し食べることを強く推奨します。';
     } else {
         calorieEvaluation = '少し不足気味ですが、まだ残りの食事があります。';
     }
@@ -442,6 +453,7 @@ export const evaluateDailyLog = async (data, stockItems = []) => {
 
       【重要】これは**現時点での中間評価**です。
       ${timeContext}
+      ${isVeryLow && (hasDinner || hour >= 21) ? "【緊急】カロリーが極端に足りていません！「今日は終わり」にせず、追加で何か食べるよう強く促してください。" : ""}
 
       # Icon Status Table (表情管理)
       回答の最下部、または指定のJSONフィールドに、以下の【ステータスコード】を必ず1つ出力してください。

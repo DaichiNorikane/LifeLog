@@ -616,7 +616,7 @@ export default function Home() {
                 目標: {target} {unit}
               </div>
               <div style={{ fontSize: '0.8rem', fontWeight: 600, color: isOver ? '#F56565' : '#48BB78', marginTop: '2px' }}>
-                {isOver ? `+${Math.abs(remaining)} ${unit} オーバー` : `残り ${remaining} ${unit}`}
+                {isOver ? `+${Math.floor(Math.abs(remaining))} ${unit} オーバー` : `残り ${Math.floor(remaining)} ${unit}`}
               </div>
             </div>
           </div>

@@ -197,7 +197,7 @@ export const suggestNextMeal = async (history, dailyLog, targetType = 'auto', st
     const isDinnerSkipped = hour >= 22 && !hasDinner;
 
     // Calculate remaining calories
-    const remainingCalories = dailyLog.targetCalories - dailyLog.totalCalories;
+    const remainingCalories = Math.floor(dailyLog.targetCalories - dailyLog.totalCalories);
     const isOverCalories = remainingCalories < 0;
     const isLowCalories = remainingCalories > 300; // 残り300kcal以上あれば追加提案する
 
@@ -492,8 +492,8 @@ export const evaluateDailyLog = async (data, stockItems = []) => {
 
       # Context
       【現在時刻】: ${hour}時
-      - この時間帯までの期待カロリー: 約${expectedCalories}kcal (1日目標${data.targetCalories}kcalの${Math.round(expectedCalorieRatio * 100)}%)
-      - 現在の摂取: ${data.consumedCalories}kcal
+      - この時間帯までの期待カロリー: 約${expectedCalories}kcal (1日目標${Math.floor(data.targetCalories)}kcalの${Math.round(expectedCalorieRatio * 100)}%)
+      - 現在の摂取: ${Math.floor(data.consumedCalories)}kcal
       - 評価: ${calorieEvaluation}
       
       ※**朝食のみ記録されている状態で「1日のカロリーが足りない」と評価しないでください。**
@@ -523,9 +523,9 @@ export const evaluateDailyLog = async (data, stockItems = []) => {
        - 目標期限: ${data.targetDate || "未設定"}
 
        【今日の摂取状況 (現在まで)】
-       - 今日の目標カロリー: ${data.targetCalories} kcal
-       - 摂取カロリー: ${data.consumedCalories} kcal
-       - 現在の収支: ${data.targetCalories - data.consumedCalories} kcal 
+       - 今日の目標カロリー: ${Math.floor(data.targetCalories)} kcal
+       - 摂取カロリー: ${Math.floor(data.consumedCalories)} kcal
+       - 現在の収支: ${Math.floor(data.targetCalories - data.consumedCalories)} kcal 
          (プラスなら残り余裕あり、マイナスなら超過)
 
        【直近の履歴 (コンテキストとして使用)】
@@ -657,7 +657,7 @@ export const evaluateSingleMeal = async (meal, contextMeals = []) => {
       【重要: この${mealTypeLabel}の全体構成】
       この${mealTypeLabel}には、評価対象の「${meal.foodName}」以外にも以下が含まれています:
       - ${otherFoods}
-      - ${mealTypeLabel}トータル: 約${totalCalsInMeal}kcal
+      - ${mealTypeLabel}トータル: 約${Math.round(totalCalsInMeal)}kcal
       
       **評価ルール**: 「${meal.foodName}」単独では栄養が偏って見えても、${mealTypeLabel}全体として見た時のバランスを考慮してください。
       例えば、メインディッシュが栄養豊富であれば、付随するお酒やサイドメニューは「食事の楽しみ」として許容範囲です。

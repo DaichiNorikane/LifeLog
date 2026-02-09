@@ -14,7 +14,8 @@ import StockManager from '@/components/StockManager'; // Imported
 import DietShooter from '@/components/DietShooter';
 import MealRankingModal from '@/components/MealRankingModal';
 import CategoryEvaluationModal from '@/components/CategoryEvaluationModal';
-import { Camera, XCircle, ChevronLeft, ChevronRight, Calculator, Weight, Utensils, Flame, Activity, Sparkles, Loader2, LogIn, Refrigerator, Gamepad2, Trophy } from 'lucide-react';
+import ElenaChallengeModal from '@/components/ElenaChallengeModal';
+import { Camera, XCircle, ChevronLeft, ChevronRight, Calculator, Weight, Utensils, Flame, Activity, Sparkles, Loader2, LogIn, Refrigerator, Gamepad2, Trophy, Brain } from 'lucide-react';
 import PullToRefresh from 'react-simple-pull-to-refresh';
 
 import { useAuth } from '@/lib/contexts/AuthContext';
@@ -35,6 +36,7 @@ export default function Home() {
   const [targetMealType, setTargetMealType] = useState('dinner'); // For Advisor
   const [showStockManager, setShowStockManager] = useState(false); // Stock Manager
   const [showGame, setShowGame] = useState(false); // Mini Game
+  const [showQuiz, setShowQuiz] = useState(false); // Elena's Challenge
   const [showRanking, setShowRanking] = useState(false); // Meal Ranking
   const [selectedCategory, setSelectedCategory] = useState(null); // 'breakfast', 'lunch', 'dinner', 'snack'
   const [stockItems, setStockItems] = useState([]); // Stock Items
@@ -698,6 +700,9 @@ export default function Home() {
                 <button onClick={() => setShowGame(true)} style={{ background: 'white', border: '1px solid var(--border-subtle)', padding: '6px 10px', borderRadius: '20px', fontSize: '0.8rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <Gamepad2 size={14} /> ゲーム
                 </button>
+                <button onClick={() => setShowQuiz(true)} style={{ background: 'white', border: '1px solid var(--border-subtle)', padding: '6px 10px', borderRadius: '20px', fontSize: '0.8rem', color: '#ED8936', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <Brain size={14} /> クイズ
+                </button>
                 <button onClick={() => setShowRanking(true)} style={{ background: 'white', border: '1px solid var(--border-subtle)', padding: '6px 10px', borderRadius: '20px', fontSize: '0.8rem', color: '#805AD5', display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <Trophy size={14} /> ランキング
                 </button>
@@ -1287,6 +1292,9 @@ export default function Home() {
       {showGame && (
         <DietShooter meals={meals} user={user} userProfile={userProfile} onClose={() => setShowGame(false)} />
       )}
+
+      {/* Elena's Challenge Quiz */}
+      <ElenaChallengeModal isOpen={showQuiz} onClose={() => setShowQuiz(false)} />
 
     </main >
   );

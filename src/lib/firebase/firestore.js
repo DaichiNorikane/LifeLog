@@ -356,6 +356,145 @@ export const getDailyEvaluation = async (userId, dateKey) => {
     }
 };
 
+// ========== Elena's Challenge (Quiz) ==========
+
+// Save a new quiz to stock
+// Save a new quiz to stock
+export const saveQuizToStock = async (userId, quizData) => {
+    try {
+        const quizzesRef = collection(db, "users", userId, "quizzes");
+
+        // Check for duplicates (simple check by question text)
+        // Note: This might be expensive if many quizzes, but stock is capped at ~50.
+        // A better way would be to query by a specific field if indexed, but for <50 items, 
+        // client-side filtering or exact match query is okay.
+        // Let's use exact match query.
+        const q = query(quizzesRef, where("question", "==", quizData.question));
+        const snapshot = await getDocs(q);
+
+        if (!snapshot.empty) {
+            console.log(`[Quiz] Duplicate question found, skipping: ${quizData.question}`);
+            return;
+        }
+
+        const payload = cleanData({
+            ...quizData,
+            correctCount: 0,
+            incorrectCount: 0,
+            createdAt: Timestamp.now(),
+            lastShown: null
+        });
+        await addDoc(quizzesRef, payload);
+    } catch (e) {
+        console.error("Error saving quiz:", e);
+    }
+};
+
+// Update quiz result (increment counts)
+export const updateQuizResult = async (userId, quizId, isCorrect) => {
+    try {
+        const quizRef = doc(db, "users", userId, "quizzes", quizId);
+        const quizSnap = await getDoc(quizRef);
+
+        if (!quizSnap.exists()) return;
+        const data = quizSnap.data();
+
+        if (isCorrect) {
+            const newCorrectCount = (data.correctCount || 0) + 1;
+            // If mastered (5 correct), delete
+            if (newCorrectCount >= 5) {
+                await deleteDoc(quizRef);
+                console.log(`[Quiz] Quiz ${quizId} mastered and deleted.`);
+            } else {
+                await updateDoc(quizRef, {
+                    correctCount: newCorrectCount,
+                    lastShown: Timestamp.now()
+                });
+            }
+        } else {
+            await updateDoc(quizRef, {
+                incorrectCount: (data.incorrectCount || 0) + 1,
+                lastShown: Timestamp.now()
+            });
+        }
+    } catch (e) {
+        console.error("Error updating quiz result:", e);
+    }
+};
+
+// Get a quiz from stock using weighted random selection (Prioritize Unseen)
+export const getQuizFromStock = async (userId) => {
+    try {
+        const quizzesRef = collection(db, "users", userId, "quizzes");
+        const snapshot = await getDocs(quizzesRef);
+
+        if (snapshot.empty) return null;
+
+        const quizzes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // 1. Filter out mastered
+        const candidates = quizzes.filter(q => (q.correctCount || 0) < 5);
+        if (candidates.length === 0) return null;
+
+        // 2. Prioritize "Never Shown" (lastShown == null)
+        const neverShown = candidates.filter(q => !q.lastShown);
+        if (neverShown.length > 0) {
+            // Pick purely random from never shown to ensure variety on startup
+            const randomIndex = Math.floor(Math.random() * neverShown.length);
+            console.log(`[Quiz] Picking from ${neverShown.length} unseen quizzes.`);
+            return neverShown[randomIndex];
+        }
+
+        // 3. If all seen, pick from "Least Recently Shown" (Oldest 60%) to avoid immediate repeats
+        const sortedByTime = candidates.sort((a, b) => {
+            const timeA = a.lastShown?.toMillis() || 0;
+            const timeB = b.lastShown?.toMillis() || 0;
+            return timeA - timeB; // Oldest first
+        });
+
+        // Take top 60% oldest
+        const candidatePoolSize = Math.max(1, Math.ceil(sortedByTime.length * 0.6));
+        const pool = sortedByTime.slice(0, candidatePoolSize);
+
+        // 4. Weighted Random on the pool (incorrect answers increase weight)
+        const weightedCandidates = pool.map(q => {
+            let weight = 10;
+            weight += (q.incorrectCount || 0) * 20;
+            weight -= (q.correctCount || 0) * 2;
+            if (weight < 1) weight = 1;
+            return { quiz: q, weight };
+        });
+
+        const totalWeight = weightedCandidates.reduce((sum, item) => sum + item.weight, 0);
+        let random = Math.random() * totalWeight;
+
+        for (const item of weightedCandidates) {
+            random -= item.weight;
+            if (random <= 0) {
+                console.log(`[Quiz] Picking weighted quiz (Last shown: ${item.quiz.lastShown?.toDate()})`);
+                return item.quiz;
+            }
+        }
+        return weightedCandidates[weightedCandidates.length - 1].quiz;
+
+    } catch (e) {
+        console.error("Error fetching quiz:", e);
+        return null;
+    }
+};
+
+// Check if stock is low
+export const getQuizStockCount = async (userId) => {
+    try {
+        const quizzesRef = collection(db, "users", userId, "quizzes");
+        const snapshot = await getDocs(quizzesRef); // expensive if large, but max 50 is fine
+        return snapshot.size;
+    } catch (e) {
+        console.error("Error counting quizzes:", e);
+        return 0;
+    }
+};
+
 // ========== LINE Linking ==========
 
 // Save a temporary 6-digit link code

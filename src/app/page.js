@@ -693,21 +693,17 @@ export default function Home() {
                 <div style={{ width: '8px', height: '8px', background: 'var(--primary)', borderRadius: '50%' }}></div>
                 <h1 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, letterSpacing: '-0.5px' }}>LifeLog</h1>
               </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={() => setShowStockManager(true)} style={{ background: 'white', border: '1px solid var(--border-subtle)', padding: '6px 10px', borderRadius: '20px', fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <Refrigerator size={14} /> 食材
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'nowrap' }}>
+                <button onClick={() => setShowStockManager(true)} style={{ background: 'white', border: '1px solid var(--border-subtle)', padding: '4px 8px', borderRadius: '16px', fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap' }}>
+                  <Refrigerator size={12} /> Stock
                 </button>
-                <button onClick={() => setShowGame(true)} style={{ background: 'white', border: '1px solid var(--border-subtle)', padding: '6px 10px', borderRadius: '20px', fontSize: '0.8rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <Gamepad2 size={14} /> ゲーム
+                <button onClick={() => setShowQuiz(true)} style={{ background: 'white', border: '1px solid var(--border-subtle)', padding: '4px 8px', borderRadius: '16px', fontSize: '0.7rem', color: '#ED8936', display: 'flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap' }}>
+                  <Brain size={12} /> Quiz
                 </button>
-                <button onClick={() => setShowQuiz(true)} style={{ background: 'white', border: '1px solid var(--border-subtle)', padding: '6px 10px', borderRadius: '20px', fontSize: '0.8rem', color: '#ED8936', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <Brain size={14} /> クイズ
+                <button onClick={() => setShowRanking(true)} style={{ background: 'white', border: '1px solid var(--border-subtle)', padding: '4px 8px', borderRadius: '16px', fontSize: '0.7rem', color: '#805AD5', display: 'flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap' }}>
+                  <Trophy size={12} /> Ranking
                 </button>
-                <button onClick={() => setShowRanking(true)} style={{ background: 'white', border: '1px solid var(--border-subtle)', padding: '6px 10px', borderRadius: '20px', fontSize: '0.8rem', color: '#805AD5', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <Trophy size={14} /> ランキング
-                </button>
-
-                <button onClick={() => logOut && logOut()} style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>ログアウト</button>
+                <button onClick={() => logOut && logOut()} style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', padding: '4px 8px', borderRadius: '16px', fontSize: '0.7rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Logout</button>
               </div>
             </div>
 

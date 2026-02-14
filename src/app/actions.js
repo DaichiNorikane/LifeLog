@@ -778,6 +778,99 @@ const heuristicScore = (meal) => {
     return { score: 5, reason: '普通の食事' };
 };
 
+/**
+ * Hybrid Recipe Calculation (DB + AI)
+ * @param {Array} ingredients - List of { name, amount(g), calories100g, ... } or { text }
+ */
+export const calculateRecipeHybrid = async (ingredients) => {
+    if (!apiKey) return { error: "API Key missing" };
+    if (!ingredients || ingredients.length === 0) return { error: "No ingredients provided" };
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+
+    // 1. Separate Known vs Unknown
+    let knownStats = { calories: 0, protein: 0, fat: 0, carbs: 0 };
+    let knownListStr = "";
+    let unknownListStr = "";
+
+    ingredients.forEach(item => {
+        if (item.source === 'official' && item.nutrients) {
+            // Calculate based on amount (standard DB is per 100g)
+            const ratio = (item.amount || 100) / 100;
+            const cals = (item.nutrients.calories || 0) * ratio;
+            const p = (item.nutrients.protein || 0) * ratio;
+            const f = (item.nutrients.fat || 0) * ratio;
+            const c = (item.nutrients.carbs || 0) * ratio;
+
+            knownStats.calories += cals;
+            knownStats.protein += p;
+            knownStats.fat += f;
+            knownStats.carbs += c;
+
+            knownListStr += `- ${item.name}: ${item.amount}g (約${Math.round(cals)}kcal)\n`;
+        } else {
+            // Manual text or unknown
+            unknownListStr += `- ${item.name || item.text} ${item.amount ? item.amount + 'g' : ''}\n`;
+        }
+    });
+
+    // 2. Build Prompt
+    const prompt = `
+      あなたは栄養計算のプロです。以下の食材リストから、レシピ全体の料理名と栄養価を計算・推測してください。
+
+      【確定している食材 (成分計算済み)】
+      ${knownListStr}
+      (確定分の合計: ${Math.round(knownStats.calories)}kcal, P:${knownStats.protein.toFixed(1)}g, F:${knownStats.fat.toFixed(1)}g, C:${knownStats.carbs.toFixed(1)}g)
+
+      【成分不明・推測が必要な食材】
+      ${unknownListStr || "(なし)"}
+
+      【タスク】
+      1. 「成分不明」の食材がある場合、その栄養価を標準的な値で推測してください。
+      2. 「確定分」と「推測分」を合計し、レシピ**全体**のカロリーとPFCを算出してください。
+      3. 食材の組み合わせから、最も可能性の高い「料理名」を推測してください。
+      4. このレシピ全体が「何人前」に相当するか推測してください。（例: 米300gと肉200gなら約2-3人前）
+      5. **1人前あたり**の数値を計算してください。
+
+      出力形式 (JSONのみ):
+      {
+        "foodName": "推測される料理名",
+        "totalServings": 数値 (例: 2.5),
+        "perServing": {
+            "calories": 1人前kcal (整数),
+            "macros": { "protein": 1人前g, "fat": 1人前g, "carbs": 1人前g }
+        },
+        "total": {
+            "calories": 全体kcal,
+             "macros": { "protein": 全体g, "fat": 全体g, "carbs": 全体g }
+        },
+        "reasoning": "計算の根拠（例: 不明分のXXを約YYkcalと推定。全体をZ人前として計算。）"
+      }
+    `;
+
+    // 3. Call Gemini
+    let lastError = null;
+    for (const modelName of MODELS_TO_TRY) {
+        try {
+            console.log(`Calculating hybrid recipe with ${modelName}...`);
+            const model = genAI.getGenerativeModel({ model: modelName });
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                return JSON.parse(jsonMatch[0]);
+            }
+        } catch (e) {
+            console.warn(`Hybrid Calc failed on ${modelName}:`, e.message);
+            lastError = e;
+        }
+    }
+
+    return { error: `Calculation failed: ${lastError?.message}` };
+};
+
 export const calculateRecipeWithGemini = async (ingredients) => {
     if (!apiKey) return { error: "API Key missing" };
     const genAI = new GoogleGenerativeAI(apiKey);

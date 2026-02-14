@@ -36,6 +36,14 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
     // Recipe State
     const [isCreatingRecipe, setIsCreatingRecipe] = useState(false);
     const [recipeForm, setRecipeForm] = useState({ foodName: '', calories: '', protein: '', fat: '', carbs: '', ingredients: '', instructions: [], description: '' });
+    // New Recipe State
+    const [recipeIngredients, setRecipeIngredients] = useState([]); // Array of objects
+    const [isIngredientModalOpen, setIsIngredientModalOpen] = useState(false);
+    const [ingredientSearchQuery, setIngredientSearchQuery] = useState('');
+    const [ingredientSearchResults, setIngredientSearchResults] = useState([]);
+    const [selectedIngredient, setSelectedIngredient] = useState(null); // For portion input
+    const [portionAmount, setPortionAmount] = useState(100);
+
     const [selectedRecipe, setSelectedRecipe] = useState(null);
     const [portionMultiplier, setPortionMultiplier] = useState(1.0);
     const [isCalculatingRecipe, setIsCalculatingRecipe] = useState(false);
@@ -343,6 +351,100 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
     };
 
     // 5. Recipe Handling
+    // New Handle Calculate
+    const handleCalculateRecipeHybrid = async () => {
+        if (recipeIngredients.length === 0) {
+            alert("食材リストが空です");
+            return;
+        }
+        setIsCalculatingRecipe(true);
+        try {
+            // Prepare payload
+            const payload = recipeIngredients.map(ing => ({
+                name: ing.name,
+                source: ing.source,
+                amount: ing.amount, // g
+                nutrients: ing.nutrients // { calories, protein... } per 100g if official
+            }));
+
+            const result = await import('@/app/actions').then(mod => mod.calculateRecipeHybrid(payload));
+
+            if (result && !result.error) {
+                // Determine 1 serving stats
+                const stat = result.perServing;
+                setRecipeForm(prev => ({
+                    ...prev,
+                    foodName: result.foodName || prev.foodName,
+                    calories: stat.calories,
+                    protein: stat.macros?.protein,
+                    fat: stat.macros?.fat,
+                    carbs: stat.macros?.carbs,
+                    // Store detailed breakdown in description or a new field if needed
+                    description: `推測: ${result.foodName} (${result.totalServings}人前)\n根拠: ${result.reasoning}`
+                }));
+                alert(`計算完了: ${result.foodName} (1人前 約${stat.calories}kcal)`);
+            } else {
+                alert("計算できませんでした: " + (result?.error || "エラー"));
+            }
+        } catch (e) {
+            console.error(e);
+            alert("計算エラー");
+        } finally {
+            setIsCalculatingRecipe(false);
+        }
+    };
+
+    // Ingredient Search
+    const handleSearchIngredient = async (e) => {
+        e.preventDefault();
+        if (!ingredientSearchQuery.trim()) return;
+        try {
+            const res = await searchLocalFood(ingredientSearchQuery);
+            if (res && res.suggestions) {
+                setIngredientSearchResults(res.suggestions);
+            } else {
+                setIngredientSearchResults([]);
+            }
+        } catch (e) { console.error(e); }
+    };
+
+    const addIngredientToRecipe = (item, amount) => {
+        const newIng = {
+            id: Date.now(),
+            name: item.foodName,
+            amount: parseFloat(amount),
+            source: 'official',
+            nutrients: {
+                calories: item.calories, // per 100g (assumption based on new UI)
+                protein: item.macros?.protein,
+                fat: item.macros?.fat,
+                carbs: item.macros?.carbs
+            }
+        };
+        setRecipeIngredients(prev => [...prev, newIng]);
+        setIngredientSearchQuery('');
+        setIngredientSearchResults([]);
+        setSelectedIngredient(null);
+        setIsIngredientModalOpen(false);
+    };
+
+    const addTextIngredient = () => {
+        if (!ingredientSearchQuery.trim()) return;
+        setRecipeIngredients(prev => [...prev, {
+            id: Date.now(),
+            name: ingredientSearchQuery,
+            amount: null,
+            source: 'text',
+            nutrients: null
+        }]);
+        setIngredientSearchQuery('');
+    };
+
+    const removeRecipeIngredient = (id) => {
+        setRecipeIngredients(prev => prev.filter(i => i.id !== id));
+    };
+
+    // Legacy handler kept for compatibility if needed, but UI will switch
     const handleCalculateRecipe = async () => {
         if (!recipeForm.ingredients.trim()) return;
         setIsCalculatingRecipe(true);
@@ -743,19 +845,82 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                         {isCreatingRecipe ? (
                             <form onSubmit={handleCreateRecipe}>
                                 <div style={{ marginBottom: '10px' }}>
-                                    <label style={labelStyle}>食材・調味料リスト (AI自動計算)</label>
-                                    <div style={{ display: 'flex', gap: '5px' }}>
-                                        <textarea
-                                            placeholder="例: 鶏むね肉 300g, 玉ねぎ 1個, 醤油 大さじ1"
-                                            value={recipeForm.ingredients}
-                                            onChange={e => setRecipeForm({ ...recipeForm, ingredients: e.target.value })}
-                                            style={{ ...inputStyle, minHeight: '60px', resize: 'vertical' }}
-                                        />
-                                        <button type="button" onClick={handleCalculateRecipe} disabled={isCalculatingRecipe || !recipeForm.ingredients} style={{ background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '8px', padding: '0 15px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', minWidth: '60px' }}>
-                                            {isCalculatingRecipe ? <Loader2 size={16} className="spin" /> : <><Search size={16} /><span>計算</span></>}
+                                    <label style={labelStyle}>食材・調味料リスト</label>
+
+                                    {/* Ingredient List */}
+                                    <div style={{ marginBottom: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                        {recipeIngredients.map(ing => (
+                                            <div key={ing.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px', fontSize: '0.85rem' }}>
+                                                <span>
+                                                    {ing.name}
+                                                    {ing.source === 'official' ? <span style={{ color: 'var(--text-secondary)', marginLeft: '5px' }}>({ing.amount}g)</span> : ''}
+                                                </span>
+                                                <button type="button" onClick={() => removeRecipeIngredient(ing.id)} style={{ border: 'none', background: 'none', color: 'var(--text-muted)' }}><X size={14} /></button>
+                                            </div>
+                                        ))}
+                                        {recipeIngredients.length === 0 && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>食材がまだありません</div>}
+                                    </div>
+
+                                    {/* Add Buttons */}
+                                    <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+                                        <button type="button" onClick={() => setIsIngredientModalOpen(true)} style={{ flex: 1, border: '1px dashed var(--primary)', background: 'var(--primary-glow)', color: 'var(--primary)', padding: '8px', borderRadius: '8px', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                                            <Plus size={16} /> 食材を追加
+                                        </button>
+                                        <button type="button" onClick={handleCalculateRecipeHybrid} disabled={isCalculatingRecipe || recipeIngredients.length === 0} style={{ background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '8px', padding: '0 15px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', minWidth: '80px' }}>
+                                            {isCalculatingRecipe ? <Loader2 size={16} className="spin" /> : <><Search size={16} /><span style={{ marginLeft: '5px' }}>AI計算</span></>}
                                         </button>
                                     </div>
-                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>食材を入力して「計算」を押すと、カロリーなどが自動入力されます。</p>
+
+                                    {/* Modal for Ingredient Search */}
+                                    {isIngredientModalOpen && (
+                                        <div className="fixed-overlay" style={{ ...overlayStyle, zIndex: 110 }}>
+                                            <div className="glass-panel" style={{ width: '90%', maxWidth: '350px', padding: '15px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                                                    <h4 style={{ margin: 0 }}>食材検索</h4>
+                                                    <button onClick={() => setIsIngredientModalOpen(false)} style={{ border: 'none', background: 'none' }}><X size={18} /></button>
+                                                </div>
+
+                                                {!selectedIngredient ? (
+                                                    // Search View
+                                                    <>
+                                                        <form onSubmit={handleSearchIngredient} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
+                                                            <input autoFocus value={ingredientSearchQuery} onChange={e => setIngredientSearchQuery(e.target.value)} placeholder="例: 鶏むね肉" style={inputStyle} />
+                                                            <button type="submit" className="btn-primary" style={{ minWidth: '40px' }}><Search size={16} /></button>
+                                                        </form>
+                                                        <div style={{ flex: 1, overflowY: 'auto' }}>
+                                                            {ingredientSearchResults.map((item, idx) => (
+                                                                <div key={idx} onClick={() => { setSelectedIngredient(item); setPortionAmount(100); }} style={{ padding: '8px', borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer' }}>
+                                                                    <div style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{item.foodName}</div>
+                                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{item.calories}kcal / 100g</div>
+                                                                </div>
+                                                            ))}
+                                                            {ingredientSearchQuery && ingredientSearchResults.length === 0 && (
+                                                                <button onClick={addTextIngredient} style={{ width: '100%', marginTop: '10px', padding: '10px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', color: 'var(--primary)' }}>
+                                                                    "{ingredientSearchQuery}" をテキストとして追加
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    // Portion View
+                                                    <>
+                                                        <div style={{ marginBottom: '15px' }}>
+                                                            <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>{selectedIngredient.foodName}</div>
+                                                            <label style={labelStyle}>分量 (g)</label>
+                                                            <input type="number" autoFocus value={portionAmount} onChange={e => setPortionAmount(e.target.value)} style={inputStyle} />
+                                                            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '5px' }}>
+                                                                {Math.round(selectedIngredient.calories * (portionAmount / 100))} kcal
+                                                            </p>
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: '10px' }}>
+                                                            <button onClick={() => setSelectedIngredient(null)} style={{ flex: 1, padding: '8px', background: 'none', border: '1px solid var(--border-subtle)', borderRadius: '4px' }}>戻る</button>
+                                                            <button onClick={() => addIngredientToRecipe(selectedIngredient, portionAmount)} className="btn-primary" style={{ flex: 1 }}>追加</button>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                                 <div style={{ marginBottom: '10px' }}><label style={labelStyle}>レシピ名</label><input required style={inputStyle} value={recipeForm.foodName} onChange={e => setRecipeForm({ ...recipeForm, foodName: e.target.value })} /></div>
                                 <div style={{ marginBottom: '10px' }}><label style={labelStyle}>カロリー (1人前)</label><input type="number" required style={inputStyle} value={recipeForm.calories} onChange={e => setRecipeForm({ ...recipeForm, calories: e.target.value })} /></div>

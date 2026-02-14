@@ -1,40 +1,25 @@
-// fs/path removed, using import
-
+// 1. Static Import (easiest for Vercel bundling)
+import mextData from '@/data/mext_fct_2020.json';
+// Alternatively, if static import fails due to size (unlikely for 2MB), use raw-loader?
+// But Next.js handles JSON imports fine.
 
 // Simple normalization map for common user queries vs official DB terms
 const QUERY_NORMALIZATION_MAP = {
     "牛": "うし",
     "豚": "ぶた",
     "鶏": "にわとり",
-    // "鳥": "にわとり", // "焼き鳥" -> "焼きにわとり" is weird. "鳥肉" -> "にわとりにく" is ok. 
+    // "鳥": "にわとり",
     "米": "こめ",
     "ご飯": "こめ",
     "ごはん": "こめ",
     "卵": "たまご",
     "玉子": "たまご",
-    // "パン": "ぱん", 
 };
 
-let mextDataCache = null;
-
-// Helper to load data
-const loadMextData = async () => {
-    if (mextDataCache) return mextDataCache;
-
-    try {
-        console.log("[foodService] Loading MEXT data via import...");
-        // Dynamic import ensures Webpack bundles the file for Vercel Serverless environment
-        const mextDataModule = await import('@/data/mext_fct_2020.json');
-
-        // Handle both ES module default export and direct JSON
-        mextDataCache = mextDataModule.default || mextDataModule;
-
-        console.log(`[foodService] Loaded ${mextDataCache.length} items from DB`);
-        return mextDataCache;
-    } catch (error) {
-        console.error("[foodService] Failed to load MEXT data:", error);
-        return [];
-    }
+// Helper to load data - effectively just returns the imported data
+const loadMextData = () => {
+    // If it's already an object (default export from JSON)
+    return mextData;
 };
 
 /**
@@ -42,10 +27,10 @@ const loadMextData = async () => {
  * @param {string} query - The search query.
  * @returns {Array} - Array of matching food items.
  */
-export const searchOfficialFoodDatabase = async (query) => {
+export const searchOfficialFoodDatabase = (query) => {
     if (!query || query.length < 1) return [];
 
-    const data = await loadMextData();
+    const data = loadMextData();
     if (!data || data.length === 0) return [];
 
     // Normalize Query

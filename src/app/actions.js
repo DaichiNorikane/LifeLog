@@ -96,8 +96,8 @@ import { searchOfficialFoodDatabase } from "../services/foodService";
  */
 export const searchLocalFood = async (query) => {
     try {
-        // searchOfficialFoodDatabase is now async due to dynamic import
-        const results = await searchOfficialFoodDatabase(query);
+        // searchOfficialFoodDatabase is synchronous now (static import)
+        const results = searchOfficialFoodDatabase(query);
         return { suggestions: results };
     } catch (e) {
         console.error("Local search failed:", e);

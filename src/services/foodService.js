@@ -25,13 +25,13 @@ const loadMextData = () => {
 /**
  * Search the Standard Tables of Food Composition in Japan (2020).
  * @param {string} query - The search query.
- * @returns {Array} - Array of matching food items.
+ * @returns {Object} - { results: [], debug: {} }
  */
 export const searchOfficialFoodDatabase = (query) => {
-    if (!query || query.length < 1) return [];
+    if (!query || query.length < 1) return { results: [], debug: { error: "empty query" } };
 
     const data = loadMextData();
-    if (!data || data.length === 0) return [];
+    if (!data || data.length === 0) return { results: [], debug: { error: "no data loaded" } };
 
     // Normalize Query
     let rawQuery = query.trim();
@@ -53,16 +53,21 @@ export const searchOfficialFoodDatabase = (query) => {
     const normKeywords = normalizedQuery.replace(/　/g, ' ').split(' ').filter(k => k);
 
     // Filter
-    const matches = data.filter(item => {
-        const name = (item.foodName || "").toLowerCase(); // Case insensitive
-        // Check if ALL keywords match (AND condition within a keyword set)
-        // We accept match if (All Raw Keywords match) OR (All Normalized Keywords match)
-
+    let matches = data.filter(item => {
+        const name = (item.foodName || "").toLowerCase();
+        // Strict Match: All keywords must be present
         const rawMatch = rawKeywords.every(k => name.includes(k.toLowerCase()));
         const normMatch = normKeywords.every(k => name.includes(k.toLowerCase()));
-
         return rawMatch || normMatch;
     });
+
+    // Fallback: If no matches, try looser OR match (any keyword)
+    if (matches.length === 0 && rawKeywords.length > 0) {
+        matches = data.filter(item => {
+            const name = (item.foodName || "").toLowerCase();
+            return rawKeywords.some(k => name.includes(k.toLowerCase()));
+        });
+    }
 
     console.log(`[foodService] Search for "${query}" (norm: "${normalizedQuery}") found ${matches.length} matches`);
 
@@ -72,7 +77,7 @@ export const searchOfficialFoodDatabase = (query) => {
     });
 
     // Map to application format
-    return matches.slice(0, 50).map(item => ({
+    const results = matches.slice(0, 50).map(item => ({
         foodName: item.foodName,
         calories: Math.round(item.enercKcal || 0),
         macros: {
@@ -80,7 +85,17 @@ export const searchOfficialFoodDatabase = (query) => {
             fat: item.fat || 0,
             carbs: item.chocdf || 0
         },
-        source: "official", // Shorten source name for UI
+        source: "official",
         originalId: item.foodId
     }));
+
+    return {
+        results,
+        debug: {
+            totalDB: data.length,
+            matches: matches.length,
+            query: query,
+            norm: normalizedQuery
+        }
+    };
 };

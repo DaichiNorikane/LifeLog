@@ -1,10 +1,10 @@
 "use client";
-import { useState, useRef, useEffect } from 'react';
-import { Camera, X, Loader2, Search, PenTool, Image as ImageIcon, ChevronRight, Trash2, Clock, BookOpen, Plus, Minus, Save, Sparkles } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Camera, X, Loader2, Search, PenTool, Image as ImageIcon, ChevronRight, Trash2, Clock, BookOpen, Plus, Minus, Save, Sparkles, Database, History } from 'lucide-react';
 import { analyzeImage } from '@/services/aiService';
-import { searchFoodWithGemini, calculateRecipeWithGemini, searchRecipesWithGemini } from '@/app/actions';
+import { searchLocalFood, searchAiFood, calculateRecipeWithGemini, searchRecipesWithGemini } from '@/app/actions';
 import { useAuth } from '@/lib/contexts/AuthContext';
-import { getRecentMeals, getRecipesFromFirestore, addRecipeToFirestore, deleteRecipeFromFirestore } from '@/lib/firebase/firestore';
+import { getRecentMeals, getRecipesFromFirestore, addRecipeToFirestore, deleteRecipeFromFirestore, addSearchHistory, getSearchHistory } from '@/lib/firebase/firestore';
 
 export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRecipeSearch = null, stockItems = [], savedRecipeSearch, onSaveRecipeSearch }) {
     const [activeTab, setActiveTab] = useState('camera'); // 'camera', 'search', 'manual', 'review', 'history', 'recipes'
@@ -12,7 +12,8 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
     const { user } = useAuth();
 
     // Data State
-    const [historyItems, setHistoryItems] = useState([]);
+    const [recentMeals, setRecentMeals] = useState([]); // Renamed from historyItems to avoid confusion
+    const [searchHistory, setSearchHistory] = useState([]); // New: Explicit Search History
     const [recipes, setRecipes] = useState([]);
     const [historyContext, setHistoryContext] = useState("");
 
@@ -22,32 +23,31 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
     // Camera State
     const [scanStep, setScanStep] = useState(0);
     const fileInputRef = useRef(null);
-    const [cameraContext, setCameraContext] = useState(""); // New: Photo Context
+    const [cameraContext, setCameraContext] = useState("");
 
     // Search State
     const [searchQueries, setSearchQueries] = useState(['']);
-    const [searchResults, setSearchResults] = useState([]);
+    const [searchResults, setSearchResults] = useState([]); // Combined results
+    const [isAiSearching, setIsAiSearching] = useState(false);
 
     // Manual State
     const [manualForm, setManualForm] = useState({ foodName: '', calories: '', protein: '' });
 
     // Recipe State
     const [isCreatingRecipe, setIsCreatingRecipe] = useState(false);
-
-    // Updated recipeForm to include instructions and description
     const [recipeForm, setRecipeForm] = useState({ foodName: '', calories: '', protein: '', fat: '', carbs: '', ingredients: '', instructions: [], description: '' });
     const [selectedRecipe, setSelectedRecipe] = useState(null);
     const [portionMultiplier, setPortionMultiplier] = useState(1.0);
     const [isCalculatingRecipe, setIsCalculatingRecipe] = useState(false);
 
-    const [deleteConfirmation, setDeleteConfirmation] = useState(null); // New state for delete modal
+    const [deleteConfirmation, setDeleteConfirmation] = useState(null);
 
     // Recipe Search State
     const [recipeSearchMode, setRecipeSearchMode] = useState(savedRecipeSearch?.results?.length > 0 || initialRecipeSearch);
     const [recipeSearchQuery, setRecipeSearchQuery] = useState(savedRecipeSearch?.query || '');
-    const [foundRecipes, setFoundRecipes] = useState(savedRecipeSearch?.results || []); // Array of recipes
+    const [foundRecipes, setFoundRecipes] = useState(savedRecipeSearch?.results || []);
     const [isSearchingRecipe, setIsSearchingRecipe] = useState(false);
-    const [viewingRecipe, setViewingRecipe] = useState(null); // For viewing details (found or saved)
+    const [viewingRecipe, setViewingRecipe] = useState(null);
     const [toast, setToast] = useState(null);
 
     const showToast = (msg) => {
@@ -61,7 +61,6 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
             setActiveTab('recipes');
             setRecipeSearchMode(true);
             setRecipeSearchQuery(initialRecipeSearch);
-            // Auto trigger search
             handleSearchRecipe(null, initialRecipeSearch);
         }
     }, [initialRecipeSearch]);
@@ -70,15 +69,16 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
     useEffect(() => {
         const load = async () => {
             if (user) {
-                const [h, r] = await Promise.all([
+                const [recent, hist, r] = await Promise.all([
                     getRecentMeals(user.uid),
+                    getSearchHistory(user.uid),
                     getRecipesFromFirestore(user.uid)
                 ]);
-                setHistoryItems(h);
+                setRecentMeals(recent);
+                setSearchHistory(hist);
                 setRecipes(r);
 
-                // Build context (top 20 distinct names)
-                const names = h.slice(0, 20).map(i => i.foodName).join(', ');
+                const names = recent.slice(0, 20).map(i => i.foodName).join(', ');
                 setHistoryContext(names);
             }
         };
@@ -103,7 +103,12 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
 
     const [mealType, setMealType] = useState(getDefaultMealType());
 
-    // ... (Resize Image Helper same as before) ...
+    // ... (Resize Image Helper skipped, assume unchanged) ...
+    // Note: Since I am replacing the top part, I need to keep the resizeImage function if it was in the range. 
+    // The previous view showed resizeImage starting at line 107. 
+    // I will include it to be safe, or just leave it if I don't replace that far.
+    // Wait, the range 1-253 covers resizeImage. I must include it.
+
     const resizeImage = (file, maxWidth = 800) => {
         return new Promise((resolve) => {
             const reader = new FileReader();
@@ -138,14 +143,13 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
         const newItems = files.map(file => ({
             id: Date.now() + Math.random(),
             type: 'image',
-            status: 'preview', // New status
+            status: 'preview',
             file: file,
             preview: null
         }));
 
         setPendingItems(prev => [...prev, ...newItems]);
 
-        // Generate Previews only
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
             const item = newItems[i];
@@ -157,14 +161,22 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
             }
         }
         setLoading(false);
-        setActiveTab('review'); // Go to review to add context/analyze
+        setActiveTab('review');
     };
 
     const runAnalysis = async (item) => {
         if (!item.file || item.status === 'analyzing') return;
         updateItem(item.id, { status: 'analyzing' });
         try {
-            const result = await analyzeImage(item.file, item.context || cameraContext); // Use item-specific context if avail or fallback
+            const result = await analyzeImage(item.file, item.context || cameraContext);
+
+            // Save to history automatically on successful analysis
+            if (user && result && result.foodName) {
+                await addSearchHistory(user.uid, result);
+                // Refresh history silently
+                getSearchHistory(user.uid).then(setSearchHistory);
+            }
+
             updateItem(item.id, {
                 status: 'done',
                 result: { ...result, image: item.preview }
@@ -188,26 +200,96 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
         newQueries[index] = value;
         setSearchQueries(newQueries);
     };
+
+    // Instant Search Effect
+    useEffect(() => {
+        const query = searchQueries[0];
+        if (!query || query.trim().length === 0) {
+            console.log("[FoodLogger] Search query is empty, clearing results.");
+            setSearchResults([]);
+            return;
+        }
+
+        const timeoutId = setTimeout(async () => {
+            // 1. Local History Match (Client Side)
+            const historyMatches = searchHistory.filter(item =>
+                item.foodName.toLowerCase().includes(query.toLowerCase())
+            ).map(item => ({ ...item, source: 'history' }));
+
+            // 2. Official DB Match (Server Action)
+            let dbMatches = [];
+            try {
+                const localRes = await searchLocalFood(query);
+                if (localRes && localRes.suggestions) {
+                    dbMatches = localRes.suggestions.map(item => ({ ...item, source: 'database' }));
+
+                    // DEBUG: User feedback for empty results
+                    if (localRes.debug) {
+                        console.log("Search Debug:", localRes.debug);
+                        if (dbMatches.length === 0) {
+                            // Only show debug toast if NO results found to avoid spam
+                            showToast(`DB:${localRes.debug.totalDB}件, ヒット:0`);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("Local DB Search Error:", err);
+                // Show toast for debugging if needed, or just silent fail.
+                // For now, let's show a subtle error if it completely fails to help diagnosis
+                // showToast(`検索エラー: ${err.message}`); 
+                // Actually user said "not reflecting", implies no results.
+            }
+
+            // Combine (Deduping by foodName might be good, but for now just concat)
+            // Prioritize History
+            const combined = [...historyMatches, ...dbMatches];
+
+            // Simple dedupe by name to avoid showing same item twice
+            const unique = [];
+            const seen = new Set();
+            combined.forEach(item => {
+                if (!seen.has(item.foodName)) {
+                    seen.add(item.foodName);
+                    unique.push(item);
+                }
+            });
+
+            console.log("Final Search Results:", unique);
+            setSearchResults(unique.slice(0, 20));
+        }, 300); // 300ms debounce
+
+        return () => clearTimeout(timeoutId);
+    }, [searchQueries, searchHistory]);
+
     const addQueryInput = () => setSearchQueries(prev => [...prev, '']);
     const removeQueryInput = (index) => {
         if (searchQueries.length > 1) setSearchQueries(prev => prev.filter((_, i) => i !== index));
     };
 
-    const handleSearch = async (e) => {
+    // Explicit AI Search Trigger
+    const handleAiSearch = async (e) => {
         e.preventDefault();
         const combinedQuery = searchQueries.filter(q => q.trim()).join('と');
         if (!combinedQuery) return;
 
-        setLoading(true);
+        setIsAiSearching(true);
         try {
-            const res = await searchFoodWithGemini(combinedQuery, historyContext);
+            const res = await searchAiFood(combinedQuery, historyContext);
             if (res.suggestions) {
-                setSearchResults(res.suggestions);
+                const aiMatches = res.suggestions.map(item => ({ ...item, source: 'ai' }));
+
+                // Merge with current results (AI at top or bottom? Maybe Top if explicitly asked)
+                setSearchResults(prev => {
+                    const existingNames = new Set(prev.map(p => p.foodName));
+                    const newUnique = aiMatches.filter(m => !existingNames.has(m.foodName));
+                    return [...newUnique, ...prev];
+                });
             }
         } catch (error) {
-            console.error("search failed", error);
+            console.error("AI search failed", error);
+            showToast("AI検索に失敗しました");
         } finally {
-            setLoading(false);
+            setIsAiSearching(false);
         }
     };
 
@@ -225,7 +307,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
     };
 
     // Helper to Add Item
-    const addItemToPending = (resultData, type = 'manual') => {
+    const addItemToPending = async (resultData, type = 'manual') => {
         const newItem = {
             id: Date.now() + Math.random(),
             type: type,
@@ -239,6 +321,14 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
             }
         };
         setPendingItems(prev => [...prev, newItem]);
+
+        // Save to History (if not already from history)
+        if (type !== 'history' && user && resultData.foodName) {
+            await addSearchHistory(user.uid, resultData);
+            // Update local history state
+            const updatedHistory = await getSearchHistory(user.uid);
+            setSearchHistory(updatedHistory);
+        }
     };
 
     // 4. History Handling
@@ -249,7 +339,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
             macros: item.macros,
             reasoning: "履歴から追加"
         }, 'history');
-        alert(`${item.foodName} を追加しました`);
+        showToast(`${item.foodName} を追加しました`);
     };
 
     // 5. Recipe Handling
@@ -545,55 +635,86 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                 {/* --- SEARCH --- */}
                 {activeTab === 'search' && (
                     <div className="fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>入力中に履歴から候補を表示。AI検索はボタンをタップ。</p>
-                        <form onSubmit={handleSearch} style={{ display: 'flex', gap: '8px', marginBottom: '15px' }}>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>入力で履歴・公式DBから検索。AI検索はボタンで。</p>
+                        <form onSubmit={handleAiSearch} style={{ display: 'flex', gap: '8px', marginBottom: '15px' }}>
                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '5px' }}>
                                 {searchQueries.map((q, i) => (
                                     <div key={i} style={{ display: 'flex', gap: '5px' }}>
-                                        <input value={q} onChange={(e) => handleQueryChange(i, e.target.value)} placeholder="食べたもの" style={inputStyle} />
+                                        <input
+                                            value={q}
+                                            onChange={(e) => handleQueryChange(i, e.target.value)}
+                                            placeholder="食べたもの"
+                                            style={inputStyle}
+                                        />
                                         {searchQueries.length > 1 && <button type="button" onClick={() => removeQueryInput(i)} style={{ border: 'none', background: 'none' }}><X size={16} /></button>}
                                     </div>
                                 ))}
                             </div>
-                            <button type="submit" className="btn-primary" disabled={loading} style={{ padding: '0 15px' }}>{loading ? <Loader2 className="spin" /> : <><Sparkles size={16} /><span style={{ fontSize: '0.7rem' }}>AI</span></>}</button>
+                            <button type="submit" className="btn-primary" disabled={isAiSearching} style={{ padding: '0 15px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+                                {isAiSearching ? <Loader2 className="spin" /> : <><Sparkles size={16} /><span style={{ fontSize: '0.75rem', marginLeft: '4px' }}>AI検索</span></>}
+                            </button>
                         </form>
+
                         <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', minHeight: 0 }}>
-                            {/* Quick History Suggestions (before AI search) */}
-                            {searchQueries[0] && searchQueries[0].length > 0 && searchResults.length === 0 && (
-                                <>
-                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '5px' }}>💡 履歴から候補:</p>
-                                    {historyItems
-                                        .filter(item => item.foodName.toLowerCase().includes(searchQueries[0].toLowerCase()))
-                                        .slice(0, 5)
-                                        .map((item, i) => (
-                                            <div key={`hist-${i}`} onClick={() => { addItemToPending(item, 'history'); showToast('履歴から追加しました'); }} className="glass-panel hover-card" style={{ padding: '12px', marginBottom: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f0fdf4', borderLeft: '3px solid #48BB78' }}>
-                                                <div>
-                                                    <div style={{ fontWeight: 'bold' }}>{item.foodName}</div>
-                                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.calories} kcal</div>
-                                                </div>
-                                                <Plus size={18} color="var(--primary)" />
-                                            </div>
-                                        ))
-                                    }
-                                    {historyItems.filter(item => item.foodName.toLowerCase().includes(searchQueries[0].toLowerCase())).length === 0 && (
-                                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '10px' }}>一致する履歴がありません。AI検索をお試しください。</p>
-                                    )}
-                                </>
+                            {/* Combined Search Results */}
+                            {searchResults.length === 0 && searchQueries[0]?.length === 0 && (
+                                <div style={{ textAlign: 'center', marginTop: '20px', color: 'var(--text-muted)' }}>
+                                    <Search size={32} style={{ margin: '0 auto 10px', opacity: 0.3 }} />
+                                    <p style={{ fontSize: '0.9rem' }}>何を食べましたか？</p>
+                                    <p style={{ fontSize: '0.8rem' }}>履歴や公式データから即座に検索します</p>
+                                </div>
                             )}
-                            {/* AI Search Results */}
-                            {searchResults.length > 0 && (
-                                <>
-                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '5px' }}>✨ AI検索結果:</p>
-                                    {searchResults.map((item, i) => (
-                                        <div key={i} onClick={() => { addItemToPending(item, 'search'); showToast('AI検索から追加しました'); }} className="glass-panel hover-card" style={{ padding: '12px', marginBottom: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <div>
+
+                            {searchResults.map((item, i) => {
+                                // Determine Badge
+                                let badge = null;
+                                let badgeColor = '#EDF2F7';
+                                let badgeIcon = null;
+
+                                if (item.source === 'history') {
+                                    badge = '履歴';
+                                    badgeColor = '#E6FFFA'; // Teal light
+                                    badgeIcon = <History size={12} color="#319795" />;
+                                } else if (item.source === 'database') {
+                                    badge = '公式';
+                                    badgeColor = '#EBF8FF'; // Blue light
+                                    badgeIcon = <Database size={12} color="#3182CE" />;
+                                } else if (item.source === 'ai') {
+                                    badge = 'AI';
+                                    badgeColor = '#FAF5FF'; // Purple light
+                                    badgeIcon = <Sparkles size={12} color="#805AD5" />;
+                                }
+
+                                return (
+                                    <div key={`${item.source}-${i}`} onClick={() => { addItemToPending(item, item.source); }} className="glass-panel hover-card" style={{ padding: '12px', marginBottom: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
                                                 <div style={{ fontWeight: 'bold' }}>{item.foodName}</div>
-                                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.calories} kcal</div>
+                                                {badge && (
+                                                    <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: badgeColor, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                                        {badgeIcon} {badge}
+                                                    </span>
+                                                )}
                                             </div>
-                                            <Plus size={18} color="var(--primary)" />
+                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', gap: '8px' }}>
+                                                <span>{item.calories} kcal</span>
+                                                {item.macros && (
+                                                    <span style={{ fontSize: '0.75rem' }}>
+                                                        P:{item.macros.protein} F:{item.macros.fat} C:{item.macros.carbs}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
-                                    ))}
-                                </>
+                                        <Plus size={18} color="var(--primary)" />
+                                    </div>
+                                );
+                            })}
+
+                            {searchResults.length === 0 && searchQueries[0]?.length > 0 && !loading && (
+                                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                                    <p>候補が見つかりませんか？</p>
+                                    <p>右上の「AI検索」ボタンを押してAIに聞いてみましょう。</p>
+                                </div>
                             )}
                         </div>
                     </div>
@@ -602,8 +723,8 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                 {/* --- HISTORY --- */}
                 {activeTab === 'history' && (
                     <div className="fade-in" style={{ flex: 1, overflowY: 'auto' }}>
-                        {historyItems.length === 0 ? <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>履歴がありません</p> :
-                            historyItems.map((item) => (
+                        {recentMeals.length === 0 ? <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>履歴がありません</p> :
+                            recentMeals.map((item) => (
                                 <div key={item.id} onClick={() => handleAddHistoryItem(item)} className="glass-panel hover-card" style={{ padding: '12px', marginBottom: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div>
                                         <div style={{ fontWeight: 'bold' }}>{item.foodName}</div>

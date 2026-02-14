@@ -408,40 +408,96 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
         } catch (e) { console.error(e); }
     };
 
+    const [editingId, setEditingId] = useState(null); // ID of ingredient being edited
+
     const addIngredientToRecipe = (item, amount) => {
-        const newIng = {
-            id: Date.now(),
-            name: item.foodName,
-            amount: amount ? parseFloat(amount) : null, // Store null if empty
-            source: 'official',
-            nutrients: {
-                calories: item.calories, // per 100g (assumption based on new UI)
-                protein: item.macros?.protein,
-                fat: item.macros?.fat,
-                carbs: item.macros?.carbs
-            }
-        };
-        setRecipeIngredients(prev => [...prev, newIng]);
+        const parsedAmount = amount ? parseFloat(amount) : null;
+
+        // If editing existing item
+        if (editingId) {
+            setRecipeIngredients(prev => prev.map(ing => {
+                if (ing.id === editingId) {
+                    return {
+                        ...ing,
+                        name: item.foodName,
+                        amount: parsedAmount,
+                        // Keep original source if editing, or update if switching? 
+                        // Usually item is the same, just amount changes.
+                        // But if item source is different (e.g. from text to official? unlikely in this flow)
+                        // For simplicity, just update amount and nutrients if available
+                        nutrients: item.source === 'official' ? {
+                            calories: item.calories,
+                            protein: item.macros?.protein,
+                            fat: item.macros?.fat,
+                            carbs: item.macros?.carbs
+                        } : ing.nutrients
+                    };
+                }
+                return ing;
+            }));
+            setEditingId(null);
+        } else {
+            // New Item
+            const newIng = {
+                id: Date.now(),
+                name: item.foodName,
+                amount: parsedAmount,
+                source: item.source || 'official', // 'text' or 'official'
+                nutrients: item.source === 'official' ? {
+                    calories: item.calories,
+                    protein: item.macros?.protein,
+                    fat: item.macros?.fat,
+                    carbs: item.macros?.carbs
+                } : null
+            };
+            setRecipeIngredients(prev => [...prev, newIng]);
+        }
+
+        // Reset UI
         setIngredientSearchQuery('');
         setIngredientSearchResults([]);
         setSelectedIngredient(null);
+        setPortionAmount('');
         setIsIngredientModalOpen(false);
     };
 
     const addTextIngredient = () => {
         if (!ingredientSearchQuery.trim()) return;
-        setRecipeIngredients(prev => [...prev, {
-            id: Date.now(),
-            name: ingredientSearchQuery,
-            amount: null,
-            source: 'text',
-            nutrients: null
-        }]);
-        setIngredientSearchQuery('');
+        // Use Modal Flow for Text Ingredients too
+        const textItem = {
+            foodName: ingredientSearchQuery,
+            calories: 0,
+            source: 'text'
+        };
+        setSelectedIngredient(textItem);
+        setPortionAmount('');
+        // No editingId, so it will add new
+    };
+
+    const editIngredient = (ing) => {
+        setEditingId(ing.id);
+        const item = {
+            foodName: ing.name,
+            calories: ing.nutrients?.calories || 0,
+            macros: ing.nutrients ? {
+                protein: ing.nutrients.protein,
+                fat: ing.nutrients.fat,
+                carbs: ing.nutrients.carbs
+            } : null,
+            source: ing.source
+        };
+        setSelectedIngredient(item);
+        setPortionAmount(ing.amount || '');
+        setIsIngredientModalOpen(true);
     };
 
     const removeRecipeIngredient = (id) => {
         setRecipeIngredients(prev => prev.filter(i => i.id !== id));
+        if (editingId === id) {
+            setEditingId(null);
+            setSelectedIngredient(null);
+            setIsIngredientModalOpen(false);
+        }
     };
 
     // Legacy handler kept for compatibility if needed, but UI will switch
@@ -850,12 +906,15 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                     {/* Ingredient List */}
                                     <div style={{ marginBottom: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                                         {recipeIngredients.map(ing => (
-                                            <div key={ing.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px', fontSize: '0.85rem' }}>
+                                            <div key={ing.id} onClick={() => editIngredient(ing)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px', fontSize: '0.85rem', cursor: 'pointer', border: editingId === ing.id ? '1px solid var(--primary)' : '1px solid transparent' }}>
                                                 <span>
                                                     {ing.name}
-                                                    {ing.source === 'official' ? <span style={{ color: 'var(--text-secondary)', marginLeft: '5px' }}>({ing.amount ? ing.amount + 'g' : 'AI推測'})</span> : ''}
+                                                    {ing.source === 'official' ?
+                                                        <span style={{ color: 'var(--text-secondary)', marginLeft: '5px' }}>({ing.amount ? ing.amount + 'g' : 'AI推測'})</span> :
+                                                        <span style={{ color: 'var(--text-muted)', marginLeft: '5px' }}>(テキスト/ {ing.amount ? ing.amount + 'g' : 'AI推測'})</span>
+                                                    }
                                                 </span>
-                                                <button type="button" onClick={() => removeRecipeIngredient(ing.id)} style={{ border: 'none', background: 'none', color: 'var(--text-muted)' }}><X size={14} /></button>
+                                                <button type="button" onClick={(e) => { e.stopPropagation(); removeRecipeIngredient(ing.id); }} style={{ border: 'none', background: 'none', color: 'var(--text-muted)' }}><X size={14} /></button>
                                             </div>
                                         ))}
                                         {recipeIngredients.length === 0 && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>食材がまだありません</div>}
@@ -876,8 +935,8 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                         <div className="fixed-overlay" style={{ ...overlayStyle, zIndex: 110 }}>
                                             <div className="glass-panel" style={{ width: '90%', maxWidth: '350px', padding: '15px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                                                    <h4 style={{ margin: 0 }}>食材検索</h4>
-                                                    <button onClick={() => setIsIngredientModalOpen(false)} style={{ border: 'none', background: 'none' }}><X size={18} /></button>
+                                                    <h4 style={{ margin: 0 }}>{editingId ? '食材を編集' : '食材検索'}</h4>
+                                                    <button onClick={() => { setIsIngredientModalOpen(false); setEditingId(null); setSelectedIngredient(null); }} style={{ border: 'none', background: 'none' }}><X size={18} /></button>
                                                 </div>
 
                                                 {!selectedIngredient ? (
@@ -913,8 +972,8 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                                             </p>
                                                         </div>
                                                         <div style={{ display: 'flex', gap: '10px' }}>
-                                                            <button onClick={() => setSelectedIngredient(null)} style={{ flex: 1, padding: '8px', background: 'none', border: '1px solid var(--border-subtle)', borderRadius: '4px' }}>戻る</button>
-                                                            <button onClick={() => addIngredientToRecipe(selectedIngredient, portionAmount)} className="btn-primary" style={{ flex: 1 }}>追加</button>
+                                                            <button onClick={() => { setSelectedIngredient(null); setEditingId(null); }} style={{ flex: 1, padding: '8px', background: 'none', border: '1px solid var(--border-subtle)', borderRadius: '4px' }}>戻る</button>
+                                                            <button onClick={() => addIngredientToRecipe(selectedIngredient, portionAmount)} className="btn-primary" style={{ flex: 1 }}>{editingId ? '更新' : '追加'}</button>
                                                         </div>
                                                     </>
                                                 )}

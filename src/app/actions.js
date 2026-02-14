@@ -794,9 +794,10 @@ export const calculateRecipeHybrid = async (ingredients) => {
     let unknownListStr = "";
 
     ingredients.forEach(item => {
-        if (item.source === 'official' && item.nutrients) {
+        if (item.source === 'official' && item.nutrients && item.amount) {
+            // Case A: Known Item + Known Amount
             // Calculate based on amount (standard DB is per 100g)
-            const ratio = (item.amount || 100) / 100;
+            const ratio = item.amount / 100;
             const cals = (item.nutrients.calories || 0) * ratio;
             const p = (item.nutrients.protein || 0) * ratio;
             const f = (item.nutrients.fat || 0) * ratio;
@@ -808,8 +809,12 @@ export const calculateRecipeHybrid = async (ingredients) => {
             knownStats.carbs += c;
 
             knownListStr += `- ${item.name}: ${item.amount}g (約${Math.round(cals)}kcal)\n`;
+        } else if (item.source === 'official' && item.nutrients && !item.amount) {
+            // Case B: Known Item + Unknown Amount
+            // Pass nutrient density to AI and ask to estimate amount
+            unknownListStr += `- ${item.name} (分量不明) [参考値: 100gあたり ${item.nutrients.calories}kcal, P:${item.nutrients.protein}g, F:${item.nutrients.fat}g, C:${item.nutrients.carbs}g]\n`;
         } else {
-            // Manual text or unknown
+            // Case C: Manual text or totally unknown
             unknownListStr += `- ${item.name || item.text} ${item.amount ? item.amount + 'g' : ''}\n`;
         }
     });
@@ -826,8 +831,9 @@ export const calculateRecipeHybrid = async (ingredients) => {
       ${unknownListStr || "(なし)"}
 
       【タスク】
-      1. 「成分不明」の食材がある場合、その栄養価を標準的な値で推測してください。
-      2. 「確定分」と「推測分」を合計し、レシピ**全体**のカロリーとPFCを算出してください。
+      1. 「成分不明」または「分量不明」の食材がある場合、料理の文脈から適切な分量を推測してください。
+      2. 分量不明だが「参考値」が提供されている食材については、推測した分量と参考値(100gあたり)を使って正確に計算してください。
+      3. 「確定分」と「推測分」を合計し、レシピ**全体**のカロリーとPFCを算出してください。
       3. 食材の組み合わせから、最も可能性の高い「料理名」を推測してください。
       4. このレシピ全体が「何人前」に相当するか推測してください。（例: 米300gと肉200gなら約2-3人前）
       5. **1人前あたり**の数値を計算してください。

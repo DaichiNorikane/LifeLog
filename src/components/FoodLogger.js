@@ -42,7 +42,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
     const [ingredientSearchQuery, setIngredientSearchQuery] = useState('');
     const [ingredientSearchResults, setIngredientSearchResults] = useState([]);
     const [selectedIngredient, setSelectedIngredient] = useState(null); // For portion input
-    const [portionAmount, setPortionAmount] = useState(100);
+    const [portionAmount, setPortionAmount] = useState(''); // Allow empty string for "unknown"
 
     const [selectedRecipe, setSelectedRecipe] = useState(null);
     const [portionMultiplier, setPortionMultiplier] = useState(1.0);
@@ -412,7 +412,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
         const newIng = {
             id: Date.now(),
             name: item.foodName,
-            amount: parseFloat(amount),
+            amount: amount ? parseFloat(amount) : null, // Store null if empty
             source: 'official',
             nutrients: {
                 calories: item.calories, // per 100g (assumption based on new UI)
@@ -853,7 +853,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                             <div key={ing.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px', fontSize: '0.85rem' }}>
                                                 <span>
                                                     {ing.name}
-                                                    {ing.source === 'official' ? <span style={{ color: 'var(--text-secondary)', marginLeft: '5px' }}>({ing.amount}g)</span> : ''}
+                                                    {ing.source === 'official' ? <span style={{ color: 'var(--text-secondary)', marginLeft: '5px' }}>({ing.amount ? ing.amount + 'g' : 'AI推測'})</span> : ''}
                                                 </span>
                                                 <button type="button" onClick={() => removeRecipeIngredient(ing.id)} style={{ border: 'none', background: 'none', color: 'var(--text-muted)' }}><X size={14} /></button>
                                             </div>
@@ -906,10 +906,10 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                                     <>
                                                         <div style={{ marginBottom: '15px' }}>
                                                             <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>{selectedIngredient.foodName}</div>
-                                                            <label style={labelStyle}>分量 (g)</label>
-                                                            <input type="number" autoFocus value={portionAmount} onChange={e => setPortionAmount(e.target.value)} style={inputStyle} />
+                                                            <label style={labelStyle}>分量 (g) <span style={{ fontSize: '0.8em', color: 'var(--text-muted)' }}>※空欄でAI推測</span></label>
+                                                            <input type="number" autoFocus value={portionAmount} onChange={e => setPortionAmount(e.target.value)} placeholder="例: 100 (不明なら空欄)" style={inputStyle} />
                                                             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '5px' }}>
-                                                                {Math.round(selectedIngredient.calories * (portionAmount / 100))} kcal
+                                                                {portionAmount ? Math.round(selectedIngredient.calories * (portionAmount / 100)) + ' kcal' : 'AIが分量を推測します'}
                                                             </p>
                                                         </div>
                                                         <div style={{ display: 'flex', gap: '10px' }}>

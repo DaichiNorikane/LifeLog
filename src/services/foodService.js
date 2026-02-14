@@ -85,6 +85,7 @@ export const searchOfficialFoodDatabase = (query) => {
             fat: item.fat || 0,
             carbs: item.chocdf || 0
         },
+        unit: "100g",
         source: "official",
         originalId: item.foodId
     }));

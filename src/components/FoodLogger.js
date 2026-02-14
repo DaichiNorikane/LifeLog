@@ -697,7 +697,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                                 )}
                                             </div>
                                             <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', gap: '8px' }}>
-                                                <span>{item.calories} kcal</span>
+                                                <span>{item.calories} kcal{item.unit && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}> / {item.unit}</span>}</span>
                                                 {item.macros && (
                                                     <span style={{ fontSize: '0.75rem' }}>
                                                         P:{item.macros.protein} F:{item.macros.fat} C:{item.macros.carbs}

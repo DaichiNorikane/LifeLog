@@ -510,3 +510,53 @@ export const saveLinkCode = async (userId, code) => {
         throw e;
     }
 };
+// ========== Search History ==========
+
+export const addSearchHistory = async (userId, item) => {
+    if (!userId || !item || !item.foodName) return;
+    try {
+        const historyRef = collection(db, "users", userId, "searchHistory");
+
+        // Check for duplicate foodName to update timestamp instead of adding new
+        const q = query(historyRef, where("foodName", "==", item.foodName), limit(1));
+        const snapshot = await getDocs(q);
+
+        const payload = cleanData({
+            foodName: item.foodName,
+            calories: item.calories,
+            macros: item.macros || {},
+            reasoning: item.reasoning || "",
+            timestamp: Timestamp.now(),
+            searchedAt: new Date().toISOString()
+        });
+
+        if (!snapshot.empty) {
+            const docId = snapshot.docs[0].id;
+            const docRef = doc(db, "users", userId, "searchHistory", docId);
+            await updateDoc(docRef, {
+                timestamp: Timestamp.now(),
+                searchedAt: new Date().toISOString(),
+                // Update details if they changed (e.g. refined macros)
+                calories: item.calories,
+                macros: item.macros || {}
+            });
+        } else {
+            await addDoc(historyRef, payload);
+        }
+    } catch (e) {
+        console.error("Error adding search history:", e);
+    }
+};
+
+export const getSearchHistory = async (userId, limitCount = 20) => {
+    if (!userId) return [];
+    try {
+        const historyRef = collection(db, "users", userId, "searchHistory");
+        const q = query(historyRef, orderBy("timestamp", "desc"), limit(limitCount));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (e) {
+        console.error("Error fetching search history:", e);
+        return [];
+    }
+};

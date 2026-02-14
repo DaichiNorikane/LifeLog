@@ -88,7 +88,17 @@ export const analyzeImageWithGemini = async (base64Image, context = "") => {
     return { error: `All models failed. Last error: ${lastError?.message}` };
 };
 
+import { searchOfficialFoodDatabase } from "../services/foodService";
+
 export const searchFoodWithGemini = async (query, historyContext = "") => {
+    // 1. Search Official Database (Fast, Accurate)
+    const officialResults = searchOfficialFoodDatabase(query);
+
+    // If we have enough good matches, we might not even need Gemini, 
+    // but users often search for vague terms like "Pizza", so we usually want both.
+    // However, to save tokens/latency, if we have an EXACT match, maybe prioritize it?
+    // For now, let's just get AI suggestions too, to provide diversity (e.g. restaurant meals).
+
     if (!apiKey) {
         return { error: "API Key missing" };
     }
@@ -122,27 +132,27 @@ export const searchFoodWithGemini = async (query, historyContext = "") => {
       }
     `;
 
+    let aiSuggestions = [];
     let lastError = null;
 
+    // AI Search (Parallelizable if needed, but keeping simple sequential for stability)
     for (const modelName of MODELS_TO_TRY) {
         try {
             const model = genAI.getGenerativeModel({ model: modelName });
-
             const result = await model.generateContent(prompt);
             const response = await result.response;
             const text = response.text();
-
             const jsonMatch = text.match(/\{[\s\S]*\}/);
+
             if (jsonMatch) {
                 const data = JSON.parse(jsonMatch[0]);
-                // Add model name metadata to each suggestion
                 if (data.suggestions) {
-                    data.suggestions = data.suggestions.map(s => ({
+                    aiSuggestions = data.suggestions.map(s => ({
                         ...s,
-                        reasoning: `[Model: ${modelName}] ${s.reasoning}`
+                        reasoning: `[AI: ${modelName}] ${s.reasoning}`
                     }));
                 }
-                return data;
+                break; // Success, stop trying other models
             }
         } catch (e) {
             console.warn(`Search Model ${modelName} failed:`, e.message);
@@ -150,7 +160,15 @@ export const searchFoodWithGemini = async (query, historyContext = "") => {
         }
     }
 
-    return { error: "Failed to search food", details: lastError?.message };
+    // Combine Results: Official Data First
+    const combinedSuggestions = [
+        ...officialResults.map(r => ({ ...r, reasoning: "【公式データ】日本食品標準成分表2020" })),
+        ...aiSuggestions
+    ];
+
+    return {
+        suggestions: combinedSuggestions.slice(0, 15) // Limit to top 15 total
+    };
 };
 
 

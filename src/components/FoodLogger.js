@@ -227,8 +227,8 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                     if (localRes.debug) {
                         console.log("Search Debug:", localRes.debug);
                         if (dbMatches.length === 0) {
-                            // Only show debug toast if NO results found to avoid spam
-                            showToast(`DB:${localRes.debug.totalDB}件, ヒット:0`);
+                            // Show subtle feedback that DB search was performed but found nothing
+                            showToast(`公式データベース: 該当なし`);
                         }
                     }
                 }

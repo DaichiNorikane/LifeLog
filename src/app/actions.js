@@ -90,15 +90,26 @@ export const analyzeImageWithGemini = async (base64Image, context = "") => {
 
 import { searchOfficialFoodDatabase } from "../services/foodService";
 
-export const searchFoodWithGemini = async (query, historyContext = "") => {
-    // 1. Search Official Database (Fast, Accurate)
-    const officialResults = searchOfficialFoodDatabase(query);
+/**
+ * Server Action: Search only the local official database.
+ * Fast and costs no tokens.
+ */
+export const searchLocalFood = async (query) => {
+    try {
+        // searchOfficialFoodDatabase is now async due to dynamic import
+        const results = await searchOfficialFoodDatabase(query);
+        return { suggestions: results };
+    } catch (e) {
+        console.error("Local search failed:", e);
+        return { suggestions: [] };
+    }
+};
 
-    // If we have enough good matches, we might not even need Gemini, 
-    // but users often search for vague terms like "Pizza", so we usually want both.
-    // However, to save tokens/latency, if we have an EXACT match, maybe prioritize it?
-    // For now, let's just get AI suggestions too, to provide diversity (e.g. restaurant meals).
-
+/**
+ * Server Action: Search using Gemini AI.
+ * Used for fallback or complex queries.
+ */
+export const searchAiFood = async (query, historyContext = "") => {
     if (!apiKey) {
         return { error: "API Key missing" };
     }
@@ -111,13 +122,11 @@ export const searchFoodWithGemini = async (query, historyContext = "") => {
 
       【パーソナライズ考慮】
       ユーザーの過去の食事履歴: ${historyContext}
-      - もし履歴の中に、検索語句「${query}」と一致または非常に近いものがあれば、それを優先的に上位に提案してください（ユーザーがよく食べるものを出しやすくするため）。
-      - ただし、検索語句と関係のない履歴は無視してください。
+      - もし履歴の中に、検索語句「${query}」と一致または非常に近いものがあれば、それを優先的に上位に提案してください。
 
       【重要: ハルシネーション（嘘の生成）を禁止します】
       - 「${query}」そのものが存在しない・曖昧な場合は、推測で捏造せず、一般的な近い料理や、「該当なし」と判断できる候補を出してください。
       - お店のメニュー名が含まれる場合、公式情報を優先してください。
-      - ユーザーが「ラーメンと餃子」のように複数の食品を検索した場合、それぞれの食品について有力な候補を提案してください（例: ラーメンの候補数点、餃子の候補数点）。
       
       出力形式 (JSONのみ):
       {
@@ -126,7 +135,7 @@ export const searchFoodWithGemini = async (query, historyContext = "") => {
             "foodName": "正確な商品名/料理名",
             "calories": 数値 (kcal),
             "macros": { "protein": 数値(g), "fat": 数値(g), "carbs": 数値(g) },
-            "reasoning": "選出理由 (例: 履歴に基づく / 2024年現在の公式情報)"
+            "reasoning": "選出理由"
           }
         ]
       }
@@ -135,7 +144,7 @@ export const searchFoodWithGemini = async (query, historyContext = "") => {
     let aiSuggestions = [];
     let lastError = null;
 
-    // AI Search (Parallelizable if needed, but keeping simple sequential for stability)
+    // AI Search
     for (const modelName of MODELS_TO_TRY) {
         try {
             const model = genAI.getGenerativeModel({ model: modelName });
@@ -152,24 +161,28 @@ export const searchFoodWithGemini = async (query, historyContext = "") => {
                         reasoning: `[AI: ${modelName}] ${s.reasoning}`
                     }));
                 }
-                break; // Success, stop trying other models
+                break; // Success
             }
         } catch (e) {
             console.warn(`Search Model ${modelName} failed:`, e.message);
+            if (e.message.includes("JSON")) {
+                console.log("Failed JSON text:", text); // Log the raw text for debugging
+            }
             lastError = e;
         }
     }
 
-    // Combine Results: Official Data First
-    const combinedSuggestions = [
-        ...officialResults.map(r => ({ ...r, reasoning: "【公式データ】日本食品標準成分表2020" })),
-        ...aiSuggestions
-    ];
-
     return {
-        suggestions: combinedSuggestions.slice(0, 15) // Limit to top 15 total
+        suggestions: aiSuggestions
     };
 };
+
+/* 
+ * Deprecated: Kept for backward compatibility if needed, 
+ * but `searchAiFood` is the new standard.
+ * redirecting to `searchAiFood` for now.
+ */
+export const searchFoodWithGemini = searchAiFood;
 
 
 

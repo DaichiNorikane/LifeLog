@@ -84,13 +84,13 @@ export async function GET(request) {
 
             // 5. Push LINE Message
             const text = `
-【${todayStr}の評価レポート by エレナ】
+【${todayStr}の評価レポート by エレナ 🌙】
 スコア: ${evaluation.score}点
 判定: ${evaluation.title}
 
 ${evaluation.reason || evaluation.advice}
 
-(自動配信)
+(自動配信: 明日も一緒に頑張りましょうね♪)
 `.trim();
 
             await messagingApi.pushMessage({

@@ -34,13 +34,13 @@ export async function POST(request) {
         // Let's assume 'reason' is the main text.
 
         const text = `
-【${dateStr}の評価結果】
+【${dateStr}の評価結果 by エレナ 🍎】
 スコア: ${score}点
 判定: ${title}
 
 ${evaluation.reason || evaluation.advice}
 
-(アプリから手動送信)
+(エレナからのレポートをお届けしました✨)
         `.trim();
 
         // 3. Push Message

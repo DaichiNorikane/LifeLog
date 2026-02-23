@@ -205,10 +205,10 @@ export default function Home() {
   const getDailyTotals = (date) => {
     const dailyMeals = meals.filter(m => isSameDay(new Date(m.timestamp), date));
     return dailyMeals.reduce((acc, meal) => ({
-      calories: acc.calories + (meal.calories || 0),
-      protein: acc.protein + (meal.macros?.protein || 0),
-      fat: acc.fat + (meal.macros?.fat || 0),
-      carbs: acc.carbs + (meal.macros?.carbs || 0),
+      calories: acc.calories + Number(meal.calories || 0),
+      protein: acc.protein + Number(meal.macros?.protein || 0),
+      fat: acc.fat + Number(meal.macros?.fat || 0),
+      carbs: acc.carbs + Number(meal.macros?.carbs || 0),
     }), { calories: 0, protein: 0, fat: 0, carbs: 0 });
   };
 
@@ -272,7 +272,7 @@ export default function Home() {
   const displayMeals = meals.filter(meal => isSameDay(new Date(meal.timestamp), currentDate));
   const selectedWeightEntry = weights.find(w => w.date === currentDateKey);
 
-  const totalCalories = displayMeals.reduce((acc, meal) => acc + meal.calories, 0);
+  const totalCalories = displayMeals.reduce((acc, meal) => acc + Number(meal.calories || 0), 0);
   const targetCalories = userProfile?.targetCalories || 2200;
   const remaining = Math.max(0, targetCalories - totalCalories);
 
@@ -779,7 +779,7 @@ export default function Home() {
                 { label: '脂質(F)', key: 'fat', color: '#ECC94B', targetRatio: 0.3, kcalPerG: 9 },     // 30%
                 { label: '炭水化物(C)', key: 'carbs', color: '#4299E1', targetRatio: 0.5, kcalPerG: 4 }   // 50%
               ].map((macro) => {
-                const totalG = displayMeals.reduce((acc, m) => acc + (m.macros?.[macro.key] || 0), 0);
+                const totalG = displayMeals.reduce((acc, m) => acc + Number(m.macros?.[macro.key] || 0), 0);
                 // Calculate Approx Target based on Calorie Goal
                 const targetG = Math.round((targetCalories * macro.targetRatio) / macro.kcalPerG);
                 const percent = Math.min(100, (totalG / targetG) * 100);
@@ -878,10 +878,10 @@ export default function Home() {
                     const categoryMeals = displayMeals.filter(m => (m.mealType || 'snack') === category.type);
                     if (categoryMeals.length === 0) return null;
 
-                    const categoryTotalCal = categoryMeals.reduce((acc, m) => acc + (m.calories || 0), 0);
-                    const categoryTotalP = categoryMeals.reduce((acc, m) => acc + (m.macros?.protein || 0), 0);
-                    const categoryTotalF = categoryMeals.reduce((acc, m) => acc + (m.macros?.fat || 0), 0);
-                    const categoryTotalC = categoryMeals.reduce((acc, m) => acc + (m.macros?.carbs || 0), 0);
+                    const categoryTotalCal = categoryMeals.reduce((acc, m) => acc + Number(m.calories || 0), 0);
+                    const categoryTotalP = categoryMeals.reduce((acc, m) => acc + Number(m.macros?.protein || 0), 0);
+                    const categoryTotalF = categoryMeals.reduce((acc, m) => acc + Number(m.macros?.fat || 0), 0);
+                    const categoryTotalC = categoryMeals.reduce((acc, m) => acc + Number(m.macros?.carbs || 0), 0);
 
                     return (
                       <div key={category.type} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>

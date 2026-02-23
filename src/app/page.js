@@ -373,29 +373,37 @@ export default function Home() {
       const allMealsForContext = [...existingMealsToday, ...newMeals];
 
       adjustedMeals.forEach(async (m, index) => {
-        // Eval
-        console.log('[MealColorDebug] Evaluating meal:', m.foodName);
-        // 同じ日の食事をcontextとして渡す
+        // Eval Newly added meal
+        console.log('[MealColorDebug] Evaluating new meal:', m.foodName);
         const evalResult = await evaluateSingleMeal({ ...m, id: addedIds[index] }, allMealsForContext);
         console.log('[MealColorDebug] Eval result:', evalResult);
         if (evalResult && typeof evalResult.score === 'number') {
-          const targetId = addedIds[index]; // Guaranteed match by index order
+          const targetId = addedIds[index];
           console.log('[MealColorDebug] Updating Firestore for ID:', targetId, 'Score:', evalResult.score);
           if (targetId) {
-            // Update Firestore
             const updates = {
               score: evalResult.score,
               reason: evalResult.reason,
-              assessment: evalResult.score >= 8 ? 'positive' : (evalResult.score <= 3 ? 'negative' : 'neutral') // Legacy compat
+              assessment: evalResult.score >= 8 ? 'positive' : (evalResult.score <= 3 ? 'negative' : 'neutral')
             };
             await updateMealInFirestore(user.uid, targetId, updates);
-            console.log('[MealColorDebug] Firestore updated, now updating local state');
-
-            // Update Local State (Optimistic but accurate ID)
             setMeals(prev => prev.map(p => p.id === targetId ? { ...p, ...updates } : p));
           }
-        } else {
-          console.warn('[MealColorDebug] No valid score in evalResult:', evalResult);
+        }
+      });
+
+      // Also trigger re-evaluation of PREVIOUS existing meals for the same day context
+      existingMealsToday.forEach(async (existingMeal) => {
+        console.log('[AutoReval] Re-evaluating existing meal:', existingMeal.foodName);
+        const reEvalResult = await evaluateSingleMeal(existingMeal, allMealsForContext);
+        if (reEvalResult && typeof reEvalResult.score === 'number') {
+          const updates = {
+            score: reEvalResult.score,
+            reason: reEvalResult.reason,
+            assessment: reEvalResult.score >= 8 ? 'positive' : (reEvalResult.score <= 3 ? 'negative' : 'neutral')
+          };
+          await updateMealInFirestore(user.uid, existingMeal.id, updates);
+          setMeals(prev => prev.map(p => p.id === existingMeal.id ? { ...p, ...updates } : p));
         }
       });
     }
@@ -1023,6 +1031,27 @@ export default function Home() {
                   // 2. Background Update
                   try {
                     await updateMealInFirestore(user.uid, targetMealId, { mealType: newType });
+
+                    // Trigger Re-evaluation of the same day meals with updated context
+                    const targetMeal = meals.find(m => m.id === targetMealId);
+                    if (targetMeal) {
+                      const targetDate = new Date(targetMeal.timestamp);
+                      const sameDayMeals = meals.filter(m => isSameDay(new Date(m.timestamp), targetDate))
+                        .map(m => m.id === targetMealId ? { ...m, mealType: newType } : m);
+
+                      sameDayMeals.forEach(async (m) => {
+                        const reEvalResult = await evaluateSingleMeal(m, sameDayMeals);
+                        if (reEvalResult && typeof reEvalResult.score === 'number') {
+                          const updates = {
+                            score: reEvalResult.score,
+                            reason: reEvalResult.reason,
+                            assessment: reEvalResult.score >= 8 ? 'positive' : (reEvalResult.score <= 3 ? 'negative' : 'neutral')
+                          };
+                          await updateMealInFirestore(user.uid, m.id, updates);
+                          setMeals(prev => prev.map(p => p.id === m.id ? { ...p, ...updates } : p));
+                        }
+                      });
+                    }
                   } catch (err) {
                     console.error("Failed to update meal type", err);
                     // Revert

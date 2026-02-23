@@ -649,11 +649,18 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
 
         setLoading(true);
         try {
-            const mealsToLog = validItems.map(item => ({
-                ...item.result,
-                mealType: mealType, // Add selected meal type
-                timestamp: new Date().toISOString()
-            }));
+            const mealsToLog = validItems.map(item => {
+                // Determine timestamp logic: use activeDate's date part, current time's time part
+                const d = new Date(activeDate || new Date());
+                const now = new Date();
+                d.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+
+                return {
+                    ...item.result,
+                    mealType: mealType, // Add selected meal type
+                    timestamp: d.toISOString() // Record relative to activeDate
+                };
+            });
             await onLogMeal(mealsToLog);
         } catch (error) {
             console.error("Logging failed", error);

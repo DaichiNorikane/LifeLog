@@ -435,19 +435,20 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
                                 <input
                                     type="date"
                                     value={targetDateForEntry.toISOString().split('T')[0]} // Simple format, verify timezone
-                                    onChange={(e) => setTargetDateForEntry(new Date(e.target.value))}
+                                    readOnly
                                     style={{
                                         border: '1px solid var(--border-subtle)',
                                         borderRadius: '6px',
                                         padding: '4px',
                                         fontSize: '0.9rem',
-                                        background: '#f8fafc',
-                                        color: 'var(--text-primary)'
+                                        background: '#edf2f7',
+                                        color: 'var(--text-primary)',
+                                        cursor: 'not-allowed'
                                     }}
                                 />
                                 の体重
                             </div>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>記録・更新</div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>現在選択中の日付の体重を記録</div>
                         </div>
                         <div style={{ display: 'flex', gap: '10px' }}>
                             <div style={{ position: 'relative' }}>

@@ -204,12 +204,18 @@ export default function Home() {
   // Calculate Totals for Today
   const getDailyTotals = (date) => {
     const dailyMeals = meals.filter(m => isSameDay(new Date(m.timestamp), date));
-    return dailyMeals.reduce((acc, meal) => ({
-      calories: acc.calories + Number(meal.calories || 0),
-      protein: acc.protein + Number(meal.macros?.protein || 0),
-      fat: acc.fat + Number(meal.macros?.fat || 0),
-      carbs: acc.carbs + Number(meal.macros?.carbs || 0),
-    }), { calories: 0, protein: 0, fat: 0, carbs: 0 });
+    return dailyMeals.reduce((acc, meal) => {
+      const c = Number(meal.calories);
+      const p = Number(meal.macros?.protein);
+      const f = Number(meal.macros?.fat);
+      const cb = Number(meal.macros?.carbs);
+      return {
+        calories: acc.calories + (isNaN(c) ? 0 : c),
+        protein: acc.protein + (isNaN(p) ? 0 : p),
+        fat: acc.fat + (isNaN(f) ? 0 : f),
+        carbs: acc.carbs + (isNaN(cb) ? 0 : cb),
+      };
+    }, { calories: 0, protein: 0, fat: 0, carbs: 0 });
   };
 
   const dayTotals = getDailyTotals(currentDate);
@@ -787,7 +793,10 @@ export default function Home() {
                 { label: '脂質(F)', key: 'fat', color: '#ECC94B', targetRatio: 0.3, kcalPerG: 9 },     // 30%
                 { label: '炭水化物(C)', key: 'carbs', color: '#4299E1', targetRatio: 0.5, kcalPerG: 4 }   // 50%
               ].map((macro) => {
-                const totalG = displayMeals.reduce((acc, m) => acc + Number(m.macros?.[macro.key] || 0), 0);
+                const totalG = displayMeals.reduce((acc, m) => {
+                  const val = Number(m.macros?.[macro.key]);
+                  return acc + (isNaN(val) ? 0 : val);
+                }, 0);
                 // Calculate Approx Target based on Calorie Goal
                 const targetG = Math.round((targetCalories * macro.targetRatio) / macro.kcalPerG);
                 const percent = Math.min(100, (totalG / targetG) * 100);
@@ -886,10 +895,10 @@ export default function Home() {
                     const categoryMeals = displayMeals.filter(m => (m.mealType || 'snack') === category.type);
                     if (categoryMeals.length === 0) return null;
 
-                    const categoryTotalCal = categoryMeals.reduce((acc, m) => acc + Number(m.calories || 0), 0);
-                    const categoryTotalP = categoryMeals.reduce((acc, m) => acc + Number(m.macros?.protein || 0), 0);
-                    const categoryTotalF = categoryMeals.reduce((acc, m) => acc + Number(m.macros?.fat || 0), 0);
-                    const categoryTotalC = categoryMeals.reduce((acc, m) => acc + Number(m.macros?.carbs || 0), 0);
+                    const categoryTotalCal = categoryMeals.reduce((acc, m) => { const v = Number(m.calories); return acc + (isNaN(v) ? 0 : v); }, 0);
+                    const categoryTotalP = categoryMeals.reduce((acc, m) => { const v = Number(m.macros?.protein); return acc + (isNaN(v) ? 0 : v); }, 0);
+                    const categoryTotalF = categoryMeals.reduce((acc, m) => { const v = Number(m.macros?.fat); return acc + (isNaN(v) ? 0 : v); }, 0);
+                    const categoryTotalC = categoryMeals.reduce((acc, m) => { const v = Number(m.macros?.carbs); return acc + (isNaN(v) ? 0 : v); }, 0);
 
                     return (
                       <div key={category.type} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>

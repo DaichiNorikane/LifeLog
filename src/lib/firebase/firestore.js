@@ -80,10 +80,17 @@ export const addMealToFirestore = async (userId, meal) => {
     }
 };
 
-// Get all meals
-export const getMealsFromFirestore = async (userId) => {
+// Get meals (limited to recent days for performance)
+export const getMealsFromFirestore = async (userId, daysBack = 45) => {
     try {
-        const q = query(getMealsConf(userId), orderBy("timestamp", "desc"));
+        const sinceDate = new Date();
+        sinceDate.setDate(sinceDate.getDate() - daysBack);
+        const q = query(
+            getMealsConf(userId),
+            where("timestamp", ">=", sinceDate.toISOString()),
+            orderBy("timestamp", "desc"),
+            limit(500)
+        );
         const querySnapshot = await getDocs(q);
         return querySnapshot.docs.map(doc => ({
             id: doc.id,
@@ -154,7 +161,7 @@ export const addWeightToFirestore = async (userId, weight, date) => {
 
 export const getWeightsFromFirestore = async (userId) => {
     try {
-        const q = query(getWeightsRef(userId), orderBy("date", "desc")); // Order by date string
+        const q = query(getWeightsRef(userId), orderBy("date", "desc"), limit(120));
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => ({
             id: doc.id,

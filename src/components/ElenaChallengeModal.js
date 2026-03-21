@@ -158,7 +158,7 @@ const ElenaChallengeModal = ({ isOpen, onClose }) => {
                                 border: '2px solid white', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                             }}>
                                 <img
-                                    src={result === 'correct' ? "/images/elena/elena_score_100.png" : (result === 'incorrect' ? "/images/elena/elena_score_0_20.png" : "/images/elena.png")}
+                                    src={result === 'correct' ? "/images/elena/elena_score_100.webp" : (result === 'incorrect' ? "/images/elena/elena_score_0_20.webp" : "/images/elena.webp")}
                                     alt="Elena"
                                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                 />

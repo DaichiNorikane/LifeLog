@@ -5,16 +5,18 @@ import {
   calculateRecipeWithGemini,
   updateUserTargetWeight
 } from './actions';
-import React, { useState, useEffect } from 'react';
-import FoodLogger from '@/components/FoodLogger';
-import WeightTracker from '@/components/WeightTracker';
-import EvaluationModal from '@/components/EvaluationModal';
-import AdvisorModal from '@/components/AdvisorModal';
-import StockManager from '@/components/StockManager'; // Imported
-import DietShooter from '@/components/DietShooter';
-import MealRankingModal from '@/components/MealRankingModal';
-import CategoryEvaluationModal from '@/components/CategoryEvaluationModal';
-import ElenaChallengeModal from '@/components/ElenaChallengeModal';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import dynamic from 'next/dynamic';
+
+const FoodLogger = dynamic(() => import('@/components/FoodLogger'), { ssr: false });
+const WeightTracker = dynamic(() => import('@/components/WeightTracker'), { ssr: false });
+const EvaluationModal = dynamic(() => import('@/components/EvaluationModal'), { ssr: false });
+const AdvisorModal = dynamic(() => import('@/components/AdvisorModal'), { ssr: false });
+const StockManager = dynamic(() => import('@/components/StockManager'), { ssr: false });
+const DietShooter = dynamic(() => import('@/components/DietShooter'), { ssr: false });
+const MealRankingModal = dynamic(() => import('@/components/MealRankingModal'), { ssr: false });
+const CategoryEvaluationModal = dynamic(() => import('@/components/CategoryEvaluationModal'), { ssr: false });
+const ElenaChallengeModal = dynamic(() => import('@/components/ElenaChallengeModal'), { ssr: false });
 import { Camera, XCircle, ChevronLeft, ChevronRight, Calculator, Weight, Utensils, Flame, Activity, Sparkles, Loader2, LogIn, Refrigerator, Gamepad2, Trophy, Brain } from 'lucide-react';
 import PullToRefresh from 'react-simple-pull-to-refresh';
 
@@ -76,44 +78,34 @@ export default function Home() {
       setWeights(firestoreWeights);
       setStockItems(firestoreStock || []);
       setUserProfile(profile || { targetCalories: 2200 });
-
-      // キャッシュは一時的に無効化（容量超過対策済みまで）
-      // try {
-      //   localStorage.setItem(`lifelog_meals_${uid}`, JSON.stringify(firestoreMeals.slice(0, 50)));
-      //   localStorage.setItem(`lifelog_weights_${uid}`, JSON.stringify(firestoreWeights.slice(0, 90)));
-      //   localStorage.setItem(`lifelog_stock_${uid}`, JSON.stringify(firestoreStock || []));
-      // } catch (cacheError) {
-      //   console.warn('Cache save failed:', cacheError);
-      // }
-
-      // Auto-evaluate meals without scores (batch process)
-      const unevaluatedMeals = firestoreMeals.filter(m => typeof m.score !== 'number');
+      // Auto-evaluate in background (don't block startup)
+      const unevaluatedMeals = firestoreMeals
+        .filter(m => typeof m.score !== 'number')
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        .slice(0, 5);
       if (unevaluatedMeals.length > 0) {
-        console.log(`[AutoEval] Found ${unevaluatedMeals.length} unevaluated meals, processing...`);
-        // Process all unevaluated meals
-        for (const meal of unevaluatedMeals) {
-          try {
-            console.log(`[AutoEval] Evaluating: ${meal.foodName}`);
-            // 同じ日の食事をcontextとして渡す
-            const mealDate = new Date(meal.timestamp);
-            const sameDayMeals = firestoreMeals.filter(m => {
-              const d = new Date(m.timestamp);
-              return d.getFullYear() === mealDate.getFullYear() &&
-                d.getMonth() === mealDate.getMonth() &&
-                d.getDate() === mealDate.getDate();
-            });
-            const result = await evaluateSingleMeal(meal, sameDayMeals);
-            if (typeof result.score === 'number') {
-              // Update Firestore
-              await updateMealInFirestore(user.uid, meal.id, { score: result.score, reason: result.reason });
-              // Update local state
-              setMeals(prev => prev.map(m => m.id === meal.id ? { ...m, score: result.score, reason: result.reason } : m));
-              console.log(`[AutoEval] Evaluated ${meal.foodName}: Score ${result.score}`);
+        // Fire-and-forget: run in background
+        (async () => {
+          console.log(`[AutoEval] Background: ${unevaluatedMeals.length} meals to evaluate`);
+          for (const meal of unevaluatedMeals) {
+            try {
+              const mealDate = new Date(meal.timestamp);
+              const sameDayMeals = firestoreMeals.filter(m => {
+                const d = new Date(m.timestamp);
+                return d.getFullYear() === mealDate.getFullYear() &&
+                  d.getMonth() === mealDate.getMonth() &&
+                  d.getDate() === mealDate.getDate();
+              });
+              const result = await evaluateSingleMeal(meal, sameDayMeals);
+              if (typeof result.score === 'number') {
+                await updateMealInFirestore(user.uid, meal.id, { score: result.score, reason: result.reason });
+                setMeals(prev => prev.map(m => m.id === meal.id ? { ...m, score: result.score, reason: result.reason } : m));
+              }
+            } catch (err) {
+              console.error(`[AutoEval] Failed: ${meal.foodName}`, err);
             }
-          } catch (err) {
-            console.error(`[AutoEval] Failed to evaluate ${meal.foodName}:`, err);
           }
-        }
+        })();
       }
     } catch (e) {
       console.error(e);
@@ -218,49 +210,36 @@ export default function Home() {
     }, { calories: 0, protein: 0, fat: 0, carbs: 0 });
   };
 
-  const dayTotals = getDailyTotals(currentDate);
+  const dayTotals = useMemo(() => getDailyTotals(currentDate), [meals, currentDate]);
+
+  // Derived Values (memoized)
+  const displayMeals = useMemo(() => meals.filter(meal => isSameDay(new Date(meal.timestamp), currentDate)), [meals, currentDate]);
+  const selectedWeightEntry = useMemo(() => weights.find(w => w.date === currentDateKey), [weights, currentDateKey]);
 
   // --- Dynamic Calorie Target Logic ---
-  // Calculate "debt" or "savings" from previous 3 days to adjust today's target
-  const getDynamicTarget = () => {
+  const baseTarget = userProfile?.targetCalories || 2200;
+  const dailyTarget = useMemo(() => {
     if (!userProfile?.targetCalories) return 2200;
-
-    let baseTarget = userProfile.targetCalories;
     let balance = 0;
-
-    // Look back 3 days
     for (let i = 1; i <= 3; i++) {
       const d = new Date(currentDate);
       d.setDate(d.getDate() - i);
-
       const totals = getDailyTotals(d);
-      // If no data for that day, skip (assume neutral)
       const hasData = meals.some(m => isSameDay(new Date(m.timestamp), d));
       if (hasData) {
-        balance += (totals.calories - baseTarget);
+        balance += (totals.calories - userProfile.targetCalories);
       }
     }
-
-    // Adjustment: Subtract 1/3 of the accumulated surplus/deficit from today's target
-    // If we ate too much (+balance), target goes down.
-    // If we ate too little (-balance), target goes up (optional, currently enabled).
     const adjustment = Math.round(balance / 3);
-    const dynamicTarget = baseTarget - adjustment;
-
-    // Safety limits: Don't drop below 1200 or go above base + 500
+    const dynamicTarget = userProfile.targetCalories - adjustment;
     if (dynamicTarget < 1200) return 1200;
-    if (dynamicTarget > baseTarget + 500) return baseTarget + 500;
-
+    if (dynamicTarget > userProfile.targetCalories + 500) return userProfile.targetCalories + 500;
     return Math.round(dynamicTarget);
-  };
-
-  const dailyTarget = getDynamicTarget();
-  const baseTarget = userProfile?.targetCalories || 2200;
+  }, [meals, currentDate, userProfile]);
   const isAdjusted = dailyTarget !== baseTarget;
 
   // Prepare History for AI Context
-  const getHistorySummary = () => {
-    // Get last 7 days summary
+  const getHistorySummary = useCallback(() => {
     let summary = [];
     for (let i = 1; i <= 7; i++) {
       const d = new Date();
@@ -272,19 +251,14 @@ export default function Home() {
       }
     }
     return summary.join('\n');
-  };
-
-  // Derived Values
-  const displayMeals = meals.filter(meal => isSameDay(new Date(meal.timestamp), currentDate));
-  const selectedWeightEntry = weights.find(w => w.date === currentDateKey);
+  }, [meals, baseTarget]);
 
   const totalCalories = displayMeals.reduce((acc, meal) => acc + Number(meal.calories || 0), 0);
   const targetCalories = userProfile?.targetCalories || 2200;
   const remaining = Math.max(0, targetCalories - totalCalories);
 
-  // Statistics for Leon
-  const getRecentStats = () => {
-    // 1. Avg Cal 3 Days (excluding today)
+  // Statistics for Leon (memoized)
+  const { avgCal3Days, streakDays } = useMemo(() => {
     let totalCal3Days = 0;
     let daysWithData = 0;
     for (let i = 1; i <= 3; i++) {
@@ -298,31 +272,21 @@ export default function Home() {
     }
     const avgCal3Days = daysWithData > 0 ? Math.round(totalCal3Days / daysWithData) : 0;
 
-    // 2. Streak Days (including today if has data, backwards)
     let streak = 0;
-    // Check today first
     if (displayMeals.length > 0) streak++;
-
-    // Check past days
-    for (let i = 1; i <= 365; i++) { // Limit to 1 year
+    for (let i = 1; i <= 45; i++) {
       const d = new Date(currentDate);
       d.setDate(d.getDate() - i);
       const hasData = meals.some(m => isSameDay(new Date(m.timestamp), d));
-      if (hasData) {
-        streak++;
-      } else {
-        break;
-      }
+      if (hasData) { streak++; } else { break; }
     }
     return { avgCal3Days, streakDays: streak };
-  };
+  }, [meals, currentDate, displayMeals]);
 
-  const { avgCal3Days, streakDays } = getRecentStats();
-
-  // Evaluation Data Prep
-  const evaluationData = {
-    avgCal3Days, // Added for Leon
-    streakDays,  // Added for Leon
+  // Evaluation Data Prep (memoized)
+  const evaluationData = useMemo(() => ({
+    avgCal3Days,
+    streakDays,
     date: currentDate.toISOString(),
     consumedCalories: dayTotals.calories,
     macros: {
@@ -330,21 +294,20 @@ export default function Home() {
       fat: dayTotals.fat,
       carbs: dayTotals.carbs
     },
-    targetCalories: targetCalories, // Use Base Target (User Configured)
-    baseTargetCalories: baseTarget, // Pass base for reference
-    historySummary: getHistorySummary(), // Pass history context
-    meals: meals.filter(m => isSameDay(new Date(m.timestamp), currentDate)).map(m => ({
+    targetCalories: targetCalories,
+    baseTargetCalories: baseTarget,
+    historySummary: getHistorySummary(),
+    meals: displayMeals.map(m => ({
       foodName: m.foodName,
       calories: m.calories,
       macros: m.macros,
-      timestamp: m.timestamp, // string
-      mealType: m.mealType, // 重要: AIが朝食/昼食/夕食を認識するために必要
-      // Exclude 'createdAt' or convert it if needed. AI doesn't need it.
+      timestamp: m.timestamp,
+      mealType: m.mealType,
     })),
     currentWeight: selectedWeightEntry?.weight,
     targetWeight: userProfile?.targetWeight,
     targetDate: userProfile?.targetDate
-  };
+  }), [avgCal3Days, streakDays, currentDate, dayTotals, targetCalories, baseTarget, displayMeals, selectedWeightEntry, userProfile, getHistorySummary]);
 
   // Handlers
   const handleLogMeal = async (mealOrMeals) => {
@@ -372,44 +335,37 @@ export default function Home() {
         return combined.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
       });
 
-      // 3. Background Evaluation (Fire and Forget)
-      // Iterate using the captured IDs
-      // 同じ日の既存の食事 + 新規追加した食事を合わせてcontextを作成
+      // 3. Background Evaluation (batched with Promise.all)
       const existingMealsToday = meals.filter(meal => isSameDay(new Date(meal.timestamp), currentDate));
       const allMealsForContext = [...existingMealsToday, ...newMeals];
 
-      adjustedMeals.forEach(async (m, index) => {
-        // Eval Newly added meal
-        console.log('[MealColorDebug] Evaluating new meal:', m.foodName);
-        const evalResult = await evaluateSingleMeal({ ...m, id: addedIds[index] }, allMealsForContext);
-        console.log('[MealColorDebug] Eval result:', evalResult);
-        if (evalResult && typeof evalResult.score === 'number') {
-          const targetId = addedIds[index];
-          console.log('[MealColorDebug] Updating Firestore for ID:', targetId, 'Score:', evalResult.score);
-          if (targetId) {
-            const updates = {
-              score: evalResult.score,
-              reason: evalResult.reason,
-              assessment: evalResult.score >= 8 ? 'positive' : (evalResult.score <= 3 ? 'negative' : 'neutral')
-            };
-            await updateMealInFirestore(user.uid, targetId, updates);
-            setMeals(prev => prev.map(p => p.id === targetId ? { ...p, ...updates } : p));
-          }
-        }
-      });
+      // Evaluate new meals in parallel
+      const newMealEvals = adjustedMeals.map((m, index) =>
+        evaluateSingleMeal({ ...m, id: addedIds[index] }, allMealsForContext)
+          .then(evalResult => ({ evalResult, id: addedIds[index] }))
+          .catch(() => null)
+      );
 
-      // Also trigger re-evaluation of PREVIOUS existing meals for the same day context
-      existingMealsToday.forEach(async (existingMeal) => {
-        console.log('[AutoReval] Re-evaluating existing meal:', existingMeal.foodName);
-        const reEvalResult = await evaluateSingleMeal(existingMeal, allMealsForContext);
-        if (reEvalResult && typeof reEvalResult.score === 'number') {
+      // Re-evaluate existing meals only if they don't have scores yet
+      const existingEvals = existingMealsToday
+        .filter(m => typeof m.score !== 'number')
+        .map(existingMeal =>
+          evaluateSingleMeal(existingMeal, allMealsForContext)
+            .then(evalResult => ({ evalResult, id: existingMeal.id }))
+            .catch(() => null)
+        );
+
+      // Fire all evaluations in parallel, update as they resolve
+      Promise.all([...newMealEvals, ...existingEvals]).then(async (results) => {
+        for (const r of results) {
+          if (!r || !r.evalResult || typeof r.evalResult.score !== 'number') continue;
           const updates = {
-            score: reEvalResult.score,
-            reason: reEvalResult.reason,
-            assessment: reEvalResult.score >= 8 ? 'positive' : (reEvalResult.score <= 3 ? 'negative' : 'neutral')
+            score: r.evalResult.score,
+            reason: r.evalResult.reason,
+            assessment: r.evalResult.score >= 8 ? 'positive' : (r.evalResult.score <= 3 ? 'negative' : 'neutral')
           };
-          await updateMealInFirestore(user.uid, existingMeal.id, updates);
-          setMeals(prev => prev.map(p => p.id === existingMeal.id ? { ...p, ...updates } : p));
+          await updateMealInFirestore(user.uid, r.id, updates);
+          setMeals(prev => prev.map(p => p.id === r.id ? { ...p, ...updates } : p));
         }
       });
     }
@@ -1289,22 +1245,20 @@ export default function Home() {
 
       {
         showLogger && (
-          <React.Suspense fallback={null}>
-            <div style={{ position: 'relative', zIndex: 999 }}>
-              <FoodLogger
-                onLogMeal={handleLogMeal}
-                onCancel={() => {
-                  setShowLogger(false);
-                  setInitialRecipeSearch(null);
-                }}
-                activeDate={currentDate}
-                initialRecipeSearch={initialRecipeSearch}
-                stockItems={stockItems}
-                savedRecipeSearch={recipeSearchState} // Pass persisted search
-                onSaveRecipeSearch={setRecipeSearchState} // Save search callback
-              />
-            </div>
-          </React.Suspense>
+          <div style={{ position: 'relative', zIndex: 999 }}>
+            <FoodLogger
+              onLogMeal={handleLogMeal}
+              onCancel={() => {
+                setShowLogger(false);
+                setInitialRecipeSearch(null);
+              }}
+              activeDate={currentDate}
+              initialRecipeSearch={initialRecipeSearch}
+              stockItems={stockItems}
+              savedRecipeSearch={recipeSearchState} // Pass persisted search
+              onSaveRecipeSearch={setRecipeSearchState} // Save search callback
+            />
+          </div>
         )
       }
 

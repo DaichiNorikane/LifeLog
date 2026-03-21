@@ -224,7 +224,7 @@ export const getStockItems = async (userId) => {
     try {
         const userRef = doc(db, 'users', userId);
         const stockRef = collection(userRef, 'stockItems');
-        const q = query(stockRef, orderBy('addedAt', 'desc'));
+        const q = query(stockRef, orderBy('addedAt', 'desc'), limit(200));
         const querySnapshot = await getDocs(q);
         return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } catch (e) {
@@ -263,7 +263,7 @@ export const addRecipeToFirestore = async (userId, recipe) => {
 
 export const getRecipesFromFirestore = async (userId) => {
     try {
-        const q = query(getRecipesRef(userId), orderBy("createdAt", "desc"));
+        const q = query(getRecipesRef(userId), orderBy("createdAt", "desc"), limit(200));
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => ({
             id: doc.id,

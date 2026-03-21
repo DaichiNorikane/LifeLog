@@ -382,9 +382,8 @@ export default function Home() {
     setIsDeleting(true);
     try {
       await deleteMealFromFirestore(user.uid, deleteConfirmation.id);
-      // Optimistic update or fetch
-      const savedMeals = await getMealsFromFirestore(user.uid);
-      setMeals(savedMeals);
+      // Optimistic local update (no re-fetch needed)
+      setMeals(prev => prev.filter(m => m.id !== deleteConfirmation.id));
     } catch (e) {
       console.error(e);
       alert('削除に失敗しました');

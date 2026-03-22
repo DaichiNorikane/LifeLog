@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { validateSignature, replyMessage } from '@/lib/line';
 import { db } from '@/lib/firebase/admin'; // Use Admin DB
 import { FieldValue } from 'firebase-admin/firestore'; // For serverTimestamp
-import { suggestNextMeal } from '@/app/actions';
+import { suggestNextMeal } from '@/app/actions/meal-advisor';
 
 export async function POST(request) {
     const body = await request.text();

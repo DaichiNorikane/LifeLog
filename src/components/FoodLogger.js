@@ -2,7 +2,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Camera, X, Loader2, Search, PenTool, Image as ImageIcon, ChevronRight, Trash2, Clock, BookOpen, Plus, Minus, Save, Sparkles, Database, History } from 'lucide-react';
 import { analyzeImage } from '@/services/aiService';
-import { searchLocalFood, searchAiFood, calculateRecipeWithGemini, searchRecipesWithGemini } from '@/app/actions';
+import { searchLocalFood, searchAiFood } from '@/app/actions/food-search';
+import { calculateRecipeWithGemini, searchRecipesWithGemini } from '@/app/actions/recipe';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { getRecentMeals, getRecipesFromFirestore, addRecipeToFirestore, deleteRecipeFromFirestore, addSearchHistory, getSearchHistory } from '@/lib/firebase/firestore';
 
@@ -49,6 +50,10 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
     const [isCalculatingRecipe, setIsCalculatingRecipe] = useState(false);
 
     const [deleteConfirmation, setDeleteConfirmation] = useState(null);
+
+    // Bulk Ingredient Input State
+    const [isBulkIngredientModalOpen, setIsBulkIngredientModalOpen] = useState(false);
+    const [bulkIngredientText, setBulkIngredientText] = useState('');
 
     // Recipe Search State
     const [recipeSearchMode, setRecipeSearchMode] = useState(savedRecipeSearch?.results?.length > 0 || initialRecipeSearch);
@@ -158,8 +163,8 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
 
         setPendingItems(prev => [...prev, ...newItems]);
 
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
+        // Parallelize all resizes
+        await Promise.all(files.map(async (file, i) => {
             const item = newItems[i];
             try {
                 const resizedImage = await resizeImage(file);
@@ -167,7 +172,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
             } catch (error) {
                 console.error("Preview failed", error);
             }
-        }
+        }));
         setLoading(false);
         setActiveTab('review');
     };
@@ -380,7 +385,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                     fat: stat.macros?.fat,
                     carbs: stat.macros?.carbs,
                     // Store detailed breakdown in description or a new field if needed
-                    description: `推測: ${result.foodName} (${result.totalServings}人前)\n根拠: ${result.reasoning}`
+                    description: `推測: ${result.foodName} (${result.totalServings}人前)\n\n根拠:\n${(result.reasoning || '').replace(/。\s*/g, '。\n').replace(/、\s*(?=\S{4,})/g, '、\n')}`
                 }));
                 alert(`計算完了: ${result.foodName} (1人前 約${stat.calories}kcal)`);
             } else {
@@ -498,6 +503,33 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
             setSelectedIngredient(null);
             setIsIngredientModalOpen(false);
         }
+    };
+
+    // Bulk ingredient text parser
+    const handleBulkIngredientAdd = () => {
+        if (!bulkIngredientText.trim()) return;
+        const lines = bulkIngredientText.split('\n').filter(l => l.trim());
+        const newIngredients = lines.map(line => {
+            // Split by whitespace (full/half width space, tab)
+            const parts = line.trim().split(/[\s\t　]+/);
+            const name = parts[0] || line.trim();
+            const amountStr = parts.slice(1).join(' ') || '';
+            // Try to extract numeric grams from amount string
+            const gMatch = amountStr.match(/(\d+(?:\.\d+)?)\s*g/i);
+            const parsedAmount = gMatch ? parseFloat(gMatch[1]) : null;
+            return {
+                id: Date.now() + Math.random(),
+                name: name,
+                amount: parsedAmount,
+                amountLabel: amountStr || null,
+                source: 'text',
+                nutrients: null
+            };
+        });
+        setRecipeIngredients(prev => [...prev, ...newIngredients]);
+        setBulkIngredientText('');
+        setIsBulkIngredientModalOpen(false);
+        showToast(`${newIngredients.length}件の食材を追加しました`);
     };
 
     // Legacy handler kept for compatibility if needed, but UI will switch
@@ -906,96 +938,135 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                 {activeTab === 'recipes' && (
                     <div className="fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                         {isCreatingRecipe ? (
-                            <form onSubmit={handleCreateRecipe}>
-                                <div style={{ marginBottom: '10px' }}>
-                                    <label style={labelStyle}>食材・調味料リスト</label>
+                            <form onSubmit={handleCreateRecipe} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                                <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', paddingBottom: '10px' }}>
+                                    <div style={{ marginBottom: '10px' }}>
+                                        <label style={labelStyle}>食材・調味料リスト</label>
 
-                                    {/* Ingredient List */}
-                                    <div style={{ marginBottom: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                                        {recipeIngredients.map(ing => (
-                                            <div key={ing.id} onClick={() => editIngredient(ing)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px', fontSize: '0.85rem', cursor: 'pointer', border: editingId === ing.id ? '1px solid var(--primary)' : '1px solid transparent' }}>
-                                                <span>
-                                                    {ing.name}
-                                                    {ing.source === 'official' ?
-                                                        <span style={{ color: 'var(--text-secondary)', marginLeft: '5px' }}>({ing.amount ? ing.amount + 'g' : 'AI推測'})</span> :
-                                                        <span style={{ color: 'var(--text-muted)', marginLeft: '5px' }}>(テキスト/ {ing.amount ? ing.amount + 'g' : 'AI推測'})</span>
-                                                    }
-                                                </span>
-                                                <button type="button" onClick={(e) => { e.stopPropagation(); removeRecipeIngredient(ing.id); }} style={{ border: 'none', background: 'none', color: 'var(--text-muted)' }}><X size={14} /></button>
-                                            </div>
-                                        ))}
-                                        {recipeIngredients.length === 0 && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>食材がまだありません</div>}
-                                    </div>
-
-                                    {/* Add Buttons */}
-                                    <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-                                        <button type="button" onClick={() => setIsIngredientModalOpen(true)} style={{ flex: 1, border: '1px dashed var(--primary)', background: 'var(--primary-glow)', color: 'var(--primary)', padding: '8px', borderRadius: '8px', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
-                                            <Plus size={16} /> 食材を追加
-                                        </button>
-                                        <button type="button" onClick={handleCalculateRecipeHybrid} disabled={isCalculatingRecipe || recipeIngredients.length === 0} style={{ background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '8px', padding: '0 15px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', minWidth: '80px' }}>
-                                            {isCalculatingRecipe ? <Loader2 size={16} className="spin" /> : <><Search size={16} /><span style={{ marginLeft: '5px' }}>AI計算</span></>}
-                                        </button>
-                                    </div>
-
-                                    {/* Modal for Ingredient Search */}
-                                    {isIngredientModalOpen && (
-                                        <div className="fixed-overlay" style={{ ...overlayStyle, zIndex: 110 }}>
-                                            <div className="glass-panel" style={{ width: '90%', maxWidth: '350px', padding: '15px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                                                    <h4 style={{ margin: 0 }}>{editingId ? '食材を編集' : '食材検索'}</h4>
-                                                    <button onClick={() => { setIsIngredientModalOpen(false); setEditingId(null); setSelectedIngredient(null); }} style={{ border: 'none', background: 'none' }}><X size={18} /></button>
+                                        {/* Ingredient List */}
+                                        <div style={{ marginBottom: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                            {recipeIngredients.map(ing => (
+                                                <div key={ing.id} onClick={() => editIngredient(ing)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px', fontSize: '0.85rem', cursor: 'pointer', border: editingId === ing.id ? '1px solid var(--primary)' : '1px solid transparent' }}>
+                                                    <span>
+                                                        {ing.name}
+                                                        {ing.source === 'official' ?
+                                                            <span style={{ color: 'var(--text-secondary)', marginLeft: '5px' }}>({ing.amount ? ing.amount + 'g' : 'AI推測'})</span> :
+                                                            <span style={{ color: 'var(--text-muted)', marginLeft: '5px' }}>{ing.amountLabel ? `(${ing.amountLabel})` : ing.amount ? `(${ing.amount}g)` : '(AI推測)'}</span>
+                                                        }
+                                                    </span>
+                                                    <button type="button" onClick={(e) => { e.stopPropagation(); removeRecipeIngredient(ing.id); }} style={{ border: 'none', background: 'none', color: 'var(--text-muted)' }}><X size={14} /></button>
                                                 </div>
-
-                                                {!selectedIngredient ? (
-                                                    // Search View
-                                                    <>
-                                                        <form onSubmit={handleSearchIngredient} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
-                                                            <input autoFocus value={ingredientSearchQuery} onChange={e => setIngredientSearchQuery(e.target.value)} placeholder="例: 鶏むね肉" style={inputStyle} />
-                                                            <button type="submit" className="btn-primary" style={{ minWidth: '40px' }}><Search size={16} /></button>
-                                                        </form>
-                                                        <div style={{ flex: 1, overflowY: 'auto' }}>
-                                                            {ingredientSearchResults.map((item, idx) => (
-                                                                <div key={idx} onClick={() => { setSelectedIngredient(item); setPortionAmount(100); }} style={{ padding: '8px', borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer' }}>
-                                                                    <div style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{item.foodName}</div>
-                                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{item.calories}kcal / 100g</div>
-                                                                </div>
-                                                            ))}
-                                                            {ingredientSearchQuery && ingredientSearchResults.length === 0 && (
-                                                                <button onClick={addTextIngredient} style={{ width: '100%', marginTop: '10px', padding: '10px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', color: 'var(--primary)' }}>
-                                                                    "{ingredientSearchQuery}" をテキストとして追加
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    </>
-                                                ) : (
-                                                    // Portion View
-                                                    <>
-                                                        <div style={{ marginBottom: '15px' }}>
-                                                            <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>{selectedIngredient.foodName}</div>
-                                                            <label style={labelStyle}>分量 (g) <span style={{ fontSize: '0.8em', color: 'var(--text-muted)' }}>※空欄でAI推測</span></label>
-                                                            <input type="number" autoFocus value={portionAmount} onChange={e => setPortionAmount(e.target.value)} placeholder="例: 100 (不明なら空欄)" style={inputStyle} />
-                                                            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '5px' }}>
-                                                                {portionAmount ? Math.round(selectedIngredient.calories * (portionAmount / 100)) + ' kcal' : 'AIが分量を推測します'}
-                                                            </p>
-                                                        </div>
-                                                        <div style={{ display: 'flex', gap: '10px' }}>
-                                                            <button onClick={() => { setSelectedIngredient(null); setEditingId(null); }} style={{ flex: 1, padding: '8px', background: 'none', border: '1px solid var(--border-subtle)', borderRadius: '4px' }}>戻る</button>
-                                                            <button onClick={() => addIngredientToRecipe(selectedIngredient, portionAmount)} className="btn-primary" style={{ flex: 1 }}>{editingId ? '更新' : '追加'}</button>
-                                                        </div>
-                                                    </>
-                                                )}
-                                            </div>
+                                            ))}
+                                            {recipeIngredients.length === 0 && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>食材がまだありません</div>}
                                         </div>
-                                    )}
+
+                                        {/* Add Buttons */}
+                                        <div style={{ display: 'flex', gap: '8px', marginBottom: '15px', flexWrap: 'wrap' }}>
+                                            <button type="button" onClick={() => setIsIngredientModalOpen(true)} style={{ flex: 1, minWidth: '100px', border: '1px dashed var(--primary)', background: 'var(--primary-glow)', color: 'var(--primary)', padding: '8px', borderRadius: '8px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                                                <Plus size={14} /> 1つずつ追加
+                                            </button>
+                                            <button type="button" onClick={() => setIsBulkIngredientModalOpen(true)} style={{ flex: 1, minWidth: '100px', border: '1px dashed #ED8936', background: 'rgba(237,137,54,0.08)', color: '#ED8936', padding: '8px', borderRadius: '8px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                                                <PenTool size={14} /> 一括入力
+                                            </button>
+                                            <button type="button" onClick={handleCalculateRecipeHybrid} disabled={isCalculatingRecipe || recipeIngredients.length === 0} style={{ flex: '0 0 auto', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '8px', padding: '8px 15px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', minWidth: '80px' }}>
+                                                {isCalculatingRecipe ? <Loader2 size={16} className="spin" /> : <><Search size={16} /><span style={{ marginLeft: '5px' }}>AI計算</span></>}
+                                            </button>
+                                        </div>
+
+                                        {/* Modal for Ingredient Search */}
+                                        {isIngredientModalOpen && (
+                                            <div className="fixed-overlay" style={{ ...overlayStyle, zIndex: 110 }}>
+                                                <div className="glass-panel" style={{ width: '90%', maxWidth: '350px', padding: '15px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                                                        <h4 style={{ margin: 0 }}>{editingId ? '食材を編集' : '食材検索'}</h4>
+                                                        <button onClick={() => { setIsIngredientModalOpen(false); setEditingId(null); setSelectedIngredient(null); }} style={{ border: 'none', background: 'none' }}><X size={18} /></button>
+                                                    </div>
+
+                                                    {!selectedIngredient ? (
+                                                        // Search View
+                                                        <>
+                                                            <form onSubmit={handleSearchIngredient} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
+                                                                <input autoFocus value={ingredientSearchQuery} onChange={e => setIngredientSearchQuery(e.target.value)} placeholder="例: 鶏むね肉" style={inputStyle} />
+                                                                <button type="submit" className="btn-primary" style={{ minWidth: '40px' }}><Search size={16} /></button>
+                                                            </form>
+                                                            <div style={{ flex: 1, overflowY: 'auto' }}>
+                                                                {ingredientSearchResults.map((item, idx) => (
+                                                                    <div key={idx} onClick={() => { setSelectedIngredient(item); setPortionAmount(100); }} style={{ padding: '8px', borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer' }}>
+                                                                        <div style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{item.foodName}</div>
+                                                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{item.calories}kcal / 100g</div>
+                                                                    </div>
+                                                                ))}
+                                                                {ingredientSearchQuery && ingredientSearchResults.length === 0 && (
+                                                                    <button onClick={addTextIngredient} style={{ width: '100%', marginTop: '10px', padding: '10px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', color: 'var(--primary)' }}>
+                                                                        "{ingredientSearchQuery}" をテキストとして追加
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        // Portion View
+                                                        <>
+                                                            <div style={{ marginBottom: '15px' }}>
+                                                                <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>{selectedIngredient.foodName}</div>
+                                                                <label style={labelStyle}>分量 (g) <span style={{ fontSize: '0.8em', color: 'var(--text-muted)' }}>※空欄でAI推測</span></label>
+                                                                <input type="number" autoFocus value={portionAmount} onChange={e => setPortionAmount(e.target.value)} placeholder="例: 100 (不明なら空欄)" style={inputStyle} />
+                                                                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '5px' }}>
+                                                                    {portionAmount ? Math.round(selectedIngredient.calories * (portionAmount / 100)) + ' kcal' : 'AIが分量を推測します'}
+                                                                </p>
+                                                            </div>
+                                                            <div style={{ display: 'flex', gap: '10px' }}>
+                                                                <button onClick={() => { setSelectedIngredient(null); setEditingId(null); }} style={{ flex: 1, padding: '8px', background: 'none', border: '1px solid var(--border-subtle)', borderRadius: '4px' }}>戻る</button>
+                                                                <button onClick={() => addIngredientToRecipe(selectedIngredient, portionAmount)} className="btn-primary" style={{ flex: 1 }}>{editingId ? '更新' : '追加'}</button>
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Bulk Ingredient Input Modal */}
+                                        {isBulkIngredientModalOpen && (
+                                            <div className="fixed-overlay" style={{ ...overlayStyle, zIndex: 110 }}>
+                                                <div className="glass-panel" style={{ width: '90%', maxWidth: '400px', padding: '20px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', alignItems: 'center' }}>
+                                                        <h4 style={{ margin: 0 }}>食材を一括入力</h4>
+                                                        <button onClick={() => { setIsBulkIngredientModalOpen(false); setBulkIngredientText(''); }} style={{ border: 'none', background: 'none' }}><X size={18} /></button>
+                                                    </div>
+                                                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '10px', lineHeight: '1.5' }}>
+                                                        1行に1食材を入力してください。<br />
+                                                        <span style={{ color: 'var(--text-muted)' }}>例: 鶏胸肉　150g / 醤油　大さじ１</span>
+                                                    </p>
+                                                    <textarea
+                                                        autoFocus
+                                                        value={bulkIngredientText}
+                                                        onChange={e => setBulkIngredientText(e.target.value)}
+                                                        placeholder={"鶏胸肉　150g\n醤油　大さじ１\nみりん　大さじ１\n生姜　1片"}
+                                                        style={{
+                                                            ...inputStyle,
+                                                            minHeight: '150px',
+                                                            resize: 'vertical',
+                                                            fontFamily: 'inherit',
+                                                            lineHeight: '1.8',
+                                                            flex: 1
+                                                        }}
+                                                    />
+                                                    <div style={{ display: 'flex', gap: '10px', marginTop: '15px', flexShrink: 0 }}>
+                                                        <button type="button" onClick={() => { setIsBulkIngredientModalOpen(false); setBulkIngredientText(''); }} style={{ flex: 1, padding: '10px', background: 'none', border: '1px solid var(--border-subtle)', borderRadius: '8px' }}>キャンセル</button>
+                                                        <button type="button" onClick={handleBulkIngredientAdd} disabled={!bulkIngredientText.trim()} className="btn-primary" style={{ flex: 1 }}>追加</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div style={{ marginBottom: '10px' }}><label style={labelStyle}>レシピ名</label><input required style={inputStyle} value={recipeForm.foodName} onChange={e => setRecipeForm({ ...recipeForm, foodName: e.target.value })} /></div>
+                                    <div style={{ marginBottom: '10px' }}><label style={labelStyle}>カロリー (1人前)</label><input type="number" required style={inputStyle} value={recipeForm.calories} onChange={e => setRecipeForm({ ...recipeForm, calories: e.target.value })} /></div>
+                                    <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+                                        <div style={{ flex: 1 }}><label style={labelStyle}>タンパク質 (g)</label><input type="number" style={inputStyle} value={recipeForm.protein} onChange={e => setRecipeForm({ ...recipeForm, protein: e.target.value })} /></div>
+                                        <div style={{ flex: 1 }}><label style={labelStyle}>脂質 (g)</label><input type="number" style={inputStyle} value={recipeForm.fat} onChange={e => setRecipeForm({ ...recipeForm, fat: e.target.value })} /></div>
+                                        <div style={{ flex: 1 }}><label style={labelStyle}>炭水化物 (g)</label><input type="number" style={inputStyle} value={recipeForm.carbs} onChange={e => setRecipeForm({ ...recipeForm, carbs: e.target.value })} /></div>
+                                    </div>
                                 </div>
-                                <div style={{ marginBottom: '10px' }}><label style={labelStyle}>レシピ名</label><input required style={inputStyle} value={recipeForm.foodName} onChange={e => setRecipeForm({ ...recipeForm, foodName: e.target.value })} /></div>
-                                <div style={{ marginBottom: '10px' }}><label style={labelStyle}>カロリー (1人前)</label><input type="number" required style={inputStyle} value={recipeForm.calories} onChange={e => setRecipeForm({ ...recipeForm, calories: e.target.value })} /></div>
-                                <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-                                    <div style={{ flex: 1 }}><label style={labelStyle}>タンパク質 (g)</label><input type="number" style={inputStyle} value={recipeForm.protein} onChange={e => setRecipeForm({ ...recipeForm, protein: e.target.value })} /></div>
-                                    <div style={{ flex: 1 }}><label style={labelStyle}>脂質 (g)</label><input type="number" style={inputStyle} value={recipeForm.fat} onChange={e => setRecipeForm({ ...recipeForm, fat: e.target.value })} /></div>
-                                    <div style={{ flex: 1 }}><label style={labelStyle}>炭水化物 (g)</label><input type="number" style={inputStyle} value={recipeForm.carbs} onChange={e => setRecipeForm({ ...recipeForm, carbs: e.target.value })} /></div>
-                                </div>
-                                <div style={{ display: 'flex', gap: '10px' }}>
+                                <div style={{ display: 'flex', gap: '10px', flexShrink: 0, paddingTop: '10px', borderTop: '1px solid var(--border-subtle)' }}>
                                     <button type="button" onClick={() => setIsCreatingRecipe(false)} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid var(--border-subtle)', background: 'white' }}>キャンセル</button>
                                     <button type="submit" className="btn-primary" style={{ flex: 1 }}>保存</button>
                                 </div>
@@ -1089,7 +1160,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                         <button onClick={() => setViewingRecipe(null)} style={{ background: 'none', border: 'none' }}><X /></button>
                                     </div>
                                     <div style={{ padding: '20px', overflowY: 'auto', flex: 1, overscrollBehavior: 'contain', minHeight: 0 }}>
-                                        {viewingRecipe.description && <p style={{ color: 'var(--text-secondary)', marginBottom: '15px' }}>{viewingRecipe.description}</p>}
+                                        {viewingRecipe.description && <div style={{ color: 'var(--text-secondary)', marginBottom: '15px', whiteSpace: 'pre-wrap', fontSize: '0.9rem', lineHeight: '1.7', background: 'var(--bg-main)', padding: '12px', borderRadius: '8px' }}>{viewingRecipe.description}</div>}
 
                                         <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', fontSize: '1rem', fontWeight: 'bold', background: 'var(--bg-main)', padding: '10px', borderRadius: '8px' }}>
                                             <span>{viewingRecipe.calories} kcal</span>

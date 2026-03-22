@@ -1,4 +1,4 @@
-import { analyzeImageWithGemini } from '@/app/actions';
+import { analyzeImageWithGemini } from '@/app/actions/image-analysis';
 import { getMockResult } from '@/utils/mockData';
 
 // Helper to resize image if it's too large (Vercel has 4.5MB limit)
@@ -31,38 +31,32 @@ const resizeImage = (file, maxWidth = 1024) => {
 };
 
 export const analyzeImage = async (file, context = "") => {
-    return new Promise(async (resolve) => {
-        // 1. Resize/Compress file to base64 for API (Client-side)
-        // This avoids Vercel's 4.5MB payload limit
-        const base64Image = await resizeImage(file);
+    // 1. Resize/Compress file to base64 for API (Client-side)
+    // This avoids Vercel's 4.5MB payload limit
+    const base64Image = await resizeImage(file);
 
-        // Simulate "Thinking" delay for UX consistent with "Gemini 3 Mode"
-        setTimeout(async () => {
-            try {
-                // Attempt Real API
-                const apiResult = await analyzeImageWithGemini(base64Image, context); // Pass context
+    try {
+        // Attempt Real API
+        const apiResult = await analyzeImageWithGemini(base64Image, context); // Pass context
 
-                if (apiResult && !apiResult.error) {
-                    resolve({
-                        ...apiResult,
-                        confidence: 0.99,
-                        isMock: false
-                    });
-                    return;
-                }
+        if (apiResult && !apiResult.error) {
+            return {
+                ...apiResult,
+                confidence: 0.99,
+                isMock: false
+            };
+        }
 
-                // Fallback to Smart Mock if no key or error
-                console.warn("API unavailable, using Smart Mock:", apiResult?.error);
-                const mock = getMockResult(file);
-                // Propagate specific error if available
-                resolve({ ...mock, isMock: true, error: apiResult?.error || "API unavailable" });
+        // Fallback to Smart Mock if no key or error
+        console.warn("API unavailable, using Smart Mock:", apiResult?.error);
+        const mock = getMockResult(file);
+        // Propagate specific error if available
+        return { ...mock, isMock: true, error: apiResult?.error || "API unavailable" };
 
-            } catch (e) {
-                console.error("Analysis failed", e);
-                // Extract error message "Too Many Requests" etc.
-                const errorMsg = e.message.includes("429") ? "Quota Exceeded" : "API Error (Network/Size)";
-                resolve({ ...getMockResult(file), isMock: true, error: errorMsg });
-            }
-        }, 3000); // 3s delay minimum for "Thinking" effect
-    });
+    } catch (e) {
+        console.error("Analysis failed", e);
+        // Extract error message "Too Many Requests" etc.
+        const errorMsg = e.message.includes("429") ? "Quota Exceeded" : "API Error (Network/Size)";
+        return { ...getMockResult(file), isMock: true, error: errorMsg };
+    }
 };

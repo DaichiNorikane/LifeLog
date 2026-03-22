@@ -1,10 +1,6 @@
 "use client";
-import {
-  evaluateDailyLog,
-  evaluateSingleMeal, // New import
-  calculateRecipeWithGemini,
-  updateUserTargetWeight
-} from './actions';
+import { evaluateDailyLog, evaluateSingleMeal } from './actions/daily-evaluation';
+import { calculateRecipeWithGemini } from './actions/recipe';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 

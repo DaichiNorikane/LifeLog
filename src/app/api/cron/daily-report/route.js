@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase/admin';
 import { getLineClient } from '@/lib/line';
-import { evaluateDailyLog } from '@/app/actions';
+import { evaluateDailyLog } from '@/app/actions/daily-evaluation';
 
 export async function GET(request) {
     // Vercel Cron security check

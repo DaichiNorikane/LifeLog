@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Trophy, AlertCircle, CheckCircle, Brain, RefreshCw, Loader2 } from 'lucide-react';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { getQuizFromStock, saveQuizToStock, updateQuizResult, getQuizStockCount } from '@/lib/firebase/firestore';
-import { generateQuizWithGemini } from '@/app/actions';
+import { generateQuizWithGemini } from '@/app/actions/quiz';
 
 const ElenaChallengeModal = ({ isOpen, onClose }) => {
     const { user } = useAuth();
@@ -229,7 +229,7 @@ const ElenaChallengeModal = ({ isOpen, onClose }) => {
                                     marginBottom: '20px', borderLeft: '4px solid #4299E1'
                                 }}>
                                     <div style={{ fontWeight: 700, color: '#2B6CB0', marginBottom: '4px', fontSize: '0.85rem' }}>
-                                        Elenas's Point
+                                        Elena's Point
                                     </div>
                                     <div style={{ fontSize: '0.9rem', color: '#2C5282' }}>
                                         {quiz.explanation}

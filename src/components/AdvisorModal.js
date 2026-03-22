@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2, Sparkles, Utensils, Search } from 'lucide-react';
-import { suggestNextMeal } from '@/app/actions';
+import { suggestNextMeal } from '@/app/actions/meal-advisor';
 import LineConnector from './LineConnector'; // Added import
 
 export default function AdvisorModal({ history, dailyLog, targetType, onClose, onSuggestionClick, stockItems = [], savedState, onSave, userId, profile }) {

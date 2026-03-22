@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { X, Sparkles, Utensils, AlertTriangle, Loader2 } from 'lucide-react';
-import { evaluateMealCategory } from '@/app/actions';
+import { evaluateMealCategory } from '@/app/actions/daily-evaluation';
 
 export default function CategoryEvaluationModal({ category, meals, onClose, stockItems = [], savedResult, onSave }) {
     const [result, setResult] = useState(savedResult || null);

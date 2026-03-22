@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { X, Sparkles, Trophy, AlertTriangle, Info, Utensils } from 'lucide-react';
-import { evaluateDailyLog } from '@/app/actions';
+import { evaluateDailyLog } from '@/app/actions/daily-evaluation';
 import LineConnector from './LineConnector'; // Added import
 
 export default function EvaluationModal({ data, onClose, onEvaluationComplete, savedResult, onSave, stockItems = [], isToday = true, dateLabel = '', userId, userProfile }) {

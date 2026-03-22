@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { X, Trophy, AlertTriangle, Sparkles, Loader2, ThumbsUp, ThumbsDown } from 'lucide-react';
-import { generateMealRanking } from '@/app/actions';
+import { generateMealRanking } from '@/app/actions/daily-evaluation';
 
 export default function MealRankingModal({ meals, onClose }) {
     const [ranking, setRanking] = useState(null);

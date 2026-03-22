@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { X, Save, TrendingDown, Calendar, Target, AlertCircle, Ruler, Loader2, Sparkles } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea } from 'recharts';
 import { saveUserProfile, addWeightToFirestore } from '@/lib/firebase/firestore';
-import { analyzeGoalFeasibility } from '@/app/actions';
+import { analyzeGoalFeasibility } from '@/app/actions/daily-evaluation';
 
 
 // BMI計算関数

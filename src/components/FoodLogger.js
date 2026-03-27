@@ -1,8 +1,8 @@
 "use client";
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Camera, X, Loader2, Search, PenTool, Image as ImageIcon, ChevronRight, Trash2, Clock, BookOpen, Plus, Minus, Save, Sparkles, Database, History } from 'lucide-react';
+import { Camera, X, Loader2, Search, PenTool, Image as ImageIcon, ChevronRight, Trash2, Clock, BookOpen, Plus, Minus, Save, Sparkles, History } from 'lucide-react';
 import { analyzeImage } from '@/services/aiService';
-import { searchLocalFood, searchAiFood } from '@/app/actions/food-search';
+import { searchAiFood } from '@/app/actions/food-search';
 import { calculateRecipeWithGemini, searchRecipesWithGemini } from '@/app/actions/recipe';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { getRecentMeals, getRecipesFromFirestore, addRecipeToFirestore, deleteRecipeFromFirestore, addSearchHistory, getSearchHistory } from '@/lib/firebase/firestore';
@@ -41,9 +41,6 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
     const [recipeIngredients, setRecipeIngredients] = useState([]); // Array of objects
     const [isIngredientModalOpen, setIsIngredientModalOpen] = useState(false);
     const [ingredientSearchQuery, setIngredientSearchQuery] = useState('');
-    const [ingredientSearchResults, setIngredientSearchResults] = useState([]);
-    const [selectedIngredient, setSelectedIngredient] = useState(null); // For portion input
-    const [portionAmount, setPortionAmount] = useState(''); // Allow empty string for "unknown"
 
     const [selectedRecipe, setSelectedRecipe] = useState(null);
     const [portionMultiplier, setPortionMultiplier] = useState(1.0);
@@ -214,67 +211,25 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
         setSearchQueries(newQueries);
     };
 
-    // Instant Search Effect
+    // Instant Search Effect (History only)
     useEffect(() => {
         const query = searchQueries[0];
         if (!query || query.trim().length === 0) {
-            console.log("[FoodLogger] Search query is empty, clearing results.");
             setSearchResults([]);
             return;
         }
 
-        const timeoutId = setTimeout(async () => {
-            // 1. Local History Match (Client Side)
+        const timeoutId = setTimeout(() => {
             const historyMatches = searchHistory.filter(item =>
                 item.foodName.toLowerCase().includes(query.toLowerCase())
             ).map(item => ({ ...item, source: 'history' }));
 
-            // 2. Official DB Match (Server Action)
-            let dbMatches = [];
-            try {
-                const localRes = await searchLocalFood(query);
-                if (localRes && localRes.suggestions) {
-                    dbMatches = localRes.suggestions.map(item => ({ ...item, source: 'database' }));
-
-                    // DEBUG: User feedback for empty results
-                    if (localRes.debug) {
-                        console.log("Search Debug:", localRes.debug);
-                        if (dbMatches.length === 0) {
-                            // Show subtle feedback that DB search was performed but found nothing
-                            showToast(`公式データベース: 該当なし`);
-                        }
-                    }
-                }
-            } catch (err) {
-                console.error("Local DB Search Error:", err);
-                // Show toast for debugging if needed, or just silent fail.
-                // For now, let's show a subtle error if it completely fails to help diagnosis
-                // showToast(`検索エラー: ${err.message}`); 
-                // Actually user said "not reflecting", implies no results.
-            }
-
-            // Combine (Deduping by foodName might be good, but for now just concat)
-            // Prioritize History
-            const combined = [...historyMatches, ...dbMatches];
-
-            // Simple dedupe by name to avoid showing same item twice
-            const unique = [];
-            const seen = new Set();
-            combined.forEach(item => {
-                if (!seen.has(item.foodName)) {
-                    seen.add(item.foodName);
-                    unique.push(item);
-                }
-            });
-
-            console.log("Final Search Results:", unique);
-            setSearchResults(unique.slice(0, 20));
-        }, 300); // 300ms debounce
+            setSearchResults(historyMatches.slice(0, 20));
+        }, 300);
 
         return () => clearTimeout(timeoutId);
     }, [searchQueries, searchHistory]);
 
-    const addQueryInput = () => setSearchQueries(prev => [...prev, '']);
     const removeQueryInput = (index) => {
         if (searchQueries.length > 1) setSearchQueries(prev => prev.filter((_, i) => i !== index));
     };
@@ -399,18 +354,11 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
         }
     };
 
-    // Ingredient Search
-    const handleSearchIngredient = async (e) => {
+    // Ingredient Search - directly add as text ingredient
+    const handleSearchIngredient = (e) => {
         e.preventDefault();
         if (!ingredientSearchQuery.trim()) return;
-        try {
-            const res = await searchLocalFood(ingredientSearchQuery);
-            if (res && res.suggestions) {
-                setIngredientSearchResults(res.suggestions);
-            } else {
-                setIngredientSearchResults([]);
-            }
-        } catch (e) { console.error(e); }
+        addTextIngredient();
     };
 
     const [editingId, setEditingId] = useState(null); // ID of ingredient being edited
@@ -460,39 +408,22 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
 
         // Reset UI
         setIngredientSearchQuery('');
-        setIngredientSearchResults([]);
-        setSelectedIngredient(null);
-        setPortionAmount('');
         setIsIngredientModalOpen(false);
     };
 
     const addTextIngredient = () => {
         if (!ingredientSearchQuery.trim()) return;
-        // Use Modal Flow for Text Ingredients too
         const textItem = {
             foodName: ingredientSearchQuery,
             calories: 0,
             source: 'text'
         };
-        setSelectedIngredient(textItem);
-        setPortionAmount('');
-        // No editingId, so it will add new
+        addIngredientToRecipe(textItem, '');
     };
 
     const editIngredient = (ing) => {
         setEditingId(ing.id);
-        const item = {
-            foodName: ing.name,
-            calories: ing.nutrients?.calories || 0,
-            macros: ing.nutrients ? {
-                protein: ing.nutrients.protein,
-                fat: ing.nutrients.fat,
-                carbs: ing.nutrients.carbs
-            } : null,
-            source: ing.source
-        };
-        setSelectedIngredient(item);
-        setPortionAmount(ing.amount || '');
+        setIngredientSearchQuery(ing.name);
         setIsIngredientModalOpen(true);
     };
 
@@ -500,7 +431,6 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
         setRecipeIngredients(prev => prev.filter(i => i.id !== id));
         if (editingId === id) {
             setEditingId(null);
-            setSelectedIngredient(null);
             setIsIngredientModalOpen(false);
         }
     };
@@ -832,7 +762,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                 {/* --- SEARCH --- */}
                 {activeTab === 'search' && (
                     <div className="fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>入力で履歴・公式DBから検索。AI検索はボタンで。</p>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>入力で履歴から検索。AI検索はボタンで。</p>
                         <form onSubmit={handleAiSearch} style={{ display: 'flex', gap: '8px', marginBottom: '15px' }}>
                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '5px' }}>
                                 {searchQueries.map((q, i) => (
@@ -858,7 +788,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                 <div style={{ textAlign: 'center', marginTop: '20px', color: 'var(--text-muted)' }}>
                                     <Search size={32} style={{ margin: '0 auto 10px', opacity: 0.3 }} />
                                     <p style={{ fontSize: '0.9rem' }}>何を食べましたか？</p>
-                                    <p style={{ fontSize: '0.8rem' }}>履歴や公式データから即座に検索します</p>
+                                    <p style={{ fontSize: '0.8rem' }}>履歴から即座に検索します</p>
                                 </div>
                             )}
 
@@ -872,10 +802,6 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                     badge = '履歴';
                                     badgeColor = '#E6FFFA'; // Teal light
                                     badgeIcon = <History size={12} color="#319795" />;
-                                } else if (item.source === 'database') {
-                                    badge = '公式';
-                                    badgeColor = '#EBF8FF'; // Blue light
-                                    badgeIcon = <Database size={12} color="#3182CE" />;
                                 } else if (item.source === 'ai') {
                                     badge = 'AI';
                                     badgeColor = '#FAF5FF'; // Purple light
@@ -949,10 +875,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                                 <div key={ing.id} onClick={() => editIngredient(ing)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px', fontSize: '0.85rem', cursor: 'pointer', border: editingId === ing.id ? '1px solid var(--primary)' : '1px solid transparent' }}>
                                                     <span>
                                                         {ing.name}
-                                                        {ing.source === 'official' ?
-                                                            <span style={{ color: 'var(--text-secondary)', marginLeft: '5px' }}>({ing.amount ? ing.amount + 'g' : 'AI推測'})</span> :
-                                                            <span style={{ color: 'var(--text-muted)', marginLeft: '5px' }}>{ing.amountLabel ? `(${ing.amountLabel})` : ing.amount ? `(${ing.amount}g)` : '(AI推測)'}</span>
-                                                        }
+                                                        <span style={{ color: 'var(--text-muted)', marginLeft: '5px' }}>{ing.amountLabel ? `(${ing.amountLabel})` : ing.amount ? `(${ing.amount}g)` : '(AI推測)'}</span>
                                                     </span>
                                                     <button type="button" onClick={(e) => { e.stopPropagation(); removeRecipeIngredient(ing.id); }} style={{ border: 'none', background: 'none', color: 'var(--text-muted)' }}><X size={14} /></button>
                                                 </div>
@@ -979,47 +902,14 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                                 <div className="glass-panel" style={{ width: '90%', maxWidth: '350px', padding: '15px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
                                                         <h4 style={{ margin: 0 }}>{editingId ? '食材を編集' : '食材検索'}</h4>
-                                                        <button onClick={() => { setIsIngredientModalOpen(false); setEditingId(null); setSelectedIngredient(null); }} style={{ border: 'none', background: 'none' }}><X size={18} /></button>
+                                                        <button onClick={() => { setIsIngredientModalOpen(false); setEditingId(null); }} style={{ border: 'none', background: 'none' }}><X size={18} /></button>
                                                     </div>
 
-                                                    {!selectedIngredient ? (
-                                                        // Search View
-                                                        <>
-                                                            <form onSubmit={handleSearchIngredient} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
-                                                                <input autoFocus value={ingredientSearchQuery} onChange={e => setIngredientSearchQuery(e.target.value)} placeholder="例: 鶏むね肉" style={inputStyle} />
-                                                                <button type="submit" className="btn-primary" style={{ minWidth: '40px' }}><Search size={16} /></button>
-                                                            </form>
-                                                            <div style={{ flex: 1, overflowY: 'auto' }}>
-                                                                {ingredientSearchResults.map((item, idx) => (
-                                                                    <div key={idx} onClick={() => { setSelectedIngredient(item); setPortionAmount(100); }} style={{ padding: '8px', borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer' }}>
-                                                                        <div style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{item.foodName}</div>
-                                                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{item.calories}kcal / 100g</div>
-                                                                    </div>
-                                                                ))}
-                                                                {ingredientSearchQuery && ingredientSearchResults.length === 0 && (
-                                                                    <button onClick={addTextIngredient} style={{ width: '100%', marginTop: '10px', padding: '10px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', color: 'var(--primary)' }}>
-                                                                        "{ingredientSearchQuery}" をテキストとして追加
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        </>
-                                                    ) : (
-                                                        // Portion View
-                                                        <>
-                                                            <div style={{ marginBottom: '15px' }}>
-                                                                <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>{selectedIngredient.foodName}</div>
-                                                                <label style={labelStyle}>分量 (g) <span style={{ fontSize: '0.8em', color: 'var(--text-muted)' }}>※空欄でAI推測</span></label>
-                                                                <input type="number" autoFocus value={portionAmount} onChange={e => setPortionAmount(e.target.value)} placeholder="例: 100 (不明なら空欄)" style={inputStyle} />
-                                                                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '5px' }}>
-                                                                    {portionAmount ? Math.round(selectedIngredient.calories * (portionAmount / 100)) + ' kcal' : 'AIが分量を推測します'}
-                                                                </p>
-                                                            </div>
-                                                            <div style={{ display: 'flex', gap: '10px' }}>
-                                                                <button onClick={() => { setSelectedIngredient(null); setEditingId(null); }} style={{ flex: 1, padding: '8px', background: 'none', border: '1px solid var(--border-subtle)', borderRadius: '4px' }}>戻る</button>
-                                                                <button onClick={() => addIngredientToRecipe(selectedIngredient, portionAmount)} className="btn-primary" style={{ flex: 1 }}>{editingId ? '更新' : '追加'}</button>
-                                                            </div>
-                                                        </>
-                                                    )}
+                                                    <form onSubmit={handleSearchIngredient} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
+                                                        <input autoFocus value={ingredientSearchQuery} onChange={e => setIngredientSearchQuery(e.target.value)} placeholder="例: 鶏むね肉 150g" style={inputStyle} />
+                                                        <button type="submit" className="btn-primary" style={{ minWidth: '40px' }}><Plus size={16} /></button>
+                                                    </form>
+                                                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>食材名を入力して追加。分量はAIが推測します。</p>
                                                 </div>
                                             </div>
                                         )}

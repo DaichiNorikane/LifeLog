@@ -3,14 +3,18 @@ import { openDB } from 'idb';
 const DB_NAME = 'lifelog-db';
 const STORE_NAME = 'meals';
 
+let dbPromise;
+
 export const initDB = async () => {
-    return openDB(DB_NAME, 1, {
+    if (dbPromise) return dbPromise;
+    dbPromise = openDB(DB_NAME, 1, {
         upgrade(db) {
             if (!db.objectStoreNames.contains(STORE_NAME)) {
                 db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
             }
         },
     });
+    return dbPromise;
 };
 
 export const addMeal = async (meal) => {

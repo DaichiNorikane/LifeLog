@@ -1,21 +1,6 @@
 "use server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { searchOfficialFoodDatabase } from "../../services/foodService";
 import { apiKey, MODELS_TO_TRY } from "./gemini-client";
-
-/**
- * Server Action: Search only the local official database.
- * Fast and costs no tokens.
- */
-export const searchLocalFood = async (query) => {
-    try {
-        const { results, debug } = searchOfficialFoodDatabase(query);
-        return { suggestions: results, debug };
-    } catch (e) {
-        console.error("Local search failed:", e);
-        return { suggestions: [] };
-    }
-};
 
 /**
  * Server Action: Search using Gemini AI.

@@ -2,6 +2,22 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase/admin';
 import { getLineClient } from '@/lib/line';
 import { evaluateDailyLog } from '@/app/actions/daily-evaluation';
+import webpush from 'web-push';
+
+let vapidConfigured = false;
+function ensureVapid() {
+    if (vapidConfigured) return true;
+    if (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+        webpush.setVapidDetails(
+            'mailto:noreply@lifelog.app',
+            process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+            process.env.VAPID_PRIVATE_KEY
+        );
+        vapidConfigured = true;
+        return true;
+    }
+    return false;
+}
 
 export async function GET(request) {
     // Vercel Cron security check
@@ -13,14 +29,12 @@ export async function GET(request) {
     try {
         console.log('[Cron] Starting Daily Report...');
 
-        // 1. Get users with lineUserId
-        const usersSnapshot = await db.collection('users')
-            .where('lineUserId', '!=', null)
-            .get();
+        // 1. Get all users (LINE or Web Push)
+        const usersSnapshot = await db.collection('users').get();
 
         if (usersSnapshot.empty) {
-            console.log('[Cron] No users with LINE linked.');
-            return NextResponse.json({ message: 'No users linked' });
+            console.log('[Cron] No users found.');
+            return NextResponse.json({ message: 'No users' });
         }
 
         const messagingApi = getLineClient();
@@ -36,6 +50,10 @@ export async function GET(request) {
             const userId = doc.id;
             const userData = doc.data();
             const lineUserId = userData.lineUserId;
+            const hasPush = !!userData.pushSubscription;
+
+            // Skip users with no notification channel
+            if (!lineUserId && !hasPush) continue;
 
             // Fetch meals for today (JST)
             const startJST = new Date(`${todayStr}T00:00:00+09:00`);
@@ -82,7 +100,7 @@ export async function GET(request) {
                 createdAt: new Date().toISOString()
             });
 
-            // 5. Push LINE Message
+            // 5. Send Notifications
             const text = `
 【${todayStr}の評価レポート by エレナ 🌙】
 スコア: ${evaluation.score}点
@@ -93,10 +111,40 @@ ${evaluation.reason || evaluation.advice}
 (自動配信: 明日も一緒に頑張りましょうね♪)
 `.trim();
 
-            await messagingApi.pushMessage({
-                to: lineUserId,
-                messages: [{ type: 'text', text: text }]
-            });
+            // LINE Push (if linked)
+            if (lineUserId) {
+                try {
+                    await messagingApi.pushMessage({
+                        to: lineUserId,
+                        messages: [{ type: 'text', text: text }]
+                    });
+                } catch (lineErr) {
+                    console.error(`[Cron] LINE push failed for ${userId}:`, lineErr.message);
+                }
+            }
+
+            // Web Push (if subscribed)
+            const pushSubscription = userData.pushSubscription;
+            if (pushSubscription && ensureVapid()) {
+                try {
+                    const payload = JSON.stringify({
+                        title: `エレナの評価: ${evaluation.score}点 ${evaluation.title}`,
+                        body: (evaluation.reason || evaluation.advice || '').slice(0, 200),
+                        tag: `daily-report-${todayStr}`,
+                        url: '/',
+                    });
+                    await webpush.sendNotification(pushSubscription, payload);
+                } catch (pushErr) {
+                    console.error(`[Cron] Web Push failed for ${userId}:`, pushErr.message);
+                    // Clean up expired subscription
+                    if (pushErr.statusCode === 410 || pushErr.statusCode === 404) {
+                        const { FieldValue } = await import('firebase-admin/firestore');
+                        await db.collection('users').doc(userId).update({
+                            pushSubscription: FieldValue.delete(),
+                        }).catch(() => {});
+                    }
+                }
+            }
 
             results.push({ userId, score: evaluation.score });
         }

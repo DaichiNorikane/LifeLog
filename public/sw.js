@@ -105,3 +105,41 @@ async function staleWhileRevalidate(request, cacheName) {
 
   return cached || fetchPromise;
 }
+
+// --- Push Notification ---
+
+self.addEventListener('push', (event) => {
+  let data = { title: 'LifeLog', body: 'エレナからのお知らせ' };
+  try {
+    if (event.data) data = event.data.json();
+  } catch {
+    if (event.data) data.body = event.data.text();
+  }
+
+  const options = {
+    body: data.body,
+    icon: '/icon.png',
+    badge: '/icon.png',
+    tag: data.tag || 'lifelog-notification',
+    data: { url: data.url || '/' },
+  };
+
+  event.waitUntil(self.registration.showNotification(data.title, options));
+});
+
+// Notification click: open app
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || '/';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      return clients.openWindow(url);
+    })
+  );
+});

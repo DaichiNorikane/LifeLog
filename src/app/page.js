@@ -13,15 +13,17 @@ const DietShooter = dynamic(() => import('@/components/DietShooter'), { ssr: fal
 const MealRankingModal = dynamic(() => import('@/components/MealRankingModal'), { ssr: false });
 const CategoryEvaluationModal = dynamic(() => import('@/components/CategoryEvaluationModal'), { ssr: false });
 const ElenaChallengeModal = dynamic(() => import('@/components/ElenaChallengeModal'), { ssr: false });
-import { Camera, XCircle, ChevronLeft, ChevronRight, Calculator, Weight, Utensils, Flame, Activity, Sparkles, Loader2, LogIn, Refrigerator, Gamepad2, Trophy, Brain } from 'lucide-react';
+import { Camera, XCircle, ChevronLeft, ChevronRight, Calculator, Weight, Utensils, Flame, Activity, Sparkles, Loader2, LogIn, Refrigerator, Gamepad2, Trophy, Brain, Bell, BellOff } from 'lucide-react';
 import PullToRefresh from 'react-simple-pull-to-refresh';
 
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { addMealToFirestore, getMealsFromFirestore, deleteMealFromFirestore, getWeightsFromFirestore, getUserProfile, updateMealInFirestore, addStockItem, getStockItems, deleteStockItem, saveDailyEvaluation, getDailyEvaluation } from '@/lib/firebase/firestore';
 import { getCache, setCache } from '@/utils/db';
+import { usePushNotification } from '@/lib/usePushNotification';
 
 export default function Home() {
   const { user, logOut, googleSignIn, loading } = useAuth();
+  const { isSubscribed, isSupported, isLoading: pushLoading, subscribe, unsubscribe } = usePushNotification(user?.uid);
   const [showLogger, setShowLogger] = useState(false);
   const [meals, setMeals] = useState([]);
   const [weights, setWeights] = useState([]);
@@ -698,6 +700,11 @@ export default function Home() {
                 <button onClick={() => setShowRanking(true)} style={{ background: 'white', border: '1px solid var(--border-subtle)', padding: '4px 8px', borderRadius: '16px', fontSize: '0.7rem', color: '#805AD5', display: 'flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap' }}>
                   <Trophy size={12} /> Ranking
                 </button>
+                {isSupported && (
+                  <button onClick={() => isSubscribed ? unsubscribe() : subscribe()} disabled={pushLoading} style={{ background: isSubscribed ? 'var(--primary-glow)' : 'var(--bg-card)', border: `1px solid ${isSubscribed ? 'var(--primary)' : 'var(--border-subtle)'}`, padding: '4px 8px', borderRadius: '16px', fontSize: '0.7rem', color: isSubscribed ? 'var(--primary)' : 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap' }}>
+                    {isSubscribed ? <Bell size={12} /> : <BellOff size={12} />} {isSubscribed ? '通知ON' : '通知'}
+                  </button>
+                )}
                 <button onClick={() => logOut && logOut()} style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', padding: '4px 8px', borderRadius: '16px', fontSize: '0.7rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Logout</button>
               </div>
             </div>

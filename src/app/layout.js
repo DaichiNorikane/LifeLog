@@ -35,10 +35,26 @@ import { AuthProvider } from "@/lib/contexts/AuthContext";
 export default function RootLayout({ children }) {
   return (
     <html lang="ja">
+      <head>
+        <link rel="apple-touch-icon" href="/apple-icon.png" />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <AuthProvider>
           {children}
         </AuthProvider>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                  navigator.serviceWorker.register('/sw.js')
+                    .then(reg => console.log('[SW] registered:', reg.scope))
+                    .catch(err => console.warn('[SW] registration failed:', err));
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   );

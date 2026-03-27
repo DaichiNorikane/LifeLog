@@ -1,16 +1,28 @@
 {
-    "name": "LifeLog: Smart Diet Tracker",
+    "id": "/",
+    "name": "LifeLog - エレナ習慣トレーナー",
     "short_name": "LifeLog",
-    "description": "AI-powered diet tracking application",
+    "description": "AIトレーナー・エレナと一緒にダイエット管理",
     "start_url": "/",
     "display": "standalone",
+    "orientation": "portrait",
     "background_color": "#000000",
     "theme_color": "#10b981",
+    "lang": "ja",
+    "categories": ["health", "fitness", "lifestyle"],
     "icons": [
         {
             "src": "/icon.png",
-            "sizes": "192x192 512x512",
-            "type": "image/png"
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/icon.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
         }
-    ]
+    ],
+    "apple_touch_icon": "/apple-icon.png"
 }

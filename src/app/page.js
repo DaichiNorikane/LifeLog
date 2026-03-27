@@ -18,6 +18,7 @@ import PullToRefresh from 'react-simple-pull-to-refresh';
 
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { addMealToFirestore, getMealsFromFirestore, deleteMealFromFirestore, getWeightsFromFirestore, getUserProfile, updateMealInFirestore, addStockItem, getStockItems, deleteStockItem, saveDailyEvaluation, getDailyEvaluation } from '@/lib/firebase/firestore';
+import { getCache, setCache } from '@/utils/db';
 
 export default function Home() {
   const { user, logOut, googleSignIn, loading } = useAuth();
@@ -50,37 +51,60 @@ export default function Home() {
   const [advisorState, setAdvisorState] = useState({ suggestions: [], advice: null, targetType: 'dinner' }); // Persist Advisor
   const [recipeSearchState, setRecipeSearchState] = useState({ query: '', results: [] }); // Persist Recipe Search
 
-  // Data Loading
-  // Data Loading
+  // Data Loading: IndexedDB first (instant), then Firestore sync (background)
   const loadData = React.useCallback(async (forceRefresh = false) => {
     if (!user) return;
     const uid = user.uid;
 
-    // 1. 古いキャッシュをクリア（容量超過対策）
-    try {
-      localStorage.removeItem(`lifelog_meals_${uid}`);
-      localStorage.removeItem(`lifelog_weights_${uid}`);
-      localStorage.removeItem(`lifelog_stock_${uid}`);
-    } catch (e) { /* ignore */ }
+    // Step 1: Show cached data instantly
+    if (!forceRefresh) {
+      try {
+        const [cachedMeals, cachedWeights, cachedProfile, cachedStock] = await Promise.all([
+          getCache(`meals_${uid}`),
+          getCache(`weights_${uid}`),
+          getCache(`profile_${uid}`),
+          getCache(`stock_${uid}`),
+        ]);
+        if (cachedMeals?.data) setMeals(cachedMeals.data);
+        if (cachedWeights?.data) setWeights(cachedWeights.data);
+        if (cachedProfile?.data) setUserProfile(cachedProfile.data);
+        if (cachedStock?.data) setStockItems(cachedStock.data);
 
+        // If all caches are fresh, skip Firestore
+        if (cachedMeals && !cachedMeals.stale && cachedWeights && !cachedWeights.stale) {
+          console.log('[Cache] All fresh, skipping Firestore');
+          return;
+        }
+      } catch (e) { /* cache miss, continue to Firestore */ }
+    }
+
+    // Step 2: Fetch from Firestore and update cache
     try {
       const [firestoreMeals, firestoreWeights, profile, firestoreStock] = await Promise.all([
-        getMealsFromFirestore(user.uid),
-        getWeightsFromFirestore(user.uid),
-        getUserProfile(user.uid),
-        getStockItems(user.uid)
+        getMealsFromFirestore(uid),
+        getWeightsFromFirestore(uid),
+        getUserProfile(uid),
+        getStockItems(uid)
       ]);
       setMeals(firestoreMeals);
       setWeights(firestoreWeights);
       setStockItems(firestoreStock || []);
       setUserProfile(profile || { targetCalories: 2200 });
+
+      // Update IndexedDB cache in background
+      Promise.all([
+        setCache(`meals_${uid}`, firestoreMeals),
+        setCache(`weights_${uid}`, firestoreWeights),
+        setCache(`profile_${uid}`, profile || { targetCalories: 2200 }),
+        setCache(`stock_${uid}`, firestoreStock || []),
+      ]).catch(() => {});
+
       // Auto-evaluate in background (don't block startup)
       const unevaluatedMeals = firestoreMeals
         .filter(m => typeof m.score !== 'number')
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
         .slice(0, 5);
       if (unevaluatedMeals.length > 0) {
-        // Fire-and-forget: run in background
         (async () => {
           console.log(`[AutoEval] Background: ${unevaluatedMeals.length} meals to evaluate`);
           for (const meal of unevaluatedMeals) {
@@ -94,7 +118,7 @@ export default function Home() {
               });
               const result = await evaluateSingleMeal(meal, sameDayMeals);
               if (typeof result.score === 'number') {
-                await updateMealInFirestore(user.uid, meal.id, { score: result.score, reason: result.reason });
+                await updateMealInFirestore(uid, meal.id, { score: result.score, reason: result.reason });
                 setMeals(prev => prev.map(m => m.id === meal.id ? { ...m, score: result.score, reason: result.reason } : m));
               }
             } catch (err) {
@@ -328,7 +352,9 @@ export default function Home() {
       // Update local state smoothly (Prepend new meals as they are newest, then sort to be sure)
       setMeals(prev => {
         const combined = [...newMeals, ...prev];
-        return combined.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        const sorted = combined.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        setCache(`meals_${user.uid}`, sorted).catch(() => {});
+        return sorted;
       });
 
       // 3. Background Evaluation (batched with Promise.all)
@@ -379,7 +405,11 @@ export default function Home() {
     try {
       await deleteMealFromFirestore(user.uid, deleteConfirmation.id);
       // Optimistic local update (no re-fetch needed)
-      setMeals(prev => prev.filter(m => m.id !== deleteConfirmation.id));
+      setMeals(prev => {
+        const updated = prev.filter(m => m.id !== deleteConfirmation.id);
+        setCache(`meals_${user.uid}`, updated).catch(() => {});
+        return updated;
+      });
     } catch (e) {
       console.error(e);
       alert('削除に失敗しました');

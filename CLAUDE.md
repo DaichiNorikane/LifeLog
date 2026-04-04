@@ -59,9 +59,18 @@ src/
 - **ステータス**: NORMAL, SCOLD, LOGIC, ENCOURAGE, CHEER
 - 機能追加時はエレナのキャラクター性を常に意識すること
 
+## テスト
+- **フレームワーク**: Vitest + React Testing Library
+- **実行**: `npm test` (全テスト), `npm run test:coverage` (カバレッジ付き)
+- **テストファイル**: `tests/` ディレクトリ（unit/, server/, components/）
+- **モック**: `tests/mocks/` に共通モック（Gemini, Firebase, LINE SDK等）
+- **カバレッジ**: 84%+ statements, 86%+ lines（DietShooter.jsはCanvasゲームのためE2E対象として除外）
+- **E2E対象（未実装）**: ログイン→食事記録フロー、カメラ撮影、LINE連携、PWA、DietShooter
+
 ## 開発ルール
 - モバイルファースト（個人利用のWebアプリ）
 - Server Actionsでサーバーサイド処理（API Key保護）
 - Gemini APIはモデルフォールバック機能あり（flash → pro）
 - コンポーネントは動的インポート（パフォーマンス最適化済み）
 - 日本語UI
+- 新機能追加時はテストも追加すること（`npm test` で全テストパスを確認）

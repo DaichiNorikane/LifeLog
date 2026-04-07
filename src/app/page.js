@@ -391,6 +391,34 @@ export default function Home() {
           await updateMealInFirestore(user.uid, r.id, updates);
           setMeals(prev => prev.map(p => p.id === r.id ? { ...p, ...updates } : p));
         }
+
+        // Background: Run daily evaluation after individual evaluations complete
+        const dateKey = getLocalDateKey(currentDate);
+        const allMealsToday = [...allMealsForContext];
+        const consumedCalories = allMealsToday.reduce((acc, m) => acc + (Number(m.calories) || 0), 0);
+        try {
+          const dailyResult = await evaluateDailyLog({
+            date: dateKey,
+            consumedCalories,
+            targetCalories: userProfile?.targetCalories || 2200,
+            meals: allMealsToday.map(m => ({
+              foodName: m.foodName,
+              calories: m.calories,
+              macros: m.macros,
+              timestamp: m.timestamp,
+              mealType: m.mealType,
+            })),
+            currentWeight: userProfile?.currentWeight,
+            targetWeight: userProfile?.targetWeight,
+            targetDate: userProfile?.targetDate,
+          });
+          if (dailyResult && !dailyResult.error) {
+            await saveDailyEvaluation(user.uid, dateKey, dailyResult);
+            setEvaluationsCache(prev => ({ ...prev, [dateKey]: dailyResult }));
+          }
+        } catch (e) {
+          console.warn('[AutoEval] Daily evaluation failed:', e.message);
+        }
       });
     }
     setShowLogger(false);

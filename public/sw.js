@@ -1,6 +1,6 @@
-const CACHE_NAME = 'lifelog-v1';
-const STATIC_CACHE = 'lifelog-static-v1';
-const IMAGE_CACHE = 'lifelog-images-v1';
+const CACHE_NAME = 'lifelog-v2';
+const STATIC_CACHE = 'lifelog-static-v2';
+const IMAGE_CACHE = 'lifelog-images-v2';
 
 // Static assets to precache on install
 const PRECACHE_URLS = [
@@ -54,14 +54,20 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Strategy 2: Cache First for static assets (JS, CSS, fonts)
+  // Strategy 2: Cache First for immutable static assets (hashed filenames)
+  // _next/static files have content hashes in filenames, safe to cache forever
+  if (url.pathname.startsWith('/_next/static/')) {
+    event.respondWith(cacheFirst(request, STATIC_CACHE));
+    return;
+  }
+
+  // Strategy 2b: Network First for other JS/CSS (non-hashed, may change between deploys)
   if (
-    url.pathname.startsWith('/_next/static/') ||
     url.pathname.endsWith('.js') ||
     url.pathname.endsWith('.css') ||
     url.pathname.endsWith('.woff2')
   ) {
-    event.respondWith(cacheFirst(request, STATIC_CACHE));
+    event.respondWith(networkFirst(request, STATIC_CACHE));
     return;
   }
 
@@ -70,8 +76,8 @@ self.addEventListener('fetch', (event) => {
     return; // Let API calls go through normally
   }
 
-  // Strategy 4: Stale-While-Revalidate for pages
-  event.respondWith(staleWhileRevalidate(request, CACHE_NAME));
+  // Strategy 4: Network First for pages (ensures Server Action IDs stay in sync)
+  event.respondWith(networkFirst(request, CACHE_NAME));
 });
 
 // Cache First: use cache, fallback to network
@@ -88,6 +94,21 @@ async function cacheFirst(request, cacheName) {
     return response;
   } catch {
     return new Response('', { status: 408 });
+  }
+}
+
+// Network First: try network, fallback to cache
+async function networkFirst(request, cacheName) {
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const cache = await caches.open(cacheName);
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    const cached = await caches.match(request);
+    return cached || new Response('', { status: 408 });
   }
 }
 

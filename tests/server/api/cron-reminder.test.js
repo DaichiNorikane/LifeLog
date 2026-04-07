@@ -36,13 +36,15 @@ const mockCollection = vi.fn().mockReturnValue({
 
 vi.mock('@/lib/firebase/admin', () => ({ db: { collection: mockCollection } }));
 
-const mockSendPushToUser = vi.fn().mockResolvedValue(true);
+const mockSendPushWithLimit = vi.fn().mockResolvedValue(true);
+const mockGetTodayMeals = vi.fn().mockResolvedValue([]);
 const mockGetJSTToday = vi.fn(() => ({
   jstNow: new Date('2024-01-15T12:00:00+09:00'),
   todayStr: '2024-01-15',
 }));
 vi.mock('@/lib/pushHelper', () => ({
-  sendPushToUser: mockSendPushToUser,
+  sendPushWithLimit: mockSendPushWithLimit,
+  getTodayMeals: mockGetTodayMeals,
   getJSTToday: mockGetJSTToday,
 }));
 
@@ -78,6 +80,10 @@ describe('GET /api/cron/reminder', () => {
       set: mockSet,
       update: mockUpdate,
       collection: vi.fn().mockReturnValue({
+        doc: vi.fn().mockReturnValue({
+          get: vi.fn().mockResolvedValue({ exists: false }),
+          set: mockSet,
+        }),
         where: mockWhere,
         limit: mockLimit,
         get: mockGet,
@@ -127,50 +133,51 @@ describe('GET /api/cron/reminder', () => {
     const data = await res.json();
     expect(data.success).toBe(true);
     expect(data.sent).toBe(0);
-    expect(mockSendPushToUser).not.toHaveBeenCalled();
+    expect(mockSendPushWithLimit).not.toHaveBeenCalled();
   });
 
-  it('sends reminder when no meals recorded today', async () => {
+  it('sends reminder when no morning meals recorded', async () => {
     const userDoc = createUserDoc('user1', {
       pushSubscription: { endpoint: 'https://push.example.com' },
     });
     mockGet.mockResolvedValueOnce({ empty: false, docs: [userDoc] });
 
-    // meals query returns empty
-    mockGet.mockResolvedValueOnce({ empty: true, docs: [] });
+    // No meals today
+    mockGetTodayMeals.mockResolvedValueOnce([]);
 
     const req = createMockRequest();
     const res = await GET(req);
     const data = await res.json();
     expect(data.success).toBe(true);
     expect(data.sent).toBe(1);
-    expect(mockSendPushToUser).toHaveBeenCalledWith(
+    expect(mockSendPushWithLimit).toHaveBeenCalledWith(
       'user1',
       { endpoint: 'https://push.example.com' },
+      '2024-01-15',
+      'reminder',
       expect.objectContaining({
         tag: 'meal-reminder-2024-01-15',
       })
     );
   });
 
-  it('does not send reminder when meals exist', async () => {
+  it('does not send reminder when morning meal exists', async () => {
     const userDoc = createUserDoc('user1', {
       pushSubscription: { endpoint: 'https://push.example.com' },
     });
     mockGet.mockResolvedValueOnce({ empty: false, docs: [userDoc] });
 
-    // meals query returns non-empty
-    mockGet.mockResolvedValueOnce({
-      empty: false,
-      docs: [{ id: 'm1', data: () => ({ calories: 500 }) }],
-    });
+    // Morning meal recorded (8:00 JST = 23:00 UTC previous day... let's use 7:00 JST = UTC-2)
+    mockGetTodayMeals.mockResolvedValueOnce([
+      { id: 'm1', calories: 400, timestamp: '2024-01-14T23:00:00.000Z' }, // 8:00 JST
+    ]);
 
     const req = createMockRequest();
     const res = await GET(req);
     const data = await res.json();
     expect(data.success).toBe(true);
     expect(data.sent).toBe(0);
-    expect(mockSendPushToUser).not.toHaveBeenCalled();
+    expect(mockSendPushWithLimit).not.toHaveBeenCalled();
   });
 
   it('returns success count for multiple users', async () => {
@@ -182,10 +189,8 @@ describe('GET /api/cron/reminder', () => {
     });
     mockGet.mockResolvedValueOnce({ empty: false, docs: [user1, user2] });
 
-    // user1 no meals
-    mockGet.mockResolvedValueOnce({ empty: true, docs: [] });
-    // user2 no meals
-    mockGet.mockResolvedValueOnce({ empty: true, docs: [] });
+    // Both have no meals
+    mockGetTodayMeals.mockResolvedValue([]);
 
     const req = createMockRequest();
     const res = await GET(req);

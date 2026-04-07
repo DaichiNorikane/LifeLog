@@ -1,12 +1,28 @@
 {
     "crons": [
         {
-            "path": "/api/cron/daily-report",
-            "schedule": "0 13 * * *"
+            "path": "/api/cron/morning-boost",
+            "schedule": "30 22 * * *"
         },
         {
             "path": "/api/cron/reminder",
             "schedule": "0 3 * * *"
+        },
+        {
+            "path": "/api/cron/afternoon-check",
+            "schedule": "0 5 * * *"
+        },
+        {
+            "path": "/api/cron/evening-preview",
+            "schedule": "30 8 * * *"
+        },
+        {
+            "path": "/api/cron/daily-report",
+            "schedule": "0 13 * * *"
+        },
+        {
+            "path": "/api/cron/weekly-summary",
+            "schedule": "0 23 * * 0"
         }
     ]
 }

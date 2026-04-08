@@ -15,6 +15,9 @@ export const metadata = {
   title: "LifeLog | Smart Diet Tracker",
   description: "AI-powered diet tracking application",
   manifest: "/manifest.json",
+  icons: {
+    apple: "/apple-icon.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -36,7 +39,6 @@ export default function RootLayout({ children }) {
   return (
     <html lang="ja">
       <head>
-        <link rel="apple-touch-icon" href="/apple-icon.png" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <AuthProvider>

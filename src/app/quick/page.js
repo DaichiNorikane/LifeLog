@@ -1,11 +1,11 @@
 "use client";
 import { useState, useRef, useEffect, Suspense } from 'react';
-import { Camera, Search, PenTool, Loader2, Check, ArrowLeft, X, Plus, Minus } from 'lucide-react';
+import { Camera, Search, PenTool, Loader2, Check, ArrowLeft, X, Plus, Minus, History } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { analyzeImage } from '@/services/aiService';
 import { searchAiFood } from '@/app/actions/food-search';
-import { addMealToFirestore, getMealsFromFirestore, updateMealInFirestore } from '@/lib/firebase/firestore';
+import { addMealToFirestore, getMealsFromFirestore, updateMealInFirestore, getRecentMeals } from '@/lib/firebase/firestore';
 import { evaluateSingleMeal } from '@/app/actions/daily-evaluation';
 import { setCache } from '@/utils/db';
 
@@ -51,6 +51,10 @@ function QuickLogContent() {
   const [result, setResult] = useState(null); // { foodName, calories, macros, image }
   const [error, setError] = useState(null);
 
+  // History (recent meals for suggestions)
+  const [recentMeals, setRecentMeals] = useState([]);
+  const [historySuggestions, setHistorySuggestions] = useState([]);
+
   // Camera
   const fileInputRef = useRef(null);
   const [cameraContext, setCameraContext] = useState('');
@@ -68,6 +72,27 @@ function QuickLogContent() {
 
   // Done state
   const [savedMeal, setSavedMeal] = useState(null);
+
+  // Load recent meals for history suggestions
+  useEffect(() => {
+    if (!user) return;
+    getRecentMeals(user.uid, 100).then(meals => {
+      setRecentMeals(meals);
+    }).catch(() => {});
+  }, [user]);
+
+  // Filter history suggestions as user types
+  useEffect(() => {
+    if (!searchQuery.trim() || searchQuery.length < 1) {
+      setHistorySuggestions([]);
+      return;
+    }
+    const q = searchQuery.toLowerCase();
+    const matches = recentMeals.filter(m =>
+      m.foodName && m.foodName.toLowerCase().includes(q)
+    ).slice(0, 8);
+    setHistorySuggestions(matches);
+  }, [searchQuery, recentMeals]);
 
   // Auto-close after save
   useEffect(() => {
@@ -118,7 +143,8 @@ function QuickLogContent() {
     setIsSearching(true);
     setError(null);
     try {
-      const response = await searchAiFood(searchQuery, '');
+      const historyContext = recentMeals.slice(0, 20).map(m => m.foodName).join(', ');
+      const response = await searchAiFood(searchQuery, historyContext);
       const items = response?.suggestions || (Array.isArray(response) ? response : []);
       if (items.length > 0) {
         setSearchResults(items);
@@ -412,6 +438,29 @@ function QuickLogContent() {
             </button>
           </div>
 
+          {/* History Suggestions (shown while typing, before AI search) */}
+          {historySuggestions.length > 0 && searchResults.length === 0 && (
+            <div>
+              <div style={styles.sectionLabel}>
+                <History size={14} /> 履歴から
+              </div>
+              <div style={styles.resultList}>
+                {historySuggestions.map((item, i) => (
+                  <button key={`h-${i}`} onClick={() => selectSearchResult(item)} style={styles.resultItem}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 15 }}>{item.foodName}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                        P:{item.macros?.protein || 0}g F:{item.macros?.fat || 0}g C:{item.macros?.carbs || 0}g
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--primary)' }}>{item.calories} kcal</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* AI Search Results */}
           {searchResults.length > 0 && (
             <div style={styles.resultList}>
               {searchResults.map((item, i) => (
@@ -428,7 +477,29 @@ function QuickLogContent() {
             </div>
           )}
 
-          <button onClick={() => { setMode('select'); setSearchResults([]); setSearchQuery(''); }} style={styles.cancelLink}>
+          {/* Recent History (shown when search is empty) */}
+          {!searchQuery && recentMeals.length > 0 && searchResults.length === 0 && (
+            <div>
+              <div style={styles.sectionLabel}>
+                <History size={14} /> 最近の記録
+              </div>
+              <div style={styles.resultList}>
+                {recentMeals.slice(0, 10).map((item, i) => (
+                  <button key={`r-${i}`} onClick={() => selectSearchResult(item)} style={styles.resultItem}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 15 }}>{item.foodName}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                        P:{item.macros?.protein || 0}g F:{item.macros?.fat || 0}g C:{item.macros?.carbs || 0}g
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--primary)' }}>{item.calories} kcal</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <button onClick={() => { setMode('select'); setSearchResults([]); setSearchQuery(''); setHistorySuggestions([]); }} style={styles.cancelLink}>
             戻る
           </button>
         </div>
@@ -733,6 +804,15 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     boxShadow: '0 8px 24px var(--primary-glow)',
+  },
+  sectionLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    fontSize: 13,
+    fontWeight: 600,
+    color: 'var(--text-muted)',
+    marginBottom: 8,
   },
   spin: {
     animation: 'spin 1s linear infinite',

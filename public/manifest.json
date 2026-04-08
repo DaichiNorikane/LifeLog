@@ -24,5 +24,35 @@
             "purpose": "any maskable"
         }
     ],
-    "apple_touch_icon": "/apple-icon.png"
+    "apple_touch_icon": "/apple-icon.png",
+    "shortcuts": [
+        {
+            "name": "朝食を記録",
+            "short_name": "朝食",
+            "url": "/quick?type=breakfast",
+            "description": "朝食をすぐに記録",
+            "icons": []
+        },
+        {
+            "name": "昼食を記録",
+            "short_name": "昼食",
+            "url": "/quick?type=lunch",
+            "description": "昼食をすぐに記録",
+            "icons": []
+        },
+        {
+            "name": "夕食を記録",
+            "short_name": "夕食",
+            "url": "/quick?type=dinner",
+            "description": "夕食をすぐに記録",
+            "icons": []
+        },
+        {
+            "name": "間食を記録",
+            "short_name": "間食",
+            "url": "/quick?type=snack",
+            "description": "間食をすぐに記録",
+            "icons": []
+        }
+    ]
 }

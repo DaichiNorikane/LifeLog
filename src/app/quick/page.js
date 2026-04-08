@@ -22,9 +22,15 @@ export async function generateMetadata({ searchParams }) {
 
   return {
     title: `${title} | LifeLog`,
+    manifest: `/api/manifest?type=${type}`,
     icons: {
       icon: icon,
       apple: icon,
+    },
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: 'black-translucent',
+      title: title,
     },
   };
 }

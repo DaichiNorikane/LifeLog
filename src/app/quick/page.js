@@ -91,18 +91,18 @@ function QuickLogContent() {
     setError(null);
     try {
       const analysis = await analyzeImage(file, cameraContext);
-      if (analysis.isMock) {
-        setError(analysis.error || '分析に失敗しました');
-        setMode('select');
-      } else {
+      if (analysis.foodName && analysis.calories) {
         setResult({
           foodName: analysis.foodName,
           calories: analysis.calories,
           macros: analysis.macros || { protein: 0, fat: 0, carbs: 0 },
-          reasoning: 'AI解析',
-          image: null, // Skip base64 for speed
+          reasoning: analysis.isMock ? 'モック結果' : 'AI解析',
+          image: null,
         });
         setMode('confirm');
+      } else {
+        setError(analysis.error || '分析に失敗しました');
+        setMode('select');
       }
     } catch (err) {
       setError('画像の分析に失敗しました');
@@ -118,9 +118,10 @@ function QuickLogContent() {
     setIsSearching(true);
     setError(null);
     try {
-      const results = await searchAiFood(searchQuery, '');
-      if (Array.isArray(results) && results.length > 0) {
-        setSearchResults(results);
+      const response = await searchAiFood(searchQuery, '');
+      const items = response?.suggestions || (Array.isArray(response) ? response : []);
+      if (items.length > 0) {
+        setSearchResults(items);
       } else {
         setSearchResults([]);
         setError('見つかりませんでした');

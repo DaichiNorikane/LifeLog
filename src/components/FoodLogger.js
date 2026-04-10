@@ -211,7 +211,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
         setSearchQueries(newQueries);
     };
 
-    // Instant Search Effect (History only)
+    // Instant Search Effect (History + Recent Meals)
     useEffect(() => {
         const query = searchQueries[0];
         if (!query || query.trim().length === 0) {
@@ -220,15 +220,33 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
         }
 
         const timeoutId = setTimeout(() => {
-            const historyMatches = searchHistory.filter(item =>
-                item.foodName.toLowerCase().includes(query.toLowerCase())
-            ).map(item => ({ ...item, source: 'history' }));
+            const q = query.toLowerCase();
 
-            setSearchResults(historyMatches.slice(0, 20));
-        }, 300);
+            // 1. Match from searchHistory (past search terms)
+            const historyMatches = searchHistory
+                .filter(item => item.foodName && item.foodName.toLowerCase().includes(q))
+                .map(item => ({ ...item, source: 'history' }));
+
+            // 2. Match from recentMeals (actual logged meals)
+            const recentMatches = recentMeals
+                .filter(item => item.foodName && item.foodName.toLowerCase().includes(q))
+                .map(item => ({ ...item, source: 'history' }));
+
+            // Merge and deduplicate by foodName
+            const seen = new Set();
+            const merged = [];
+            for (const item of [...historyMatches, ...recentMatches]) {
+                if (!seen.has(item.foodName)) {
+                    seen.add(item.foodName);
+                    merged.push(item);
+                }
+            }
+
+            setSearchResults(merged.slice(0, 20));
+        }, 200);
 
         return () => clearTimeout(timeoutId);
-    }, [searchQueries, searchHistory]);
+    }, [searchQueries, searchHistory, recentMeals]);
 
     const removeQueryInput = (index) => {
         if (searchQueries.length > 1) setSearchQueries(prev => prev.filter((_, i) => i !== index));

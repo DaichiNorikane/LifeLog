@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect, Suspense } from 'react';
-import { Camera, Search, PenTool, Loader2, Check, ArrowLeft, X, Plus, Minus, History } from 'lucide-react';
+import { Camera, Search, PenTool, Loader2, Check, ArrowLeft, X, Plus, Minus, History, Trash2 } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { analyzeImage } from '@/services/aiService';
@@ -51,7 +51,11 @@ function QuickLogContent() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
 
-  // History (recent meals for suggestions)
+  // Pending items (multi-meal support)
+  const [pendingItems, setPendingItems] = useState([]);
+  const [savedCount, setSavedCount] = useState(0);
+
+  // History
   const [recentMeals, setRecentMeals] = useState([]);
   const [historySuggestions, setHistorySuggestions] = useState([]);
 
@@ -67,13 +71,10 @@ function QuickLogContent() {
   // Manual
   const [manualForm, setManualForm] = useState({ foodName: '', calories: '' });
 
-  // Quantity adjustment
+  // Quantity (for confirm screen)
   const [quantity, setQuantity] = useState(1.0);
 
-  // Done state
-  const [savedMeal, setSavedMeal] = useState(null);
-
-  // Load recent meals for history suggestions
+  // Load recent meals
   useEffect(() => {
     if (!user) return;
     getRecentMeals(user.uid, 100).then(meals => {
@@ -121,19 +122,21 @@ function QuickLogContent() {
           calories: analysis.calories,
           macros: analysis.macros || { protein: 0, fat: 0, carbs: 0 },
           reasoning: analysis.isMock ? 'モック結果' : 'AI解析',
-          image: null,
         });
+        setQuantity(1.0);
         setMode('confirm');
       } else {
         setError(analysis.error || '分析に失敗しました');
         setMode('select');
       }
-    } catch (err) {
+    } catch {
       setError('画像の分析に失敗しました');
       setMode('select');
     } finally {
       setIsProcessing(false);
     }
+    // Reset file input so the same file can be selected again
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   // === Search Flow ===
@@ -163,8 +166,7 @@ function QuickLogContent() {
       foodName: item.foodName,
       calories: item.calories,
       macros: item.macros || { protein: 0, fat: 0, carbs: 0 },
-      reasoning: 'AI検索',
-      image: null,
+      reasoning: item.source === 'history' || item.id ? '履歴から' : 'AI検索',
     });
     setQuantity(1.0);
     setMode('confirm');
@@ -178,35 +180,64 @@ function QuickLogContent() {
       calories: Number(manualForm.calories),
       macros: { protein: 0, fat: 0, carbs: 0 },
       reasoning: '手入力',
-      image: null,
     });
     setQuantity(1.0);
     setMode('confirm');
   };
 
-  // === Save ===
-  const handleSave = async () => {
-    if (!result || !user) return;
+  // === Add to pending list ===
+  const addToPending = () => {
+    if (!result) return;
+    const item = {
+      id: Date.now() + Math.random(),
+      foodName: result.foodName,
+      calories: Math.round(result.calories * quantity),
+      macros: {
+        protein: Math.round((result.macros?.protein || 0) * quantity),
+        fat: Math.round((result.macros?.fat || 0) * quantity),
+        carbs: Math.round((result.macros?.carbs || 0) * quantity),
+      },
+      reasoning: result.reasoning,
+      quantity,
+    };
+    setPendingItems(prev => [...prev, item]);
+    // Reset transient state
+    setResult(null);
+    setQuantity(1.0);
+    setSearchQuery('');
+    setSearchResults([]);
+    setHistorySuggestions([]);
+    setManualForm({ foodName: '', calories: '' });
+    setCameraContext('');
+    setMode('select');
+  };
+
+  const removePending = (id) => {
+    setPendingItems(prev => prev.filter(p => p.id !== id));
+  };
+
+  // === Save All ===
+  const handleSaveAll = async () => {
+    if (pendingItems.length === 0 || !user) return;
     setIsProcessing(true);
     try {
       const now = new Date();
-      const meal = {
-        ...result,
-        calories: Math.round(result.calories * quantity),
-        macros: {
-          protein: Math.round((result.macros?.protein || 0) * quantity),
-          fat: Math.round((result.macros?.fat || 0) * quantity),
-          carbs: Math.round((result.macros?.carbs || 0) * quantity),
-        },
+      const meals = pendingItems.map(p => ({
+        foodName: p.foodName,
+        calories: p.calories,
+        macros: p.macros,
+        reasoning: p.reasoning,
         mealType,
         timestamp: now.toISOString(),
-      };
+        image: null,
+      }));
 
-      const docId = await addMealToFirestore(user.uid, meal);
-      setSavedMeal({ ...meal, id: docId });
+      const addedIds = await Promise.all(meals.map(m => addMealToFirestore(user.uid, m)));
+      setSavedCount(pendingItems.length);
+      setPendingItems([]);
       setMode('done');
 
-      // Background: evaluate + cache update
+      // Background: cache update + evaluation
       (async () => {
         try {
           const allMeals = await getMealsFromFirestore(user.uid);
@@ -220,23 +251,31 @@ function QuickLogContent() {
               d.getDate() === today.getDate();
           });
 
-          const evalResult = await evaluateSingleMeal({ ...meal, id: docId }, sameDayMeals);
-          if (typeof evalResult.score === 'number') {
-            await updateMealInFirestore(user.uid, docId, {
-              score: evalResult.score,
-              reason: evalResult.reason,
-              assessment: evalResult.score >= 8 ? 'positive' : evalResult.score <= 3 ? 'negative' : 'neutral',
-            });
-          }
+          await Promise.all(meals.map(async (meal, i) => {
+            try {
+              const evalResult = await evaluateSingleMeal({ ...meal, id: addedIds[i] }, sameDayMeals);
+              if (typeof evalResult.score === 'number') {
+                await updateMealInFirestore(user.uid, addedIds[i], {
+                  score: evalResult.score,
+                  reason: evalResult.reason,
+                  assessment: evalResult.score >= 8 ? 'positive' : evalResult.score <= 3 ? 'negative' : 'neutral',
+                });
+              }
+            } catch (err) {
+              console.error('[QuickLog] Eval failed:', err);
+            }
+          }));
         } catch (err) {
-          console.error('[QuickLog] Background eval failed:', err);
+          console.error('[QuickLog] Background tasks failed:', err);
         }
       })();
-    } catch (err) {
+    } catch {
       setError('保存に失敗しました');
       setIsProcessing(false);
     }
   };
+
+  const totalCalories = pendingItems.reduce((acc, p) => acc + (p.calories || 0), 0);
 
   // === Auth Loading ===
   if (authLoading) {
@@ -260,7 +299,7 @@ function QuickLogContent() {
   }
 
   // === Done ===
-  if (mode === 'done' && savedMeal) {
+  if (mode === 'done') {
     return (
       <div style={styles.container}>
         <div style={styles.center}>
@@ -269,13 +308,10 @@ function QuickLogContent() {
           </div>
           <h2 style={{ margin: '16px 0 8px', color: 'var(--text-primary)' }}>記録完了!</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: 14, margin: 0 }}>
-            {mealInfo.emoji} {mealInfo.label} - {savedMeal.foodName}
+            {mealInfo.emoji} {mealInfo.label} - {savedCount}件を記録しました
           </p>
-          <p style={{ color: 'var(--primary)', fontSize: 20, fontWeight: 600, margin: '8px 0 24px' }}>
-            {savedMeal.calories} kcal
-          </p>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <button onClick={() => { setMode('select'); setResult(null); setQuantity(1.0); }} style={styles.btnSecondary}>
+          <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+            <button onClick={() => { setSavedCount(0); setMode('select'); }} style={styles.btnSecondary}>
               続けて記録
             </button>
             <button onClick={() => router.push('/')} style={styles.btnPrimary}>
@@ -309,18 +345,16 @@ function QuickLogContent() {
           <h2 style={{ margin: '0 0 4px', fontSize: 20, color: 'var(--text-primary)' }}>{result.foodName}</h2>
           <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--text-muted)' }}>{result.reasoning}</p>
 
-          {/* Quantity Adjuster */}
           <div style={styles.quantityRow}>
-            <button onClick={() => setQuantity(q => Math.max(0.25, q - 0.25))} style={styles.quantityBtn}>
+            <button onClick={() => setQuantity(q => Math.max(0.25, Math.round((q - 0.25) * 100) / 100))} style={styles.quantityBtn}>
               <Minus size={18} />
             </button>
             <span style={styles.quantityLabel}>{quantity === 1 ? '1人前' : `${quantity}人前`}</span>
-            <button onClick={() => setQuantity(q => Math.min(5, q + 0.25))} style={styles.quantityBtn}>
+            <button onClick={() => setQuantity(q => Math.min(5, Math.round((q + 0.25) * 100) / 100))} style={styles.quantityBtn}>
               <Plus size={18} />
             </button>
           </div>
 
-          {/* Nutrition */}
           <div style={styles.nutritionGrid}>
             <div style={styles.nutritionItem}>
               <span style={{ fontSize: 28, fontWeight: 700, color: 'var(--primary)' }}>{adjustedCal}</span>
@@ -340,9 +374,14 @@ function QuickLogContent() {
             </div>
           </div>
 
-          <button onClick={handleSave} disabled={isProcessing} style={{ ...styles.btnPrimary, width: '100%', marginTop: 20 }}>
-            {isProcessing ? <Loader2 size={20} style={styles.spin} /> : '記録する'}
+          <button onClick={addToPending} style={{ ...styles.btnPrimary, width: '100%', marginTop: 20 }}>
+            <Plus size={20} /> リストに追加
           </button>
+          {pendingItems.length > 0 && (
+            <p style={{ margin: '12px 0 0', fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
+              追加後、選択画面で「記録する」ボタンから保存できます
+            </p>
+          )}
         </div>
       </div>
     );
@@ -374,49 +413,85 @@ function QuickLogContent() {
       {isProcessing && (
         <div style={styles.overlay}>
           <Loader2 size={40} style={styles.spin} color="var(--primary)" />
-          <p style={{ color: 'var(--text-secondary)', marginTop: 12 }}>分析中...</p>
+          <p style={{ color: 'var(--text-secondary)', marginTop: 12 }}>
+            {mode === 'select' ? '保存中...' : '分析中...'}
+          </p>
         </div>
       )}
 
       {/* Main Actions */}
       {mode === 'select' && !isProcessing && (
-        <div style={styles.actions}>
-          {/* Camera - Primary Action */}
-          <button onClick={() => fileInputRef.current?.click()} style={styles.cameraBtn}>
-            <Camera size={36} color="#fff" />
-            <span style={{ color: '#fff', fontSize: 16, fontWeight: 600, marginTop: 8 }}>写真で記録</span>
-            <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>撮影またはアルバムから</span>
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleCameraCapture}
-            style={{ display: 'none' }}
-          />
-
-          {/* Context Input for Camera */}
-          <input
-            type="text"
-            placeholder="補足情報（例: コンビニのおにぎり）"
-            value={cameraContext}
-            onChange={(e) => setCameraContext(e.target.value)}
-            style={styles.contextInput}
-          />
-
-          {/* Secondary Actions */}
-          <div style={styles.secondaryRow}>
-            <button onClick={() => setMode('search')} style={styles.secondaryBtn}>
-              <Search size={22} color="var(--secondary)" />
-              <span>検索</span>
+        <>
+          <div style={styles.actions}>
+            <button onClick={() => fileInputRef.current?.click()} style={styles.cameraBtn}>
+              <Camera size={36} color="#fff" />
+              <span style={{ color: '#fff', fontSize: 16, fontWeight: 600, marginTop: 8 }}>写真で記録</span>
+              <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>撮影またはアルバムから</span>
             </button>
-            <button onClick={() => setMode('manual')} style={styles.secondaryBtn}>
-              <PenTool size={22} color="var(--accent-orange)" />
-              <span>手入力</span>
-            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleCameraCapture}
+              style={{ display: 'none' }}
+            />
+
+            <input
+              type="text"
+              placeholder="補足情報（例: コンビニのおにぎり）"
+              value={cameraContext}
+              onChange={(e) => setCameraContext(e.target.value)}
+              style={styles.contextInput}
+            />
+
+            <div style={styles.secondaryRow}>
+              <button onClick={() => setMode('search')} style={styles.secondaryBtn}>
+                <Search size={22} color="var(--secondary)" />
+                <span>検索</span>
+              </button>
+              <button onClick={() => setMode('manual')} style={styles.secondaryBtn}>
+                <PenTool size={22} color="var(--accent-orange)" />
+                <span>手入力</span>
+              </button>
+            </div>
           </div>
-        </div>
+
+          {/* Pending Items List */}
+          {pendingItems.length > 0 && (
+            <div style={styles.pendingPanel}>
+              <div style={styles.pendingHeader}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+                  追加済み ({pendingItems.length}件)
+                </span>
+                <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--primary)' }}>
+                  合計 {totalCalories} kcal
+                </span>
+              </div>
+              <div style={styles.pendingList}>
+                {pendingItems.map(item => (
+                  <div key={item.id} style={styles.pendingItem}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {item.foodName}
+                        {item.quantity !== 1 && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> ×{item.quantity}</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                        {item.calories} kcal ・ P:{item.macros.protein}g F:{item.macros.fat}g C:{item.macros.carbs}g
+                      </div>
+                    </div>
+                    <button onClick={() => removePending(item.id)} style={styles.deleteBtn}>
+                      <Trash2 size={16} color="var(--danger)" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button onClick={handleSaveAll} disabled={isProcessing} style={{ ...styles.btnPrimary, width: '100%', marginTop: 12 }}>
+                {isProcessing ? <Loader2 size={20} style={styles.spin} /> : `${pendingItems.length}件を記録する`}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* Search Mode */}
@@ -437,7 +512,7 @@ function QuickLogContent() {
             </button>
           </div>
 
-          {/* History Suggestions (shown while typing, before AI search) */}
+          {/* History Suggestions */}
           {historySuggestions.length > 0 && searchResults.length === 0 && (
             <div>
               <div style={styles.sectionLabel}>
@@ -445,7 +520,7 @@ function QuickLogContent() {
               </div>
               <div style={styles.resultList}>
                 {historySuggestions.map((item, i) => (
-                  <button key={`h-${i}`} onClick={() => selectSearchResult(item)} style={styles.resultItem}>
+                  <button key={`h-${i}`} onClick={() => selectSearchResult({ ...item, source: 'history' })} style={styles.resultItem}>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 15 }}>{item.foodName}</div>
                       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
@@ -476,7 +551,7 @@ function QuickLogContent() {
             </div>
           )}
 
-          {/* Recent History (shown when search is empty) */}
+          {/* Recent Meals (shown when search is empty) */}
           {!searchQuery && recentMeals.length > 0 && searchResults.length === 0 && (
             <div>
               <div style={styles.sectionLabel}>
@@ -484,7 +559,7 @@ function QuickLogContent() {
               </div>
               <div style={styles.resultList}>
                 {recentMeals.slice(0, 10).map((item, i) => (
-                  <button key={`r-${i}`} onClick={() => selectSearchResult(item)} style={styles.resultItem}>
+                  <button key={`r-${i}`} onClick={() => selectSearchResult({ ...item, source: 'history' })} style={styles.resultItem}>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 15 }}>{item.foodName}</div>
                       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
@@ -628,6 +703,45 @@ const styles = {
     fontWeight: 500,
     color: 'var(--text-primary)',
   },
+  // Pending items panel
+  pendingPanel: {
+    marginTop: 20,
+    padding: 16,
+    background: 'var(--bg-card)',
+    border: '1px solid var(--border-subtle)',
+    borderRadius: 'var(--radius-md)',
+  },
+  pendingHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottom: '1px solid var(--border-subtle)',
+  },
+  pendingList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+  },
+  pendingItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '10px 12px',
+    background: 'var(--bg-main)',
+    borderRadius: 'var(--radius-sm)',
+  },
+  deleteBtn: {
+    background: 'none',
+    border: 'none',
+    padding: 6,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  // Search
   searchPanel: {
     display: 'flex',
     flexDirection: 'column',
@@ -676,6 +790,7 @@ const styles = {
     width: '100%',
     color: 'var(--text-primary)',
   },
+  // Manual
   manualPanel: {
     display: 'flex',
     flexDirection: 'column',
@@ -701,6 +816,7 @@ const styles = {
     padding: '12px 0',
     textAlign: 'center',
   },
+  // Confirm
   confirmCard: {
     background: 'var(--bg-card)',
     border: '1px solid var(--border-subtle)',
@@ -746,6 +862,7 @@ const styles = {
     flexDirection: 'column',
     gap: 2,
   },
+  // Buttons
   btnPrimary: {
     padding: '14px 24px',
     borderRadius: 'var(--radius-lg)',

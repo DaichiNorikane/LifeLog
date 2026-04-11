@@ -432,7 +432,6 @@ function QuickLogContent() {
               ref={fileInputRef}
               type="file"
               accept="image/*"
-              capture="environment"
               onChange={handleCameraCapture}
               style={{ display: 'none' }}
             />

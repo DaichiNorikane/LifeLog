@@ -95,14 +95,13 @@ function QuickLogContent() {
     setHistorySuggestions(matches);
   }, [searchQuery, recentMeals]);
 
-  // Auto-close after save
+  // Auto-return to select mode after save
   useEffect(() => {
     if (mode === 'done') {
       const timer = setTimeout(() => {
-        if (window.opener || window.history.length <= 1) {
-          window.close();
-        }
-      }, 3000);
+        setSavedCount(0);
+        setMode('select');
+      }, 2000);
       return () => clearTimeout(timer);
     }
   }, [mode]);
@@ -235,6 +234,7 @@ function QuickLogContent() {
       const addedIds = await Promise.all(meals.map(m => addMealToFirestore(user.uid, m)));
       setSavedCount(pendingItems.length);
       setPendingItems([]);
+      setIsProcessing(false);
       setMode('done');
 
       // Background: cache update + evaluation
@@ -310,8 +310,11 @@ function QuickLogContent() {
           <p style={{ color: 'var(--text-secondary)', fontSize: 14, margin: 0 }}>
             {mealInfo.emoji} {mealInfo.label} - {savedCount}件を記録しました
           </p>
-          <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-            <button onClick={() => { setSavedCount(0); setMode('select'); }} style={styles.btnSecondary}>
+          <p style={{ color: 'var(--text-muted)', fontSize: 12, margin: '16px 0 0' }}>
+            まもなく記録画面に戻ります...
+          </p>
+          <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+            <button onClick={() => { setIsProcessing(false); setSavedCount(0); setMode('select'); }} style={styles.btnSecondary}>
               続けて記録
             </button>
             <button onClick={() => router.push('/')} style={styles.btnPrimary}>

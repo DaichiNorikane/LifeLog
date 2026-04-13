@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Camera, X, Loader2, Search, PenTool, Image as ImageIcon, ChevronRight, Trash2, Clock, BookOpen, Plus, Minus, Save, Sparkles, History } from 'lucide-react';
 import { analyzeImage } from '@/services/aiService';
 import { searchAiFood } from '@/app/actions/food-search';
-import { calculateRecipeWithGemini, searchRecipesWithGemini } from '@/app/actions/recipe';
+import { calculateRecipeHybrid, calculateRecipeWithGemini, searchRecipesWithGemini } from '@/app/actions/recipe';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { getRecentMeals, getRecipesFromFirestore, addRecipeToFirestore, deleteRecipeFromFirestore, addSearchHistory, getSearchHistory } from '@/lib/firebase/firestore';
 
@@ -345,7 +345,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                 nutrients: ing.nutrients // { calories, protein... } per 100g if official
             }));
 
-            const result = await import('@/app/actions').then(mod => mod.calculateRecipeHybrid(payload));
+            const result = await calculateRecipeHybrid(payload);
 
             if (result && !result.error) {
                 // Determine 1 serving stats

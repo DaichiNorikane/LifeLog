@@ -232,7 +232,7 @@ function createMediumWidget(data) {
         label.textColor = COLORS.textSub;
         row.addSpacer(4);
         const val = row.addText(`${item.value}g`);
-        val.font = Font.monospacedSystemFont(14);
+        val.font = Font.boldMonospacedSystemFont(14);
         val.textColor = COLORS.text;
         rightCol.addSpacer(2);
     }

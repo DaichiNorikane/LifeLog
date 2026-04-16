@@ -104,9 +104,27 @@ function createSmallWidget(data) {
 
     w.addSpacer(6);
 
+    // 残りカロリー
+    const remainStack = w.addStack();
+    remainStack.layoutHorizontally();
+    remainStack.centerAlignContent();
+    const remainLabel = remainStack.addText(
+        data.remaining >= 0 ? "残り " : "超過 "
+    );
+    remainLabel.font = Font.systemFont(10);
+    remainLabel.textColor = COLORS.textSub;
+    const remainValue = remainStack.addText(`${Math.abs(data.remaining)}`);
+    remainValue.font = Font.boldMonospacedSystemFont(14);
+    remainValue.textColor = data.remaining >= 0 ? COLORS.green : COLORS.red;
+    const remainUnit = remainStack.addText(" kcal");
+    remainUnit.font = Font.systemFont(10);
+    remainUnit.textColor = COLORS.textSub;
+
+    w.addSpacer(2);
+
     // エレナメッセージ
-    const msgText = w.addText(elena.msg);
-    msgText.font = Font.mediumSystemFont(11);
+    const msgText = w.addText(`${elena.emoji} ${elena.msg}`);
+    msgText.font = Font.mediumSystemFont(10);
     msgText.textColor = COLORS.text;
     msgText.lineLimit = 1;
 
@@ -159,6 +177,22 @@ function createMediumWidget(data) {
     targetText.font = Font.systemFont(11);
     targetText.textColor = COLORS.textSub;
 
+    // 残りカロリー(目立たせる)
+    const remainRow = leftCol.addStack();
+    remainRow.layoutHorizontally();
+    remainRow.centerAlignContent();
+    const remainLabel = remainRow.addText(
+        data.remaining >= 0 ? "残り " : "超過 "
+    );
+    remainLabel.font = Font.systemFont(11);
+    remainLabel.textColor = COLORS.textSub;
+    const remainValue = remainRow.addText(`${Math.abs(data.remaining)}`);
+    remainValue.font = Font.boldMonospacedSystemFont(18);
+    remainValue.textColor = data.remaining >= 0 ? COLORS.green : COLORS.red;
+    const remainUnit = remainRow.addText(" kcal");
+    remainUnit.font = Font.systemFont(11);
+    remainUnit.textColor = COLORS.textSub;
+
     leftCol.addSpacer(4);
 
     // プログレスバー
@@ -208,13 +242,9 @@ function createMediumWidget(data) {
     // フッター
     const footer = w.addStack();
     footer.layoutHorizontally();
-    const remaining = footer.addText(
-        data.remaining >= 0
-            ? `あと ${data.remaining} kcal`
-            : `${Math.abs(data.remaining)} kcal オーバー`
-    );
-    remaining.font = Font.boldSystemFont(12);
-    remaining.textColor = data.remaining >= 0 ? COLORS.green : COLORS.red;
+    const ratioText = footer.addText(`達成率 ${data.ratio}%`);
+    ratioText.font = Font.systemFont(11);
+    ratioText.textColor = COLORS.textSub;
     footer.addSpacer();
     const meals = footer.addText(`${data.mealCount}食記録済み`);
     meals.font = Font.systemFont(11);

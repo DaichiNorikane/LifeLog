@@ -16,13 +16,24 @@ export async function GET(request) {
     try {
         const { todayStr } = getJSTToday();
 
-        const [meals, userDoc] = await Promise.all([
+        const [meals, userDoc, weightSnap] = await Promise.all([
             getTodayMeals(userId, todayStr),
             db.collection('users').doc(userId).get(),
+            db.collection('users').doc(userId).collection('weights').orderBy('date', 'desc').limit(1).get(),
         ]);
 
         const userData = userDoc.exists ? userDoc.data() : {};
         const targetCalories = userData.targetCalories || 2000;
+        const targetWeight = userData.targetWeight ? Number(userData.targetWeight) : null;
+
+        let latestWeight = null;
+        let latestWeightDate = null;
+        if (!weightSnap.empty) {
+            const w = weightSnap.docs[0].data();
+            const wn = Number(w.weight);
+            latestWeight = isNaN(wn) ? null : wn;
+            latestWeightDate = w.date || null;
+        }
 
         const totals = meals.reduce(
             (acc, meal) => {
@@ -63,6 +74,9 @@ export async function GET(request) {
             carbs: Math.round(totals.carbs),
             mealCount: meals.length,
             elenaStatus,
+            weight: latestWeight,
+            weightDate: latestWeightDate,
+            targetWeight,
         });
     } catch (error) {
         console.error('[Widget] Error:', error);

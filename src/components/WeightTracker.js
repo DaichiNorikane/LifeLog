@@ -283,8 +283,9 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
                         )}
                     </div>
 
-                    {/* --- Elena's Proposal Section --- */}
-                    <div className="glass-panel" style={{ padding: '20px', borderRadius: '16px' }}>
+                    {/* --- Elena's Proposal Section (removed) --- */}
+                    {false && (
+                    <div className="glass-panel" style={{ padding: '20px', borderRadius: '16px', display: 'none' }}>
                         <h3 style={{ margin: '0 0 15px 0', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <Sparkles size={18} color="#10B981" /> Elena's Proposal
                         </h3>
@@ -427,6 +428,7 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
                             </div>
                         )}
                     </div>
+                    )}
 
                     {/* Daily Input */}
                     <div className="glass-panel" style={{ padding: '20px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '15px' }}>

@@ -126,6 +126,11 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
 
     const [targetDateForEntry, setTargetDateForEntry] = useState(activeDate ? new Date(activeDate) : new Date());
 
+    // ホーム画面で選択中の日付に追従させる
+    useEffect(() => {
+        if (activeDate) setTargetDateForEntry(new Date(activeDate));
+    }, [activeDate]);
+
     // Set initial daily weight if exists for targetDateForEntry
     useEffect(() => {
         if (!targetDateForEntry) return;
@@ -433,24 +438,13 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
                     {/* Daily Input */}
                     <div className="glass-panel" style={{ padding: '20px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '15px' }}>
                         <div>
-                            <div style={{ fontSize: '0.9rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <input
-                                    type="date"
-                                    value={targetDateForEntry.toISOString().split('T')[0]} // Simple format, verify timezone
-                                    readOnly
-                                    style={{
-                                        border: '1px solid var(--border-subtle)',
-                                        borderRadius: '6px',
-                                        padding: '4px',
-                                        fontSize: '0.9rem',
-                                        background: '#edf2f7',
-                                        color: 'var(--text-primary)',
-                                        cursor: 'not-allowed'
-                                    }}
-                                />
-                                の体重
+                            <div style={{ fontSize: '0.95rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ color: 'var(--text-primary)' }}>
+                                    {targetDateForEntry.getFullYear()}/{targetDateForEntry.getMonth() + 1}/{targetDateForEntry.getDate()}
+                                </span>
+                                <span>の体重</span>
                             </div>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>現在選択中の日付の体重を記録</div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>ホーム画面で選択中の日付の体重を記録</div>
                         </div>
                         <div style={{ display: 'flex', gap: '10px' }}>
                             <div style={{ position: 'relative' }}>

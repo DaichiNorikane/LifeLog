@@ -40,6 +40,7 @@ export const searchAiFood = async (query, historyContext = "") => {
 
     let aiSuggestions = [];
     let lastError = null;
+    let succeeded = false;
 
     for (const modelName of MODELS_TO_TRY) {
         try {
@@ -57,6 +58,7 @@ export const searchAiFood = async (query, historyContext = "") => {
                         reasoning: `[AI: ${modelName}] ${s.reasoning}`
                     }));
                 }
+                succeeded = true;
                 break;
             }
         } catch (e) {
@@ -65,9 +67,11 @@ export const searchAiFood = async (query, historyContext = "") => {
         }
     }
 
-    return {
-        suggestions: aiSuggestions
-    };
+    if (!succeeded) {
+        return { error: lastError?.message || "全モデルでAI検索に失敗しました", suggestions: [] };
+    }
+
+    return { suggestions: aiSuggestions };
 };
 
 export const searchFoodWithGemini = searchAiFood;

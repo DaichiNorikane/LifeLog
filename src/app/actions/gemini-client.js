@@ -21,10 +21,9 @@ export const ELENA_PERSONA = `あなたは「エレナ」です。ユーザー�
 
 // Models to try in order of preference
 export const MODELS_TO_TRY = [
-    "gemini-2.0-flash",       // Latest stable flash model
-    "gemini-1.5-flash",       // Fast fallback
-    "gemini-1.5-pro",         // High reasoning backup
-    "gemini-pro"              // Legacy fallback
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "gemini-2.0-flash",
 ];
 
 // Create a singleton GenAI instance

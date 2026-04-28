@@ -261,7 +261,10 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
         setIsAiSearching(true);
         try {
             const res = await searchAiFood(combinedQuery, historyContext);
-            if (res.suggestions) {
+            if (res.error) {
+                showToast(`AI検索に失敗: ${res.error}`);
+            }
+            if (res.suggestions && res.suggestions.length > 0) {
                 const aiMatches = res.suggestions.map(item => ({ ...item, source: 'ai' }));
 
                 // Merge with current results (AI at top or bottom? Maybe Top if explicitly asked)

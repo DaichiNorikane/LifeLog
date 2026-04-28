@@ -211,38 +211,40 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
         setSearchQueries(newQueries);
     };
 
-    // Instant Search Effect (History + Recent Meals)
+    // Instant Search Effect (History + Recent Meals) - 全クエリ対象
     useEffect(() => {
-        const query = searchQueries[0];
-        if (!query || query.trim().length === 0) {
+        const activeQueries = searchQueries.map(q => (q || '').trim()).filter(Boolean);
+        if (activeQueries.length === 0) {
             setSearchResults([]);
             return;
         }
 
         const timeoutId = setTimeout(() => {
-            const q = query.toLowerCase();
-
-            // 1. Match from searchHistory (past search terms)
-            const historyMatches = searchHistory
-                .filter(item => item.foodName && item.foodName.toLowerCase().includes(q))
-                .map(item => ({ ...item, source: 'history' }));
-
-            // 2. Match from recentMeals (actual logged meals)
-            const recentMatches = recentMeals
-                .filter(item => item.foodName && item.foodName.toLowerCase().includes(q))
-                .map(item => ({ ...item, source: 'history' }));
-
-            // Merge and deduplicate by foodName
-            const seen = new Set();
             const merged = [];
-            for (const item of [...historyMatches, ...recentMatches]) {
-                if (!seen.has(item.foodName)) {
-                    seen.add(item.foodName);
-                    merged.push(item);
+            const seen = new Set();
+            const perQueryLimit = activeQueries.length > 1 ? 8 : 20;
+
+            for (const rawQuery of activeQueries) {
+                const q = rawQuery.toLowerCase();
+                const historyMatches = searchHistory
+                    .filter(item => item.foodName && item.foodName.toLowerCase().includes(q))
+                    .map(item => ({ ...item, source: 'history', matchedQuery: rawQuery }));
+                const recentMatches = recentMeals
+                    .filter(item => item.foodName && item.foodName.toLowerCase().includes(q))
+                    .map(item => ({ ...item, source: 'history', matchedQuery: rawQuery }));
+
+                let countForThisQuery = 0;
+                for (const item of [...historyMatches, ...recentMatches]) {
+                    const key = `${rawQuery}::${item.foodName}`;
+                    if (!seen.has(key) && countForThisQuery < perQueryLimit) {
+                        seen.add(key);
+                        merged.push(item);
+                        countForThisQuery++;
+                    }
                 }
             }
 
-            setSearchResults(merged.slice(0, 20));
+            setSearchResults(merged);
         }, 200);
 
         return () => clearTimeout(timeoutId);
@@ -252,25 +254,32 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
         if (searchQueries.length > 1) setSearchQueries(prev => prev.filter((_, i) => i !== index));
     };
 
-    // Explicit AI Search Trigger
+    const addQueryInput = () => {
+        setSearchQueries(prev => [...prev, '']);
+    };
+
+    // Explicit AI Search Trigger - 複数クエリ対応
     const handleAiSearch = async (e) => {
         e.preventDefault();
-        const combinedQuery = searchQueries.filter(q => q.trim()).join('と');
-        if (!combinedQuery) return;
+        const activeQueries = searchQueries.map(q => (q || '').trim()).filter(Boolean);
+        if (activeQueries.length === 0) return;
 
         setIsAiSearching(true);
         try {
-            const res = await searchAiFood(combinedQuery, historyContext);
+            const res = await searchAiFood(activeQueries, historyContext);
             if (res.error) {
                 showToast(`AI検索に失敗: ${res.error}`);
             }
             if (res.suggestions && res.suggestions.length > 0) {
-                const aiMatches = res.suggestions.map(item => ({ ...item, source: 'ai' }));
+                const aiMatches = res.suggestions.map(item => ({
+                    ...item,
+                    source: 'ai',
+                    matchedQuery: item.forQuery || activeQueries[0],
+                }));
 
-                // Merge with current results (AI at top or bottom? Maybe Top if explicitly asked)
                 setSearchResults(prev => {
-                    const existingNames = new Set(prev.map(p => p.foodName));
-                    const newUnique = aiMatches.filter(m => !existingNames.has(m.foodName));
+                    const existing = new Set(prev.map(p => `${p.matchedQuery || ''}::${p.foodName}`));
+                    const newUnique = aiMatches.filter(m => !existing.has(`${m.matchedQuery || ''}::${m.foodName}`));
                     return [...newUnique, ...prev];
                 });
             }
@@ -783,7 +792,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                 {/* --- SEARCH --- */}
                 {activeTab === 'search' && (
                     <div className="fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>入力で履歴から検索。AI検索はボタンで。</p>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>入力で履歴から検索。複数食材は「+追加」で同時検索可能。</p>
                         <form onSubmit={handleAiSearch} style={{ display: 'flex', gap: '8px', marginBottom: '15px' }}>
                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '5px' }}>
                                 {searchQueries.map((q, i) => (
@@ -791,12 +800,19 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                         <input
                                             value={q}
                                             onChange={(e) => handleQueryChange(i, e.target.value)}
-                                            placeholder="食べたもの"
+                                            placeholder={i === 0 ? "食べたもの" : `食べたもの ${i + 1}`}
                                             style={inputStyle}
                                         />
-                                        {searchQueries.length > 1 && <button type="button" onClick={() => removeQueryInput(i)} style={{ border: 'none', background: 'none' }}><X size={16} /></button>}
+                                        {searchQueries.length > 1 && <button type="button" onClick={() => removeQueryInput(i)} style={{ border: 'none', background: 'none', cursor: 'pointer' }}><X size={16} /></button>}
                                     </div>
                                 ))}
+                                <button
+                                    type="button"
+                                    onClick={addQueryInput}
+                                    style={{ alignSelf: 'flex-start', border: '1px dashed var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', padding: '6px 10px', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                >
+                                    <Plus size={14} /> 食材を追加
+                                </button>
                             </div>
                             <button type="submit" className="btn-primary" disabled={isAiSearching} style={{ padding: '0 15px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
                                 {isAiSearching ? <Loader2 className="spin" /> : <><Sparkles size={16} /><span style={{ fontSize: '0.75rem', marginLeft: '4px' }}>AI検索</span></>}
@@ -813,46 +829,68 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                 </div>
                             )}
 
-                            {searchResults.map((item, i) => {
-                                // Determine Badge
-                                let badge = null;
-                                let badgeColor = '#EDF2F7';
-                                let badgeIcon = null;
+                            {(() => {
+                                const activeQueries = searchQueries.map(q => (q || '').trim()).filter(Boolean);
+                                const showGroups = activeQueries.length > 1;
+                                const renderItem = (item, i) => {
+                                    let badge = null;
+                                    let badgeColor = '#EDF2F7';
+                                    let badgeIcon = null;
+                                    if (item.source === 'history') {
+                                        badge = '履歴';
+                                        badgeColor = '#E6FFFA';
+                                        badgeIcon = <History size={12} color="#319795" />;
+                                    } else if (item.source === 'ai') {
+                                        badge = 'AI';
+                                        badgeColor = '#FAF5FF';
+                                        badgeIcon = <Sparkles size={12} color="#805AD5" />;
+                                    }
+                                    return (
+                                        <div key={`${item.source}-${item.matchedQuery || ''}-${i}-${item.foodName}`} onClick={() => { addItemToPending(item, item.source); }} className="glass-panel hover-card" style={{ padding: '12px', marginBottom: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                                                    <div style={{ fontWeight: 'bold' }}>{item.foodName}</div>
+                                                    {badge && (
+                                                        <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: badgeColor, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                                            {badgeIcon} {badge}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', gap: '8px' }}>
+                                                    <span>{item.calories} kcal{item.unit && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}> / {item.unit}</span>}</span>
+                                                    {item.macros && (
+                                                        <span style={{ fontSize: '0.75rem' }}>
+                                                            P:{item.macros.protein} F:{item.macros.fat} C:{item.macros.carbs}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <Plus size={18} color="var(--primary)" />
+                                        </div>
+                                    );
+                                };
 
-                                if (item.source === 'history') {
-                                    badge = '履歴';
-                                    badgeColor = '#E6FFFA'; // Teal light
-                                    badgeIcon = <History size={12} color="#319795" />;
-                                } else if (item.source === 'ai') {
-                                    badge = 'AI';
-                                    badgeColor = '#FAF5FF'; // Purple light
-                                    badgeIcon = <Sparkles size={12} color="#805AD5" />;
+                                if (!showGroups) {
+                                    return searchResults.map((item, i) => renderItem(item, i));
                                 }
 
-                                return (
-                                    <div key={`${item.source}-${i}`} onClick={() => { addItemToPending(item, item.source); }} className="glass-panel hover-card" style={{ padding: '12px', marginBottom: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
-                                                <div style={{ fontWeight: 'bold' }}>{item.foodName}</div>
-                                                {badge && (
-                                                    <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: badgeColor, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                                                        {badgeIcon} {badge}
-                                                    </span>
-                                                )}
+                                // クエリ別にグループ化
+                                return activeQueries.map(q => {
+                                    const items = searchResults.filter(r => r.matchedQuery === q);
+                                    return (
+                                        <div key={`group-${q}`} style={{ marginBottom: '12px' }}>
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 'bold', padding: '4px 6px', marginBottom: '6px', borderLeft: '3px solid var(--primary)' }}>
+                                                「{q}」の候補 ({items.length})
                                             </div>
-                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', gap: '8px' }}>
-                                                <span>{item.calories} kcal{item.unit && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}> / {item.unit}</span>}</span>
-                                                {item.macros && (
-                                                    <span style={{ fontSize: '0.75rem' }}>
-                                                        P:{item.macros.protein} F:{item.macros.fat} C:{item.macros.carbs}
-                                                    </span>
-                                                )}
-                                            </div>
+                                            {items.length === 0 ? (
+                                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', padding: '6px 10px' }}>履歴に見つかりません。AI検索を試してください。</div>
+                                            ) : (
+                                                items.map((item, i) => renderItem(item, i))
+                                            )}
                                         </div>
-                                        <Plus size={18} color="var(--primary)" />
-                                    </div>
-                                );
-                            })}
+                                    );
+                                });
+                            })()}
 
                             {searchResults.length === 0 && searchQueries[0]?.length > 0 && !loading && (
                                 <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>

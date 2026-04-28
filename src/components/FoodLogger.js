@@ -29,7 +29,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
     // Search State
     const [searchQueries, setSearchQueries] = useState(['']);
     const [searchResults, setSearchResults] = useState([]); // Combined results
-    const [isAiSearching, setIsAiSearching] = useState(false);
+    const [isAiSearching, setIsAiSearching] = useState({});
 
     // Manual State
     const [manualForm, setManualForm] = useState({ foodName: '', calories: '', protein: '' });
@@ -258,15 +258,15 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
         setSearchQueries(prev => [...prev, '']);
     };
 
-    // Explicit AI Search Trigger - 複数クエリ対応
-    const handleAiSearch = async (e) => {
-        e.preventDefault();
-        const activeQueries = searchQueries.map(q => (q || '').trim()).filter(Boolean);
-        if (activeQueries.length === 0) return;
+    // Explicit AI Search Trigger - 入力欄ごとに個別検索
+    const handleAiSearch = async (e, targetIndex) => {
+        if (e && e.preventDefault) e.preventDefault();
+        const query = (searchQueries[targetIndex] || '').trim();
+        if (!query) return;
 
-        setIsAiSearching(true);
+        setIsAiSearching(prev => ({ ...prev, [targetIndex]: true }));
         try {
-            const res = await searchAiFood(activeQueries, historyContext);
+            const res = await searchAiFood(query, historyContext);
             if (res.error) {
                 showToast(`AI検索に失敗: ${res.error}`);
             }
@@ -274,7 +274,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                 const aiMatches = res.suggestions.map(item => ({
                     ...item,
                     source: 'ai',
-                    matchedQuery: item.forQuery || activeQueries[0],
+                    matchedQuery: query,
                 }));
 
                 setSearchResults(prev => {
@@ -287,7 +287,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
             console.error("AI search failed", error);
             showToast("AI検索に失敗しました");
         } finally {
-            setIsAiSearching(false);
+            setIsAiSearching(prev => ({ ...prev, [targetIndex]: false }));
         }
     };
 
@@ -792,32 +792,42 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                 {/* --- SEARCH --- */}
                 {activeTab === 'search' && (
                     <div className="fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>入力で履歴から検索。複数食材は「+追加」で同時検索可能。</p>
-                        <form onSubmit={handleAiSearch} style={{ display: 'flex', gap: '8px', marginBottom: '15px' }}>
-                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                                {searchQueries.map((q, i) => (
-                                    <div key={i} style={{ display: 'flex', gap: '5px' }}>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>入力で履歴から検索。各食材ごとにAI検索ボタンを押してください。</p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '15px' }}>
+                            {searchQueries.map((q, i) => {
+                                const busy = !!isAiSearching[i];
+                                const empty = !q.trim();
+                                return (
+                                    <div key={i} style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
                                         <input
                                             value={q}
                                             onChange={(e) => handleQueryChange(i, e.target.value)}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAiSearch(e, i); } }}
                                             placeholder={i === 0 ? "食べたもの" : `食べたもの ${i + 1}`}
-                                            style={inputStyle}
+                                            style={{ ...inputStyle, flex: 1 }}
                                         />
+                                        <button
+                                            type="button"
+                                            onClick={(e) => handleAiSearch(e, i)}
+                                            disabled={busy || empty}
+                                            className="btn-primary"
+                                            style={{ padding: '0 12px', height: '44px', background: empty ? '#cbd5e0' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                            title="この食材をAI検索"
+                                        >
+                                            {busy ? <Loader2 className="spin" size={16} /> : <><Sparkles size={14} /><span style={{ fontSize: '0.7rem' }}>AI</span></>}
+                                        </button>
                                         {searchQueries.length > 1 && <button type="button" onClick={() => removeQueryInput(i)} style={{ border: 'none', background: 'none', cursor: 'pointer' }}><X size={16} /></button>}
                                     </div>
-                                ))}
-                                <button
-                                    type="button"
-                                    onClick={addQueryInput}
-                                    style={{ alignSelf: 'flex-start', border: '1px dashed var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', padding: '6px 10px', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                                >
-                                    <Plus size={14} /> 食材を追加
-                                </button>
-                            </div>
-                            <button type="submit" className="btn-primary" disabled={isAiSearching} style={{ padding: '0 15px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-                                {isAiSearching ? <Loader2 className="spin" /> : <><Sparkles size={16} /><span style={{ fontSize: '0.75rem', marginLeft: '4px' }}>AI検索</span></>}
+                                );
+                            })}
+                            <button
+                                type="button"
+                                onClick={addQueryInput}
+                                style={{ alignSelf: 'flex-start', border: '1px dashed var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', padding: '6px 10px', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                            >
+                                <Plus size={14} /> 食材を追加
                             </button>
-                        </form>
+                        </div>
 
                         <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', minHeight: 0 }}>
                             {/* Combined Search Results */}

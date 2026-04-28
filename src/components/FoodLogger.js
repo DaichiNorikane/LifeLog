@@ -802,7 +802,6 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                         <input
                                             value={q}
                                             onChange={(e) => handleQueryChange(i, e.target.value)}
-                                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAiSearch(e, i); } }}
                                             placeholder={i === 0 ? "食べたもの" : `食べたもの ${i + 1}`}
                                             style={{ ...inputStyle, flex: 1 }}
                                         />

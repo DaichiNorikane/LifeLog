@@ -44,7 +44,7 @@ export const generateQuizWithGemini = async (count = 5) => {
       ]
     `;
 
-    const MODELS = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+    const MODELS = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"];
     let lastError = null;
 
     for (const modelName of MODELS) {

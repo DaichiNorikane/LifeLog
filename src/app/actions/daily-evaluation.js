@@ -1,6 +1,6 @@
 "use server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { apiKey, ELENA_PERSONA, extractJSON } from "./gemini-client";
+import { apiKey, ELENA_PERSONA, extractJSON, MODELS_TO_TRY } from "./gemini-client";
 import { suggestNextMeal } from "./meal-advisor";
 
 export const evaluateDailyLog = async (data, stockItems = []) => {
@@ -238,13 +238,7 @@ export const evaluateDailyLog = async (data, stockItems = []) => {
       }
     `;
 
-    const COACHING_MODELS = [
-        "gemini-1.5-pro",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash"
-    ];
-
-    for (const modelName of COACHING_MODELS) {
+    for (const modelName of MODELS_TO_TRY) {
         try {
             const model = genAI.getGenerativeModel({ model: modelName });
             const result = await model.generateContent(prompt);
@@ -328,9 +322,7 @@ export const evaluateSingleMeal = async (meal, contextMeals = []) => {
       }
     `;
 
-    const FAST_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"];
-
-    for (const modelName of FAST_MODELS) {
+    for (const modelName of MODELS_TO_TRY) {
         try {
             console.log(`[SingleMealEval] Trying model: ${modelName}`);
             const model = genAI.getGenerativeModel({ model: modelName });
@@ -436,12 +428,7 @@ export const analyzeGoalFeasibility = async (data) => {
         }
     `;
 
-    const GOAL_ANALYSIS_MODELS = [
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-1.5-pro",
-        "gemini-pro"
-    ];
+    const GOAL_ANALYSIS_MODELS = MODELS_TO_TRY;
 
     let lastError = null;
 
@@ -534,7 +521,7 @@ export const generateMealRanking = async (meals) => {
     `;
 
     let lastError = null;
-    const models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"];
+    const models = MODELS_TO_TRY;
 
     for (const modelName of models) {
         try {
@@ -612,7 +599,7 @@ export const evaluateMealCategory = async (category, meals, dailyContext = {}) =
       }
     `;
 
-    const MODELS = ["gemini-1.5-pro", "gemini-2.0-flash", "gemini-1.5-flash"];
+    const MODELS = MODELS_TO_TRY;
     let lastError = null;
 
     for (const modelName of MODELS) {

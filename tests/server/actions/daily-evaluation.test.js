@@ -17,10 +17,18 @@ vi.mock('@/app/actions/gemini-client', () => ({
   apiKey: 'test-key',
   ELENA_PERSONA: 'Test persona',
   MODELS_TO_TRY: ['model-1'],
+  THINKING: { OFF: 0, MEDIUM: 1024, DYNAMIC: -1 },
+  getGenAI: vi.fn(),
+  createModel: vi.fn(() => ({ generateContent: mockGenerateContent })),
   extractJSON: vi.fn((text) => {
     const m = text.match(/\{[\s\S]*\}/);
     return m ? JSON.parse(m[0]) : null;
   }),
+  DAILY_EVAL_SCHEMA: {},
+  MEAL_SCORE_SCHEMA: {},
+  GOAL_ANALYSIS_SCHEMA: {},
+  MEAL_RANKING_SCHEMA: {},
+  CATEGORY_EVAL_SCHEMA: {},
 }));
 
 const mockSuggestNextMeal = vi.fn(() =>

@@ -37,7 +37,12 @@ const mockMealsSnapshot = {
 
 const mockGet = vi.fn();
 const mockWhere = vi.fn().mockReturnThis();
-const mockDoc = vi.fn().mockReturnValue({ get: mockGet });
+const mockWeightCollection = {
+  orderBy: vi.fn().mockReturnThis(),
+  limit: vi.fn().mockReturnThis(),
+  get: vi.fn().mockResolvedValue({ empty: true, docs: [] }),
+};
+const mockDoc = vi.fn().mockReturnValue({ get: mockGet, collection: vi.fn().mockReturnValue(mockWeightCollection) });
 const mockCollection = vi.fn().mockReturnValue({
   doc: mockDoc,
   where: mockWhere,

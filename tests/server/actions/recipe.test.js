@@ -16,6 +16,12 @@ vi.mock('@google/generative-ai', () => {
 vi.mock('@/app/actions/gemini-client', () => ({
   apiKey: 'test-key',
   MODELS_TO_TRY: ['model-1'],
+  THINKING: { OFF: 0, MEDIUM: 1024, DYNAMIC: -1 },
+  getGenAI: vi.fn(),
+  createModel: vi.fn(() => ({ generateContent: mockGenerateContent })),
+  RECIPE_HYBRID_SCHEMA: {},
+  RECIPE_CALC_SCHEMA: {},
+  RECIPE_SEARCH_SCHEMA: {},
 }));
 
 import {

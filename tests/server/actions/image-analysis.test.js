@@ -16,6 +16,10 @@ vi.mock('@google/generative-ai', () => {
 vi.mock('@/app/actions/gemini-client', () => ({
   apiKey: 'test-key',
   MODELS_TO_TRY: ['model-1'],
+  THINKING: { OFF: 0, MEDIUM: 1024, DYNAMIC: -1 },
+  getGenAI: vi.fn(),
+  createModel: vi.fn(() => ({ generateContent: mockGenerateContent })),
+  FOOD_ANALYSIS_SCHEMA: {},
 }));
 
 import { analyzeImageWithGemini } from '@/app/actions/image-analysis';

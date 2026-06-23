@@ -1,6 +1,7 @@
 "use server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { apiKey, ELENA_PERSONA, MODELS_TO_TRY, extractJSON } from "./gemini-client";
+import {
+    apiKey, getGenAI, ELENA_PERSONA, MODELS_TO_TRY, THINKING, createModel, MEAL_ADVISOR_SCHEMA
+} from "./gemini-client";
 
 export const suggestNextMeal = async (history, dailyLog, targetType = 'auto', stockItems = []) => {
     const labels = {
@@ -87,63 +88,48 @@ export const suggestNextMeal = async (history, dailyLog, targetType = 'auto', st
     const stockContext = stockItems.length > 0 ? `冷蔵庫・ストック・文脈情報: ${stockItems.map(i => i.name).join(', ')}` : "特になし";
 
     const prompt = `
-        # Role
-        ${ELENA_PERSONA}
+# Role
+${ELENA_PERSONA}
 
-        【文脈】
-        ${mealContext}
-        ${stockContext}
-        カロリー状況: ${isOverCalories ? `目標より${Math.abs(remainingCalories)}kcal超過` : `残り${remainingCalories}kcal`}
+【文脈】
+${mealContext}
+${stockContext}
+カロリー状況: ${isOverCalories ? `目標より${Math.abs(remainingCalories)}kcal超過` : `残り${remainingCalories}kcal`}
 
-        【提案のルール】
-        1. **提案数**: **必ず4〜6個**のバリエーション豊かなメニューを提案してください。
-        2. **アメとムチ**:
-           - カロリー超過時: 「えっ...これ以上食べちゃダメです！🙅‍♀️」「お水だけにしておきましょう？🥺」と感情に訴える。
-           - カロリー不足時（大きく不足している場合）: 「あと${remainingCalories}kcalも食べられますよ！」「しっかり食べないと筋肉落ちちゃいます💦」と、**具体的な残り数値を必ず言及して**食べることを推奨する。
-           - 余裕がある時: 「今日は余裕ですね！美味しいもの食べちゃいましょう✨」と明るく。
-        4. **提案内容**:
-           - **ストック情報の活用**: 「${stockContext}」にある食材を使えるレシピを優先的に1〜2個含めること。
-           - "reason"も会話調で。「これなら脂質も抑えられて最高ですよ！👍」など。
+【提案のルール】
+1. **提案数**: **必ず4〜6個**のバリエーション豊かなメニューを提案してください。
+2. **アメとムチ**:
+   - カロリー超過時: 「えっ...これ以上食べちゃダメです！🙅‍♀️」「お水だけにしておきましょう？🥺」と感情に訴える。
+   - カロリー不足時（大きく不足している場合）: 「あと${remainingCalories}kcalも食べられますよ！」「しっかり食べないと筋肉落ちちゃいます💦」と、**具体的な残り数値を必ず言及して**食べることを推奨する。
+   - 余裕がある時: 「今日は余裕ですね！美味しいもの食べちゃいましょう✨」と明るく。
+4. **提案内容**:
+   - **ストック情報の活用**: 「${stockContext}」にある食材を使えるレシピを優先的に1〜2個含めること。
+   - "reason"も会話調で。「これなら脂質も抑えられて最高ですよ！👍」など。
 
-        出力はJSON形式のみ:
-        {
-            "mealCategory": "${mealCategory}",
-            "detectedContext": "${mealContext}",
-            "suggestions": [
-                { "name": "メニュー名", "reason": "エレナとしての推奨理由（会話調・絵文字付き）", "calories": 推定kcal },
-                ...
-            ],
-            "advice": "エレナからの全体アドバイス（1文・絵文字付き）"
-        }
-        `;
+mealCategory に "${mealCategory}"、detectedContext に "${mealContext}" を設定してください。
+    `.trim();
 
     let lastError = null;
 
     for (const modelName of MODELS_TO_TRY) {
         try {
             if (!apiKey) throw new Error("API Key is missing.");
-            const genAI = new GoogleGenerativeAI(apiKey);
-            const model = genAI.getGenerativeModel({ model: modelName });
+            const genAI = getGenAI();
+            const model = createModel(genAI, modelName, MEAL_ADVISOR_SCHEMA, THINKING.OFF);
 
             const result = await model.generateContent(prompt);
-            const response = await result.response;
-            const text = response.text().replace(/```json\n?|\n?```/g, "").trim();
-            const jsonMatch = text.match(/\{[\s\S]*\}/);
-
-            if (jsonMatch) {
-                const parsed = JSON.parse(jsonMatch[0]);
-                parsed.debug = {
-                    hour,
-                    historyLength: history.length,
-                    eatenMealTypes,
-                    hasBreakfast,
-                    hasLunch,
-                    hasDinner,
-                    suggestedMealType,
-                    mealContext
-                };
-                return parsed;
-            }
+            const parsed = JSON.parse(result.response.text());
+            parsed.debug = {
+                hour,
+                historyLength: history.length,
+                eatenMealTypes,
+                hasBreakfast,
+                hasLunch,
+                hasDinner,
+                suggestedMealType,
+                mealContext
+            };
+            return parsed;
         } catch (error) {
             console.warn(`Suggestion Model ${modelName} failed:`, error.message);
             lastError = error;

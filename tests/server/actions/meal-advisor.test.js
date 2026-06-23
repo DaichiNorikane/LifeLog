@@ -17,7 +17,11 @@ vi.mock('@/app/actions/gemini-client', () => ({
   apiKey: 'test-key',
   ELENA_PERSONA: 'Test persona',
   MODELS_TO_TRY: ['model-1'],
+  THINKING: { OFF: 0, MEDIUM: 1024, DYNAMIC: -1 },
+  getGenAI: vi.fn(),
+  createModel: vi.fn(() => ({ generateContent: mockGenerateContent })),
   extractJSON: vi.fn(),
+  MEAL_ADVISOR_SCHEMA: {},
 }));
 
 import { suggestNextMeal } from '@/app/actions/meal-advisor';

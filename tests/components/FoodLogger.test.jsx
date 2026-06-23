@@ -134,7 +134,7 @@ describe('FoodLogger', () => {
   it('switches to search tab and shows empty state', () => {
     render(<FoodLogger {...defaultProps} />);
     fireEvent.click(screen.getByText('検索'));
-    expect(screen.getByText('入力で履歴から検索。AI検索はボタンで。')).toBeInTheDocument();
+    expect(screen.getByText('入力で履歴から検索。各食材ごとにAI検索ボタンを押してください。')).toBeInTheDocument();
     expect(screen.getByText('何を食べましたか？')).toBeInTheDocument();
     expect(screen.getByText('履歴から即座に検索します')).toBeInTheDocument();
   });
@@ -143,7 +143,7 @@ describe('FoodLogger', () => {
     render(<FoodLogger {...defaultProps} />);
     fireEvent.click(screen.getByText('検索'));
     expect(screen.getByPlaceholderText('食べたもの')).toBeInTheDocument();
-    expect(screen.getByText('AI検索')).toBeInTheDocument();
+    expect(screen.getByTitle('この食材をAI検索')).toBeInTheDocument();
   });
 
   it('typing in search input filters history results', async () => {
@@ -172,7 +172,7 @@ describe('FoodLogger', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/候補が見つかりませんか/)).toBeInTheDocument();
-      expect(screen.getByText(/AI検索.*ボタンを押して/)).toBeInTheDocument();
+      expect(screen.getByText(/右上の「AI検索」ボタンを押して/)).toBeInTheDocument();
     });
   });
 
@@ -184,7 +184,7 @@ describe('FoodLogger', () => {
     const input = screen.getByPlaceholderText('食べたもの');
     fireEvent.change(input, { target: { value: '鶏むね肉' } });
 
-    const aiButton = screen.getByText('AI検索').closest('button');
+    const aiButton = screen.getByTitle('この食材をAI検索');
     await act(async () => {
       fireEvent.click(aiButton);
     });
@@ -206,7 +206,7 @@ describe('FoodLogger', () => {
     fireEvent.change(input, { target: { value: '鶏むね肉' } });
 
     await act(async () => {
-      fireEvent.click(screen.getByText('AI検索').closest('button'));
+      fireEvent.click(screen.getByTitle('この食材をAI検索'));
     });
 
     await waitFor(() => {

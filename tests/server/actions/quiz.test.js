@@ -16,6 +16,11 @@ vi.mock('@google/generative-ai', () => {
 vi.mock('@/app/actions/gemini-client', () => ({
   apiKey: 'test-key',
   ELENA_PERSONA: 'Test persona',
+  MODELS_TO_TRY: ['model-1', 'model-2', 'model-3'],
+  THINKING: { OFF: 0, MEDIUM: 1024, DYNAMIC: -1 },
+  getGenAI: vi.fn(),
+  createModel: vi.fn(() => ({ generateContent: mockGenerateContent })),
+  QUIZ_SCHEMA: {},
 }));
 
 import { generateQuizWithGemini } from '@/app/actions/quiz';
@@ -77,11 +82,12 @@ describe('generateQuizWithGemini', () => {
   });
 
   it('returns error when response is not a valid JSON array', async () => {
+    mockGenerateContent.mockReset();
     mockGenerateContent.mockResolvedValue({
       response: { text: () => '{"not": "an array"}' },
     });
 
-    // No array match -> throws -> tries next model -> all fail
+    // non-array JSON → throws → tries next model → all fail
     const result = await generateQuizWithGemini(3);
     expect(result.error).toBeDefined();
   });

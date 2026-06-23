@@ -5,6 +5,14 @@ vi.mock('@google/generative-ai', () => ({
     constructor(apiKey) { this.apiKey = apiKey; }
     getGenerativeModel() { return {}; }
   },
+  SchemaType: {
+    OBJECT: 'OBJECT',
+    ARRAY: 'ARRAY',
+    STRING: 'STRING',
+    NUMBER: 'NUMBER',
+    INTEGER: 'INTEGER',
+    BOOLEAN: 'BOOLEAN',
+  },
 }));
 
 describe('gemini-client', () => {
@@ -98,14 +106,15 @@ describe('gemini-client', () => {
 
   // ---- MODELS_TO_TRY ----
   describe('MODELS_TO_TRY', () => {
-    it('is an array with 4 models', () => {
+    it('is an array with 3 models', () => {
       expect(Array.isArray(MODELS_TO_TRY)).toBe(true);
-      expect(MODELS_TO_TRY).toHaveLength(4);
+      expect(MODELS_TO_TRY).toHaveLength(3);
     });
 
     it('contains expected model names', () => {
-      expect(MODELS_TO_TRY).toContain('gemini-2.0-flash');
-      expect(MODELS_TO_TRY).toContain('gemini-1.5-flash');
+      expect(MODELS_TO_TRY).toContain('gemini-3.5-flash');
+      expect(MODELS_TO_TRY).toContain('gemini-2.5-flash');
+      expect(MODELS_TO_TRY).toContain('gemini-2.5-pro');
     });
   });
 

@@ -655,8 +655,8 @@ describe('WeightTracker', () => {
 
   it('shows required pace when all conditions are met', () => {
     // currentWeight=70.5, targetWeight=65, remainingKg=5.5
-    // targetDate in future -> daysRemaining > 0
-    render(<WeightTracker {...defaultProps} />);
+    // targetDate must be in the future for daysRemaining > 0
+    render(<WeightTracker {...defaultProps} userProfile={{ ...defaultProps.userProfile, targetDate: '2027-12-31' }} />);
     expect(screen.getByText('必要ペース')).toBeInTheDocument();
   });
 

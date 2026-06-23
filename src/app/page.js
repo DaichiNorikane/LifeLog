@@ -223,14 +223,39 @@ export default function Home() {
       const p = Number(meal.macros?.protein);
       const f = Number(meal.macros?.fat);
       const cb = Number(meal.macros?.carbs);
+      const fiber = meal.macros?.fiber;
+      const sugar = meal.macros?.sugar;
+      const sodium = meal.macros?.sodium;
+      const potassium = meal.macros?.potassium;
       return {
         calories: acc.calories + (isNaN(c) ? 0 : c),
         protein: acc.protein + (isNaN(p) ? 0 : p),
         fat: acc.fat + (isNaN(f) ? 0 : f),
         carbs: acc.carbs + (isNaN(cb) ? 0 : cb),
+        fiber: fiber != null ? acc.fiber + Number(fiber) : acc.fiber,
+        sugar: sugar != null ? acc.sugar + Number(sugar) : acc.sugar,
+        sodium: sodium != null ? acc.sodium + Number(sodium) : acc.sodium,
+        potassium: potassium != null ? acc.potassium + Number(potassium) : acc.potassium,
+        // 記録件数（null除外のため合計が何件分の合算かを把握）
+        fiberRecorded: fiber != null ? acc.fiberRecorded + 1 : acc.fiberRecorded,
+        sodiumRecorded: sodium != null ? acc.sodiumRecorded + 1 : acc.sodiumRecorded,
       };
-    }, { calories: 0, protein: 0, fat: 0, carbs: 0 });
+    }, { calories: 0, protein: 0, fat: 0, carbs: 0, fiber: 0, sugar: 0, sodium: 0, potassium: 0, fiberRecorded: 0, sodiumRecorded: 0 });
   };
+
+  // FoodLoggerに渡すrecentMeals（meals stateから重複除去）
+  const recentMealsForLogger = useMemo(() => {
+    const seenNames = new Set();
+    const unique = [];
+    for (const meal of [...meals].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))) {
+      if (meal.foodName && !seenNames.has(meal.foodName)) {
+        seenNames.add(meal.foodName);
+        unique.push(meal);
+        if (unique.length >= 50) break;
+      }
+    }
+    return unique;
+  }, [meals]);
 
   const dayTotals = useMemo(() => getDailyTotals(currentDate), [meals, currentDate]);
 
@@ -278,6 +303,28 @@ export default function Home() {
   const totalCalories = displayMeals.reduce((acc, meal) => acc + Number(meal.calories || 0), 0);
   const targetCalories = userProfile?.targetCalories || 2200;
   const remaining = Math.max(0, targetCalories - totalCalories);
+
+  // エレナの表情・メッセージを記録状況に応じて計算
+  const elenaState = useMemo(() => {
+    const savedEval = evaluationsCache[currentDateKey];
+    if (savedEval?.score !== undefined && savedEval.score !== null) {
+      const s = savedEval.score;
+      if (s === 100) return { imageSrc: "/images/elena/elena_score_100.webp", message: savedEval.title || "完璧な一日！パーフェクト✨", score: s };
+      if (s >= 90) return { imageSrc: "/images/elena/elena_score_90_99.webp", message: savedEval.title || "素晴らしい！もうちょっとで満点！", score: s };
+      if (s >= 75) return { imageSrc: "/images/elena/elena_score_75_90.webp", message: savedEval.title || "いい調子！この調子でいこう！", score: s };
+      if (s >= 50) return { imageSrc: "/images/elena.webp", message: savedEval.title || "まあまあだね。もう少し頑張ろう！", score: s };
+      if (s >= 20) return { imageSrc: "/images/elena/elena_score_20_50.webp", message: savedEval.title || "ちょっと心配かな…頑張って！", score: s };
+      return { imageSrc: "/images/elena/elena_score_0_20.webp", message: savedEval.title || "もっと気をつけてよ！！", score: s };
+    }
+    const ratio = targetCalories > 0 ? totalCalories / targetCalories : 0;
+    if (totalCalories === 0) return { imageSrc: "/images/elena/elena_score_20_50.webp", message: "まだ何も食べてないよ！記録してね🍽️", score: null };
+    if (ratio < 0.5) return { imageSrc: "/images/elena/elena_score_20_50.webp", message: "もっと食べないと！バランスよくね💪", score: null };
+    if (ratio < 0.8) return { imageSrc: "/images/elena.webp", message: "いい感じ！この調子でいこう！😊", score: null };
+    if (ratio <= 1.0) return { imageSrc: "/images/elena/elena_score_75_90.webp", message: "目標達成目前！あと少し頑張れ！🔥", score: null };
+    if (ratio <= 1.1) return { imageSrc: "/images/elena/elena_score_75_90.webp", message: "目標カロリー達成！今日もよく頑張ったね✨", score: null };
+    if (ratio <= 1.3) return { imageSrc: "/images/elena/elena_score_20_50.webp", message: "ちょっと食べすぎかも…気をつけて！🤔", score: null };
+    return { imageSrc: "/images/elena/elena_score_0_20.webp", message: "食べすぎ警報！！明日はしっかり管理しよう！😤", score: null };
+  }, [evaluationsCache, currentDateKey, totalCalories, targetCalories]);
 
   // Statistics for Leon (memoized)
   const { avgCal3Days, streakDays } = useMemo(() => {
@@ -751,6 +798,27 @@ export default function Home() {
             </div>
           </header>
 
+          {/* Elena Banner */}
+          <div
+            onClick={() => setShowEvaluation(true)}
+            style={{ position: 'relative', marginBottom: '20px', background: 'white', borderRadius: '20px', padding: '14px 130px 14px 20px', boxShadow: '0 2px 10px rgba(0,0,0,0.06)', overflow: 'hidden', cursor: 'pointer', minHeight: '90px' }}
+          >
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Elena{elenaState.score !== null ? ` · スコア ${elenaState.score}` : ''}
+            </div>
+            <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.5 }}>
+              {elenaState.message}
+            </p>
+            <div style={{ marginTop: '6px', fontSize: '0.72rem', color: 'var(--primary)', fontWeight: 600 }}>
+              タップで詳細評価 →
+            </div>
+            <img
+              src={elenaState.imageSrc}
+              alt="Elena"
+              style={{ position: 'absolute', right: '-10px', bottom: '-5px', width: '130px', height: 'auto', pointerEvents: 'none' }}
+            />
+          </div>
+
           {/* Dashboard Grid */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '25px' }}>
             <StatCard
@@ -834,6 +902,49 @@ export default function Home() {
             </div>
           </div>
 
+
+          {/* 拡張栄養素カード（fiber/sugar/sodium/potassium） */}
+          {displayMeals.length > 0 && (
+            <div className="glass-panel" style={{ padding: '16px 20px', marginBottom: '25px' }}>
+              <h3 style={{ margin: '0 0 12px 0', fontSize: '0.9rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Flame size={15} color="var(--primary)" /> ダイエット関連栄養素
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                {[
+                  { label: '食物繊維', key: 'fiber', unit: 'g', target: 20, color: '#68D391', tip: '目標20g' },
+                  { label: '糖質', key: 'sugar', unit: 'g', target: null, color: '#FC8181', tip: null },
+                  { label: 'ナトリウム', key: 'sodium', unit: 'mg', target: 2500, color: '#63B3ED', tip: '目標2500mg以下' },
+                  { label: 'カリウム', key: 'potassium', unit: 'mg', target: 2500, color: '#B794F4', tip: '目標2500mg以上' },
+                ].map(({ label, key, unit, target, color, tip }) => {
+                  const val = dayTotals[key];
+                  const hasData = dayTotals[key + 'Recorded'] !== undefined
+                    ? dayTotals[key + 'Recorded'] > 0
+                    : displayMeals.some(m => m.macros?.[key] != null);
+                  const displayVal = hasData ? `${Math.round(val)}${unit}` : '―';
+                  const percent = target && hasData ? Math.min(100, (val / target) * 100) : null;
+                  return (
+                    <div key={key} style={{ background: 'var(--bg-main)', borderRadius: '10px', padding: '10px 12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: percent != null ? '6px' : '0' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{label}</span>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 700, color: hasData ? 'var(--text-primary)' : 'var(--text-muted)' }}>{displayVal}</span>
+                      </div>
+                      {percent != null && (
+                        <div style={{ height: '4px', background: '#EDF2F7', borderRadius: '2px', overflow: 'hidden' }}>
+                          <div style={{ width: `${percent}%`, height: '100%', background: color, borderRadius: '2px', transition: 'width 0.5s ease' }} />
+                        </div>
+                      )}
+                      {tip && hasData && (
+                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '3px' }}>{tip}</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {displayMeals.some(m => m.macros?.fiber == null && m.macros?.sodium == null) && (
+                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '8px 0 0', textAlign: 'right' }}>― は未取得（AI解析時に自動記録されます）</p>
+              )}
+            </div>
+          )}
 
           {/* Meal Timeline - Grouped by Meal Type */}
           <div style={{ marginBottom: '40px' }}>
@@ -1124,6 +1235,10 @@ export default function Home() {
                 <span>P: {selectedMeal.macros?.protein || 0}g</span>
                 <span>F: {selectedMeal.macros?.fat || 0}g</span>
                 <span>C: {selectedMeal.macros?.carbs || 0}g</span>
+                {selectedMeal.macros?.fiber != null && <span>食物繊維: {selectedMeal.macros.fiber}g</span>}
+                {selectedMeal.macros?.sugar != null && <span>糖質: {selectedMeal.macros.sugar}g</span>}
+                {selectedMeal.macros?.sodium != null && <span>Na: {selectedMeal.macros.sodium}mg</span>}
+                {selectedMeal.macros?.potassium != null && <span>K: {selectedMeal.macros.potassium}mg</span>}
               </div>
             </div>
 
@@ -1315,8 +1430,9 @@ export default function Home() {
               activeDate={currentDate}
               initialRecipeSearch={initialRecipeSearch}
               stockItems={stockItems}
-              savedRecipeSearch={recipeSearchState} // Pass persisted search
-              onSaveRecipeSearch={setRecipeSearchState} // Save search callback
+              savedRecipeSearch={recipeSearchState}
+              onSaveRecipeSearch={setRecipeSearchState}
+              recentMeals={recentMealsForLogger}
             />
           </div>
         )

@@ -41,14 +41,18 @@ export async function GET(request) {
                 const p = Number(meal.macros?.protein);
                 const f = Number(meal.macros?.fat);
                 const cb = Number(meal.macros?.carbs);
+                const fiber = meal.macros?.fiber;
+                const sodium = meal.macros?.sodium;
                 return {
                     calories: acc.calories + (isNaN(c) ? 0 : c),
                     protein: acc.protein + (isNaN(p) ? 0 : p),
                     fat: acc.fat + (isNaN(f) ? 0 : f),
                     carbs: acc.carbs + (isNaN(cb) ? 0 : cb),
+                    fiber: fiber != null ? acc.fiber + Number(fiber) : acc.fiber,
+                    sodium: sodium != null ? acc.sodium + Number(sodium) : acc.sodium,
                 };
             },
-            { calories: 0, protein: 0, fat: 0, carbs: 0 }
+            { calories: 0, protein: 0, fat: 0, carbs: 0, fiber: 0, sodium: 0 }
         );
 
         const remaining = targetCalories - totals.calories;
@@ -63,6 +67,19 @@ export async function GET(request) {
         else if (ratio <= 1.2) elenaStatus = 'logic';
         else elenaStatus = 'scold';
 
+        const elenaImageMap = {
+            waiting: '/images/elena/elena_score_20_50.webp',
+            encourage: '/images/elena/elena_score_20_50.webp',
+            normal: '/images/elena.webp',
+            cheer: '/images/elena/elena_score_75_90.webp',
+            logic: '/images/elena/elena_score_20_50.webp',
+            scold: '/images/elena/elena_score_0_20.webp',
+        };
+        const elenaImagePath = elenaImageMap[elenaStatus] || '/images/elena.webp';
+        const host = request.headers.get('host') || '';
+        const proto = host.includes('localhost') ? 'http' : 'https';
+        const elenaImageUrl = `${proto}://${host}${elenaImagePath}`;
+
         return NextResponse.json({
             date: todayStr,
             calories: Math.round(totals.calories),
@@ -72,8 +89,11 @@ export async function GET(request) {
             protein: Math.round(totals.protein),
             fat: Math.round(totals.fat),
             carbs: Math.round(totals.carbs),
+            fiber: Math.round(totals.fiber),
+            sodium: Math.round(totals.sodium),
             mealCount: meals.length,
             elenaStatus,
+            elenaImageUrl,
             weight: latestWeight,
             weightDate: latestWeightDate,
             targetWeight,

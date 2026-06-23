@@ -21,6 +21,14 @@ export const searchAiFood = async (query, historyContext = "") => {
     const isMulti = queries.length > 1;
     const queryListText = queries.map((q, i) => `  ${i + 1}. 「${q}」`).join('\n');
 
+    const EXTENDED_NUTRIENTS_INSTRUCTION = `
+【拡張栄養素（macros内に含める）】
+可能な限り正確な値を推定してください。信頼できるデータがない場合は null を設定（0ではなくnull）。
+- fiber: 食物繊維 (g)
+- sugar: 糖質 (g)（炭水化物から食物繊維を除いた値）
+- sodium: ナトリウム (mg)
+- potassium: カリウム (mg)`;
+
     const prompt = isMulti ? `
 あなたは厳格な栄養データベースです。ユーザーが以下の複数の食事を一度に検索しました。
 ${queryListText}
@@ -35,6 +43,7 @@ ${queryListText}
 【重要: ハルシネーション禁止】
 - 存在しない・曖昧な検索語は推測で捏造せず、近い料理を出すか件数を減らしてください。
 - 店舗メニューは公式情報を優先。
+${EXTENDED_NUTRIENTS_INSTRUCTION}
     `.trim() : `
 あなたは厳格な栄養データベースです。ユーザーが「${queries[0]}」と検索しました。
 実在する、関連性の高い食事候補を10個提案してください。
@@ -46,6 +55,7 @@ ${queryListText}
 【重要: ハルシネーション禁止】
 - 「${queries[0]}」そのものが存在しない・曖昧な場合は、推測で捏造せず、近い料理を出してください。
 - お店のメニューが含まれる場合、公式情報を優先してください。
+${EXTENDED_NUTRIENTS_INSTRUCTION}
     `.trim();
 
     let lastError = null;

@@ -528,10 +528,19 @@ export const addSearchHistory = async (userId, item) => {
         const q = query(historyRef, where("foodName", "==", item.foodName), limit(1));
         const snapshot = await getDocs(q);
 
+        const macrosPayload = cleanData({
+            ...(item.macros || {}),
+            // 拡張栄養素: nullは明示的に保存（0と未取得を区別するため）
+            fiber: item.macros?.fiber !== undefined ? item.macros.fiber : null,
+            sugar: item.macros?.sugar !== undefined ? item.macros.sugar : null,
+            sodium: item.macros?.sodium !== undefined ? item.macros.sodium : null,
+            potassium: item.macros?.potassium !== undefined ? item.macros.potassium : null,
+        });
+
         const payload = cleanData({
             foodName: item.foodName,
             calories: item.calories,
-            macros: item.macros || {},
+            macros: macrosPayload,
             reasoning: item.reasoning || "",
             timestamp: Timestamp.now(),
             searchedAt: new Date().toISOString()
@@ -543,9 +552,8 @@ export const addSearchHistory = async (userId, item) => {
             await updateDoc(docRef, {
                 timestamp: Timestamp.now(),
                 searchedAt: new Date().toISOString(),
-                // Update details if they changed (e.g. refined macros)
                 calories: item.calories,
-                macros: item.macros || {}
+                macros: macrosPayload
             });
         } else {
             await addDoc(historyRef, payload);

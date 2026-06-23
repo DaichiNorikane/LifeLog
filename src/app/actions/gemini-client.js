@@ -70,6 +70,14 @@ export const extractJSONArray = (text) => {
 
 // ========== Shared Schemas ==========
 
+// 拡張栄養素（ダイエット関連）- macrosに含める共通プロパティ
+const EXTENDED_MACROS_PROPERTIES = {
+    fiber: { type: SchemaType.NUMBER, nullable: true },     // 食物繊維 (g)
+    sugar: { type: SchemaType.NUMBER, nullable: true },     // 糖質 (g)
+    sodium: { type: SchemaType.NUMBER, nullable: true },    // ナトリウム (mg)
+    potassium: { type: SchemaType.NUMBER, nullable: true }, // カリウム (mg)
+};
+
 // 食事画像解析スキーマ
 export const FOOD_ANALYSIS_SCHEMA = {
     type: SchemaType.OBJECT,
@@ -82,6 +90,7 @@ export const FOOD_ANALYSIS_SCHEMA = {
                 protein: { type: SchemaType.NUMBER },
                 fat: { type: SchemaType.NUMBER },
                 carbs: { type: SchemaType.NUMBER },
+                ...EXTENDED_MACROS_PROPERTIES,
             },
             required: ["protein", "fat", "carbs"],
         },
@@ -103,6 +112,7 @@ const SUGGESTION_ITEM_SCHEMA = {
                 protein: { type: SchemaType.NUMBER },
                 fat: { type: SchemaType.NUMBER },
                 carbs: { type: SchemaType.NUMBER },
+                ...EXTENDED_MACROS_PROPERTIES,
             },
             required: ["protein", "fat", "carbs"],
         },
@@ -256,6 +266,7 @@ export const RECIPE_HYBRID_SCHEMA = {
                         protein: { type: SchemaType.NUMBER },
                         fat: { type: SchemaType.NUMBER },
                         carbs: { type: SchemaType.NUMBER },
+                        ...EXTENDED_MACROS_PROPERTIES,
                     },
                     required: ["protein", "fat", "carbs"],
                 },
@@ -272,6 +283,7 @@ export const RECIPE_HYBRID_SCHEMA = {
                         protein: { type: SchemaType.NUMBER },
                         fat: { type: SchemaType.NUMBER },
                         carbs: { type: SchemaType.NUMBER },
+                        ...EXTENDED_MACROS_PROPERTIES,
                     },
                     required: ["protein", "fat", "carbs"],
                 },
@@ -295,6 +307,7 @@ export const RECIPE_CALC_SCHEMA = {
                 protein: { type: SchemaType.NUMBER },
                 fat: { type: SchemaType.NUMBER },
                 carbs: { type: SchemaType.NUMBER },
+                ...EXTENDED_MACROS_PROPERTIES,
             },
             required: ["protein", "fat", "carbs"],
         },

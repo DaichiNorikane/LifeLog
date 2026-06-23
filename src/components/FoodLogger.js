@@ -5,16 +5,17 @@ import { analyzeImage } from '@/services/aiService';
 import { searchAiFood } from '@/app/actions/food-search';
 import { calculateRecipeHybrid, calculateRecipeWithGemini, searchRecipesWithGemini } from '@/app/actions/recipe';
 import { useAuth } from '@/lib/contexts/AuthContext';
-import { getRecentMeals, getRecipesFromFirestore, addRecipeToFirestore, deleteRecipeFromFirestore, addSearchHistory, getSearchHistory } from '@/lib/firebase/firestore';
+import { getRecipesFromFirestore, addRecipeToFirestore, deleteRecipeFromFirestore, addSearchHistory, getSearchHistory } from '@/lib/firebase/firestore';
+import { getCache, setCache } from '@/utils/db';
 
-export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRecipeSearch = null, stockItems = [], savedRecipeSearch, onSaveRecipeSearch }) {
+export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRecipeSearch = null, stockItems = [], savedRecipeSearch, onSaveRecipeSearch, recentMeals: recentMealsProp = [] }) {
     const [activeTab, setActiveTab] = useState('camera'); // 'camera', 'search', 'manual', 'review', 'history', 'recipes'
     const [loading, setLoading] = useState(false);
     const { user } = useAuth();
 
-    // Data State
-    const [recentMeals, setRecentMeals] = useState([]); // Renamed from historyItems to avoid confusion
-    const [searchHistory, setSearchHistory] = useState([]); // New: Explicit Search History
+    // Data State - recentMealsはpropsから受け取り（page.jsのキャッシュ済みデータを流用）
+    const recentMeals = recentMealsProp;
+    const [searchHistory, setSearchHistory] = useState([]); // 検索履歴
     const [recipes, setRecipes] = useState([]);
     const [historyContext, setHistoryContext] = useState("");
 
@@ -75,25 +76,40 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
         }
     }, [initialRecipeSearch]);
 
-    // Initial Load
+    // Initial Load - searchHistoryはIndexedDBキャッシュから即座に表示し、Firestoreでバックグラウンド更新
     useEffect(() => {
         const load = async () => {
             if (user) {
-                const [recent, hist, r] = await Promise.all([
-                    getRecentMeals(user.uid),
-                    getSearchHistory(user.uid),
+                const cacheKey = `searchHistory_${user.uid}`;
+
+                // Step1: キャッシュから即座に表示
+                const cached = await getCache(cacheKey);
+                if (cached?.data) {
+                    setSearchHistory(cached.data);
+                }
+
+                // Step2: キャッシュが新鮮なら Firestore スキップ
+                const needsRefresh = !cached || cached.stale;
+                const [hist, r] = await Promise.all([
+                    needsRefresh ? getSearchHistory(user.uid) : Promise.resolve(null),
                     getRecipesFromFirestore(user.uid)
                 ]);
-                setRecentMeals(recent);
-                setSearchHistory(hist);
-                setRecipes(r);
 
-                const names = recent.slice(0, 20).map(i => i.foodName).join(', ');
-                setHistoryContext(names);
+                if (hist) {
+                    setSearchHistory(hist);
+                    setCache(cacheKey, hist).catch(() => {});
+                }
+                setRecipes(r);
             }
         };
         load();
     }, [user]);
+
+    // recentMealsからhistoryContextを生成
+    useEffect(() => {
+        const names = recentMeals.slice(0, 20).map(i => i.foodName).join(', ');
+        setHistoryContext(names);
+    }, [recentMeals]);
 
     // Format date
     const dateStr = activeDate ?
@@ -323,9 +339,11 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
         // Save to History (if not already from history)
         if (type !== 'history' && user && resultData.foodName) {
             await addSearchHistory(user.uid, resultData);
-            // Update local history state
-            const updatedHistory = await getSearchHistory(user.uid);
-            setSearchHistory(updatedHistory);
+            // キャッシュを無効化してバックグラウンドで更新
+            getSearchHistory(user.uid).then(hist => {
+                setSearchHistory(hist);
+                setCache(`searchHistory_${user.uid}`, hist).catch(() => {});
+            });
         }
     };
 
@@ -865,11 +883,18 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                                         </span>
                                                     )}
                                                 </div>
-                                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', gap: '8px' }}>
+                                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                                                     <span>{item.calories} kcal{item.unit && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}> / {item.unit}</span>}</span>
                                                     {item.macros && (
                                                         <span style={{ fontSize: '0.75rem' }}>
                                                             P:{item.macros.protein} F:{item.macros.fat} C:{item.macros.carbs}
+                                                        </span>
+                                                    )}
+                                                    {item.macros && (item.macros.fiber != null || item.macros.sodium != null) && (
+                                                        <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                                                            {item.macros.fiber != null ? `食物繊維:${item.macros.fiber}g` : ''}
+                                                            {item.macros.fiber != null && item.macros.sodium != null ? ' ' : ''}
+                                                            {item.macros.sodium != null ? `Na:${item.macros.sodium}mg` : ''}
                                                         </span>
                                                     )}
                                                 </div>

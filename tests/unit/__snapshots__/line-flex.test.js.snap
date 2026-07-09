@@ -1,0 +1,194 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`LINE meal Flex templates > builds the confirm card 1`] = `
+{
+  "altText": "サラダチキンとおにぎりを記録する？",
+  "contents": {
+    "body": {
+      "contents": [
+        {
+          "size": "xl",
+          "text": "サラダチキンとおにぎり",
+          "type": "text",
+          "weight": "bold",
+          "wrap": true,
+        },
+        {
+          "contents": [
+            {
+              "color": "#F97316",
+              "flex": 0,
+              "size": "xxl",
+              "text": "420 kcal",
+              "type": "text",
+              "weight": "bold",
+            },
+          ],
+          "layout": "baseline",
+          "spacing": "sm",
+          "type": "box",
+        },
+        {
+          "color": "#374151",
+          "size": "sm",
+          "text": "P 28g / F 6g / C 58g",
+          "type": "text",
+          "wrap": true,
+        },
+        {
+          "contents": [
+            {
+              "color": "#6B7280",
+              "flex": 2,
+              "size": "sm",
+              "text": "食事タイプ",
+              "type": "text",
+            },
+            {
+              "flex": 3,
+              "size": "sm",
+              "text": "昼食",
+              "type": "text",
+              "weight": "bold",
+            },
+          ],
+          "layout": "horizontal",
+          "spacing": "sm",
+          "type": "box",
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "md",
+      "type": "box",
+    },
+    "footer": {
+      "contents": [
+        {
+          "action": {
+            "data": "action=save_meal&sid=sid-test",
+            "label": "✅ 記録する",
+            "type": "postback",
+          },
+          "color": "#10B981",
+          "style": "primary",
+          "type": "button",
+        },
+        {
+          "action": {
+            "data": "action=edit_meal&sid=sid-test",
+            "label": "✏️ 修正する",
+            "type": "postback",
+          },
+          "style": "secondary",
+          "type": "button",
+        },
+        {
+          "action": {
+            "data": "action=cancel_meal&sid=sid-test",
+            "label": "❌ やめる",
+            "type": "postback",
+          },
+          "style": "link",
+          "type": "button",
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "sm",
+      "type": "box",
+    },
+    "header": {
+      "backgroundColor": "#111827",
+      "contents": [
+        {
+          "color": "#FFFFFF",
+          "size": "lg",
+          "text": "この内容で記録する？",
+          "type": "text",
+          "weight": "bold",
+        },
+        {
+          "color": "#D1D5DB",
+          "margin": "sm",
+          "size": "sm",
+          "text": "違ってたら直してから保存しよ！✨",
+          "type": "text",
+          "wrap": true,
+        },
+      ],
+      "layout": "vertical",
+      "paddingAll": "16px",
+      "type": "box",
+    },
+    "size": "mega",
+    "type": "bubble",
+  },
+  "type": "flex",
+}
+`;
+
+exports[`LINE meal Flex templates > builds the saved card 1`] = `
+{
+  "altText": "サラダチキンとおにぎりを記録したよ",
+  "contents": {
+    "body": {
+      "contents": [
+        {
+          "color": "#111827",
+          "size": "xl",
+          "text": "記録したよ✅",
+          "type": "text",
+          "weight": "bold",
+        },
+        {
+          "size": "lg",
+          "text": "サラダチキンとおにぎり",
+          "type": "text",
+          "weight": "bold",
+          "wrap": true,
+        },
+        {
+          "contents": [
+            {
+              "color": "#F97316",
+              "flex": 2,
+              "size": "lg",
+              "text": "420 kcal",
+              "type": "text",
+              "weight": "bold",
+            },
+            {
+              "align": "end",
+              "color": "#2563EB",
+              "flex": 2,
+              "size": "md",
+              "text": "Score 8/10",
+              "type": "text",
+              "weight": "bold",
+            },
+          ],
+          "layout": "horizontal",
+          "spacing": "sm",
+          "type": "box",
+        },
+        {
+          "margin": "md",
+          "type": "separator",
+        },
+        {
+          "color": "#374151",
+          "size": "sm",
+          "text": "いい感じ！でも野菜も足したいね✨",
+          "type": "text",
+          "wrap": true,
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "md",
+      "type": "box",
+    },
+    "size": "mega",
+    "type": "bubble",
+  },
+  "type": "flex",
+}
+`;

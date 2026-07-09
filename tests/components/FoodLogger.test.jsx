@@ -52,6 +52,11 @@ vi.mock('@/lib/firebase/firestore', () => ({
 
 vi.mock('@/lib/firebase/config', () => ({ db: {}, auth: {} }));
 
+vi.mock('@/utils/db', () => ({
+  getCache: vi.fn().mockResolvedValue(null),
+  setCache: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('@/app/actions', () => ({
   calculateRecipeHybrid: vi.fn().mockResolvedValue({
     foodName: 'テスト', perServing: { calories: 300, macros: { protein: 15, fat: 10, carbs: 30 } }, totalServings: 2,
@@ -64,11 +69,25 @@ describe('FoodLogger', () => {
     onCancel: vi.fn(),
     activeDate: new Date('2026-04-01'),
     stockItems: [],
+    recentMeals: [
+      { id: 'h1', foodName: '過去の食事1', calories: 400, macros: { protein: 15, fat: 10, carbs: 50 } },
+      { id: 'h2', foodName: '過去の食事2', calories: 350, macros: { protein: 20, fat: 8, carbs: 40 } },
+    ],
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const firestore = await import('@/lib/firebase/firestore');
+    firestore.getRecentMeals.mockResolvedValue([
+      { id: 'h1', foodName: '過去の食事1', calories: 400, macros: { protein: 15, fat: 10, carbs: 50 } },
+      { id: 'h2', foodName: '過去の食事2', calories: 350, macros: { protein: 20, fat: 8, carbs: 40 } },
+    ]);
+    firestore.getSearchHistory.mockResolvedValue([
+      { id: 'sh1', foodName: '検索履歴1', calories: 300, macros: { protein: 10, fat: 5, carbs: 40 } },
+    ]);
+    firestore.getRecipesFromFirestore.mockResolvedValue([
+      { id: 'r1', foodName: 'マイレシピ', calories: 500, macros: { protein: 25, fat: 15, carbs: 60 }, ingredients: '鶏肉', instructions: ['焼く'] },
+    ]);
   });
 
   afterEach(() => {
@@ -153,12 +172,9 @@ describe('FoodLogger', () => {
     const input = screen.getByPlaceholderText('食べたもの');
     fireEvent.change(input, { target: { value: '検索履歴1' } });
 
-    // The debounce is 300ms
-    act(() => { vi.advanceTimersByTime(350); });
-
     await waitFor(() => {
       expect(screen.getByText('検索履歴1')).toBeInTheDocument();
-    });
+    }, { timeout: 1000 });
   });
 
   it('search tab shows no-result hint when query has no matches', async () => {
@@ -168,12 +184,10 @@ describe('FoodLogger', () => {
     const input = screen.getByPlaceholderText('食べたもの');
     fireEvent.change(input, { target: { value: 'zzz存在しない' } });
 
-    act(() => { vi.advanceTimersByTime(350); });
-
     await waitFor(() => {
       expect(screen.getByText(/候補が見つかりませんか/)).toBeInTheDocument();
       expect(screen.getByText(/右上の「AI検索」ボタンを押して/)).toBeInTheDocument();
-    });
+    }, { timeout: 1000 });
   });
 
   it('AI search button calls searchAiFood and displays results', async () => {
@@ -326,7 +340,7 @@ describe('FoodLogger', () => {
     getSearchHistory.mockResolvedValue([]);
     getRecipesFromFirestore.mockResolvedValue([]);
 
-    render(<FoodLogger {...defaultProps} />);
+    render(<FoodLogger {...defaultProps} recentMeals={[]} />);
 
     // Wait for the initial useEffect load to complete
     await act(async () => {

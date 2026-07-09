@@ -15,7 +15,7 @@ import {
     writeBatch,
     Timestamp
 } from "firebase/firestore";
-
+import { cleanData } from "@/utils/cleanData";
 
 // Get User Profile
 export const getUserProfile = async (userId) => {
@@ -35,27 +35,6 @@ export const getUserProfile = async (userId) => {
 
 // Collection reference
 const getMealsConf = (userId) => collection(db, "users", userId, "meals");
-
-// Helper to clean object for Firestore
-const cleanData = (data) => {
-    if (data === null || data === undefined) return null;
-    if (Array.isArray(data)) {
-        return data.map(item => cleanData(item)).filter(item => item !== undefined);
-    }
-    if (typeof data === 'object' && !(data instanceof Date)) {
-        const cleaned = {};
-        Object.keys(data).forEach(key => {
-            const value = cleanData(data[key]);
-            if (value !== undefined) {
-                cleaned[key] = value;
-            }
-        });
-        return cleaned;
-    }
-    // Primitives
-    if (typeof data === 'number' && isNaN(data)) return 0;
-    return data;
-};
 
 // Add a meal
 export const addMealToFirestore = async (userId, meal) => {

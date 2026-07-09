@@ -1,6 +1,6 @@
 "use server";
 import {
-    apiKey, getGenAI, MODELS_TO_TRY, THINKING, createModel, FOOD_SEARCH_SCHEMA
+    apiKey, getGenAI, MODELS_TO_TRY, THINKING, createModel, FOOD_SEARCH_SCHEMA, FOOD_ANALYSIS_SCHEMA
 } from "./gemini-client";
 
 export const searchAiFood = async (query, historyContext = "") => {
@@ -80,3 +80,54 @@ ${EXTENDED_NUTRIENTS_INSTRUCTION}
 };
 
 export const searchFoodWithGemini = searchAiFood;
+
+export const estimateMealFromText = async (description, context = "") => {
+    if (!apiKey) {
+        return { error: "API Key missing" };
+    }
+
+    const mealDescription = String(description || '').trim();
+    const correctionContext = String(context || '').trim();
+    if (!mealDescription) {
+        return { error: "食事内容が空です" };
+    }
+
+    const genAI = getGenAI();
+    const prompt = `
+あなたは厳格な栄養推定AIです。LINEで送られた食事テキストから、1食ぶんの料理名・カロリー・栄養素を推定してください。
+
+【食事内容】
+${mealDescription}
+
+【修正・補足】
+${correctionContext || "特になし"}
+
+【重要】
+- 複数品目が含まれていても、1食として合算してください。
+- 料理名 foodName は、合算内容が伝わる短い名前にしてください。
+- 補足がある場合は必ず優先してください（例: ご飯半分、ドレッシングなし、プロテイン追加）。
+- 根拠の薄い拡張栄養素は null を設定してください。0 と null を混同しないでください。
+
+【拡張栄養素（macros内）】
+- fiber: 食物繊維 (g)
+- sugar: 糖質 (g)
+- sodium: ナトリウム (mg)
+- potassium: カリウム (mg)
+    `.trim();
+
+    let lastError = null;
+    for (const modelName of MODELS_TO_TRY) {
+        try {
+            const model = createModel(genAI, modelName, FOOD_ANALYSIS_SCHEMA, THINKING.OFF);
+            const result = await model.generateContent(prompt);
+            const data = JSON.parse(result.response.text());
+            data.reasoning = `[AI: ${modelName}] ${data.reasoning || ''}`.trim();
+            return data;
+        } catch (e) {
+            console.warn(`Text meal estimate model ${modelName} failed:`, e.message);
+            lastError = e;
+        }
+    }
+
+    return { error: lastError?.message || "全モデルで食事推定に失敗しました" };
+};

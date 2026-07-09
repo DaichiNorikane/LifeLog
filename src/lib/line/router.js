@@ -1,7 +1,8 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { classifyLineIntent } from '@/app/actions/line-intent';
 import { db } from '@/lib/firebase/admin';
-import { replyOrPushMessage, showLoadingAnimation } from '@/lib/line/client';
+import { showLoadingAnimation } from '@/lib/line/client';
+import { handleChatEvent } from '@/lib/line/handlers/chat';
 import { handleFollowEvent, handleLinkCodeEvent } from '@/lib/line/handlers/link';
 import { handleKeywordSuggestEvent, MEAL_KEYWORDS } from '@/lib/line/handlers/keyword-suggest';
 import { handleMealCorrectionEvent, handleMealTextEvent } from '@/lib/line/handlers/meal-text';
@@ -10,11 +11,6 @@ import { handlePostbackEvent } from '@/lib/line/handlers/postback';
 import { handleWeightEvent, parseWeightText } from '@/lib/line/handlers/weight';
 import { resolveUserOrReply } from '@/lib/line/resolveUser';
 import { getActiveLineState } from '@/lib/line/state';
-
-export const OTHER_INTENT_MESSAGE = {
-    type: 'text',
-    text: 'ごめん、まだおしゃべりは練習中なの😢 食べたものを送ってくれたら記録するよ！「カレー食べた」とか、写真でもOK📷',
-};
 
 const isAlreadyExistsError = (error) => {
     const code = String(error?.code || error?.details || '').toLowerCase();
@@ -118,8 +114,8 @@ export const handleLineEvent = async (event) => {
         return { handled: 'meal_text' };
     }
 
-    await replyOrPushMessage(event, OTHER_INTENT_MESSAGE);
-    return { handled: 'other' };
+    await handleChatEvent(event, user, text);
+    return { handled: 'chat' };
 };
 
 export const handleLineEvents = async (events = []) => {

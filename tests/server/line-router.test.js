@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => {
     webhookCreate,
     showLoadingAnimation: vi.fn().mockResolvedValue({ success: true }),
     replyOrPushMessage: vi.fn().mockResolvedValue({ success: true }),
+    handleChatEvent: vi.fn(),
     handleFollowEvent: vi.fn(),
     handleLinkCodeEvent: vi.fn(),
     handleKeywordSuggestEvent: vi.fn(),
@@ -38,6 +39,10 @@ vi.mock('firebase-admin/firestore', () => ({
 vi.mock('@/lib/line/client', () => ({
   showLoadingAnimation: mocks.showLoadingAnimation,
   replyOrPushMessage: mocks.replyOrPushMessage,
+}));
+
+vi.mock('@/lib/line/handlers/chat', () => ({
+  handleChatEvent: mocks.handleChatEvent,
 }));
 
 vi.mock('@/lib/line/handlers/link', () => ({
@@ -152,12 +157,10 @@ describe('LINE router dispatch', () => {
     expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
   });
 
-  it('routes other text to the fixed Elena guide message', async () => {
+  it('routes other text to the Elena chat handler', async () => {
     const event = textEvent('こんにちは');
     await handleLineEvent(event);
-    expect(mocks.replyOrPushMessage).toHaveBeenCalledWith(event, expect.objectContaining({
-      text: expect.stringContaining('まだおしゃべりは練習中'),
-    }));
+    expect(mocks.handleChatEvent).toHaveBeenCalledWith(event, { uid: 'uid-1', data: {} }, 'こんにちは');
   });
 
   it('routes log_meal intent to text meal estimation', async () => {

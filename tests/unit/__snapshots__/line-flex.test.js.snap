@@ -64,6 +64,54 @@ exports[`LINE meal Flex templates > builds the confirm card 1`] = `
     "footer": {
       "contents": [
         {
+          "contents": [
+            {
+              "action": {
+                "data": "action=set_type&sid=sid-test&type=breakfast",
+                "label": "朝",
+                "type": "postback",
+              },
+              "height": "sm",
+              "style": "secondary",
+              "type": "button",
+            },
+            {
+              "action": {
+                "data": "action=set_type&sid=sid-test&type=lunch",
+                "label": "昼",
+                "type": "postback",
+              },
+              "color": "#10B981",
+              "height": "sm",
+              "style": "primary",
+              "type": "button",
+            },
+            {
+              "action": {
+                "data": "action=set_type&sid=sid-test&type=dinner",
+                "label": "夕",
+                "type": "postback",
+              },
+              "height": "sm",
+              "style": "secondary",
+              "type": "button",
+            },
+            {
+              "action": {
+                "data": "action=set_type&sid=sid-test&type=snack",
+                "label": "間食",
+                "type": "postback",
+              },
+              "height": "sm",
+              "style": "secondary",
+              "type": "button",
+            },
+          ],
+          "layout": "horizontal",
+          "spacing": "xs",
+          "type": "box",
+        },
+        {
           "action": {
             "data": "action=save_meal&sid=sid-test",
             "label": "✅ 記録する",
@@ -111,6 +159,100 @@ exports[`LINE meal Flex templates > builds the confirm card 1`] = `
           "margin": "sm",
           "size": "sm",
           "text": "違ってたら直してから保存しよ！✨",
+          "type": "text",
+          "wrap": true,
+        },
+      ],
+      "layout": "vertical",
+      "paddingAll": "16px",
+      "type": "box",
+    },
+    "size": "mega",
+    "type": "bubble",
+  },
+  "type": "flex",
+}
+`;
+
+exports[`LINE meal Flex templates > builds the edit confirmation card 1`] = `
+{
+  "altText": "食事記録を削除する？",
+  "contents": {
+    "body": {
+      "contents": [
+        {
+          "size": "md",
+          "text": "チョコレート(間食/145kcal)を削除",
+          "type": "text",
+          "weight": "bold",
+          "wrap": true,
+        },
+        {
+          "color": "#6B7280",
+          "size": "sm",
+          "text": "対象: 1件",
+          "type": "text",
+        },
+        {
+          "contents": [
+            {
+              "color": "#374151",
+              "size": "sm",
+              "text": "・チョコレート（間食/145kcal）",
+              "type": "text",
+              "wrap": true,
+            },
+          ],
+          "layout": "vertical",
+          "spacing": "xs",
+          "type": "box",
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "md",
+      "type": "box",
+    },
+    "footer": {
+      "contents": [
+        {
+          "action": {
+            "data": "action=apply_edit&sid=sid-edit",
+            "label": "✅ 実行する",
+            "type": "postback",
+          },
+          "color": "#B91C1C",
+          "style": "primary",
+          "type": "button",
+        },
+        {
+          "action": {
+            "data": "action=cancel_edit&sid=sid-edit",
+            "label": "❌ やめる",
+            "type": "postback",
+          },
+          "style": "link",
+          "type": "button",
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "sm",
+      "type": "box",
+    },
+    "header": {
+      "backgroundColor": "#B91C1C",
+      "contents": [
+        {
+          "color": "#FFFFFF",
+          "size": "lg",
+          "text": "本当に削除する？",
+          "type": "text",
+          "weight": "bold",
+        },
+        {
+          "color": "#FEE2E2",
+          "margin": "sm",
+          "size": "sm",
+          "text": "消した記録は戻せないから注意してね⚠️",
           "type": "text",
           "wrap": true,
         },

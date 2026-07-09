@@ -5,6 +5,7 @@ import { showLoadingAnimation } from '@/lib/line/client';
 import { handleChatEvent } from '@/lib/line/handlers/chat';
 import { handleFollowEvent, handleLinkCodeEvent } from '@/lib/line/handlers/link';
 import { handleKeywordSuggestEvent, MEAL_KEYWORDS } from '@/lib/line/handlers/keyword-suggest';
+import { handleMealEditEvent } from '@/lib/line/handlers/meal-edit';
 import { handleMealCorrectionEvent, handleMealTextEvent } from '@/lib/line/handlers/meal-text';
 import { handleMealPhotoEvent } from '@/lib/line/handlers/meal-photo';
 import { handlePostbackEvent } from '@/lib/line/handlers/postback';
@@ -112,6 +113,10 @@ export const handleLineEvent = async (event) => {
     if (intent.intent === 'log_meal') {
         await handleMealTextEvent(event, user, intent.mealDescription || text);
         return { handled: 'meal_text' };
+    }
+    if (intent.intent === 'edit_record') {
+        await handleMealEditEvent(event, user, text);
+        return { handled: 'meal_edit' };
     }
 
     await handleChatEvent(event, user, text);

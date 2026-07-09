@@ -37,6 +37,7 @@ export const getActiveLineState = async (uid, now = Date.now()) => {
 export const setLineState = async (uid, state) => {
     const payload = {
         pendingMeal: state.pendingMeal || null,
+        pendingEdit: state.pendingEdit || null,
         mode: state.mode || null,
         sid: state.sid,
         updatedAt: new Date().toISOString(),

@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => {
     handleFollowEvent: vi.fn(),
     handleLinkCodeEvent: vi.fn(),
     handleKeywordSuggestEvent: vi.fn(),
+    handleMealEditEvent: vi.fn(),
     handleMealCorrectionEvent: vi.fn(),
     handleMealTextEvent: vi.fn(),
     handleMealPhotoEvent: vi.fn(),
@@ -53,6 +54,10 @@ vi.mock('@/lib/line/handlers/link', () => ({
 vi.mock('@/lib/line/handlers/keyword-suggest', () => ({
   MEAL_KEYWORDS: { '朝食': 'breakfast', '昼食': 'lunch', '夕食': 'dinner' },
   handleKeywordSuggestEvent: mocks.handleKeywordSuggestEvent,
+}));
+
+vi.mock('@/lib/line/handlers/meal-edit', () => ({
+  handleMealEditEvent: mocks.handleMealEditEvent,
 }));
 
 vi.mock('@/lib/line/handlers/meal-text', () => ({
@@ -169,6 +174,16 @@ describe('LINE router dispatch', () => {
 
     await handleLineEvent(event);
     expect(mocks.handleMealTextEvent).toHaveBeenCalledWith(event, { uid: 'uid-1', data: {} }, 'サラダチキンとおにぎり');
+  });
+
+  it('routes edit_record intent to meal edit handling', async () => {
+    const event = textEvent('さっきのチョコレートを削除して');
+    mocks.classifyLineIntent.mockResolvedValue({ intent: 'edit_record', mealDescription: null });
+
+    await handleLineEvent(event);
+
+    expect(mocks.handleMealEditEvent).toHaveBeenCalledWith(event, { uid: 'uid-1', data: {} }, 'さっきのチョコレートを削除して');
+    expect(mocks.handleChatEvent).not.toHaveBeenCalled();
   });
 
   it('skips duplicate webhook events', async () => {

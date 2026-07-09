@@ -5,7 +5,29 @@ const macroText = (meal) => {
     return `P ${macros.protein || 0}g / F ${macros.fat || 0}g / C ${macros.carbs || 0}g`;
 };
 
-const postbackData = (action, sid) => new URLSearchParams({ action, sid }).toString();
+const postbackData = (action, sid, extra = {}) => new URLSearchParams({ action, sid, ...extra }).toString();
+
+const TYPE_BUTTONS = [
+    { type: 'breakfast', label: '朝' },
+    { type: 'lunch', label: '昼' },
+    { type: 'dinner', label: '夕' },
+    { type: 'snack', label: '間食' },
+];
+
+const buildTypeButton = (mealType, sid, option) => {
+    const selected = mealType === option.type;
+    return {
+        type: 'button',
+        height: 'sm',
+        style: selected ? 'primary' : 'secondary',
+        ...(selected ? { color: '#10B981' } : {}),
+        action: {
+            type: 'postback',
+            label: option.label,
+            data: postbackData('set_type', sid, { type: option.type }),
+        },
+    };
+};
 
 export const buildMealConfirmFlex = (meal, sid) => ({
     type: 'flex',
@@ -91,6 +113,12 @@ export const buildMealConfirmFlex = (meal, sid) => ({
             layout: 'vertical',
             spacing: 'sm',
             contents: [
+                {
+                    type: 'box',
+                    layout: 'horizontal',
+                    spacing: 'xs',
+                    contents: TYPE_BUTTONS.map(option => buildTypeButton(meal.mealType, sid, option)),
+                },
                 {
                     type: 'button',
                     style: 'primary',

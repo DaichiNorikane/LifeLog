@@ -2,6 +2,11 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '@/lib/firebase/admin';
 import { cleanData } from '@/utils/cleanData';
 
+const VALID_MEAL_TYPES = new Set(['breakfast', 'lunch', 'dinner', 'snack']);
+
+const userRef = (uid) => db.collection('users').doc(uid);
+const mealsRef = (uid) => userRef(uid).collection('meals');
+
 export const findUserByLineId = async (lineUserId) => {
     if (!lineUserId) return null;
     const snapshot = await db.collection('users')
@@ -29,7 +34,7 @@ export const addMealAdmin = async (uid, meal) => {
         createdAt: FieldValue.serverTimestamp(),
     };
 
-    const docRef = await db.collection('users').doc(uid).collection('meals').add(payload);
+    const docRef = await mealsRef(uid).add(payload);
     return docRef.id;
 };
 
@@ -64,12 +69,12 @@ export const addWeightAdmin = async (uid, weight, date = new Date()) => {
         updatedAt: FieldValue.serverTimestamp(),
     };
 
-    await db.collection('users').doc(uid).collection('weights').doc(dateId).set(payload, { merge: true });
+    await userRef(uid).collection('weights').doc(dateId).set(payload, { merge: true });
     return { id: dateId, ...payload };
 };
 
 export const getLatestWeightBefore = async (uid, dateId) => {
-    const snapshot = await db.collection('users').doc(uid).collection('weights')
+    const snapshot = await userRef(uid).collection('weights')
         .where('date', '<', dateId)
         .orderBy('date', 'desc')
         .limit(1)
@@ -84,6 +89,33 @@ const mapSnapshotDocs = (snapshot) => (snapshot?.docs || []).map(doc => ({
     id: doc.id,
     ...(doc.data() || {}),
 }));
+
+const uniqueIds = (ids = []) => [...new Set((ids || []).map(id => String(id || '').trim()).filter(Boolean))];
+
+export const getRecentMealsAdmin = async (uid, { sinceMs = 48 * 60 * 60 * 1000, limit = 30 } = {}) => {
+    const sinceIso = new Date(Date.now() - sinceMs).toISOString();
+    const snapshot = await mealsRef(uid)
+        .where('timestamp', '>=', sinceIso)
+        .orderBy('timestamp', 'desc')
+        .limit(limit)
+        .get();
+    return mapSnapshotDocs(snapshot);
+};
+
+export const deleteMealsAdmin = async (uid, ids = []) => {
+    const idsToDelete = uniqueIds(ids);
+    await Promise.all(idsToDelete.map(id => mealsRef(uid).doc(id).delete()));
+    return idsToDelete.length;
+};
+
+export const updateMealsTypeAdmin = async (uid, ids = [], mealType) => {
+    if (!VALID_MEAL_TYPES.has(mealType)) {
+        throw new Error(`Invalid mealType: ${mealType}`);
+    }
+    const idsToUpdate = uniqueIds(ids);
+    await Promise.all(idsToUpdate.map(id => mealsRef(uid).doc(id).update({ mealType })));
+    return idsToUpdate.length;
+};
 
 // 全食事で値が未取得（null）の場合は 0 ではなく null を返す（null/0の区別を保持）
 const sumMacro = (meals, key) => {
@@ -100,7 +132,7 @@ const sumMacro = (meals, key) => {
 };
 
 export const getLineChatContextAdmin = async (uid, userData = {}, date = new Date()) => {
-    const userRef = db.collection('users').doc(uid);
+    const userDocRef = userRef(uid);
     const { dateId, start, end } = getJstDayRange(date);
 
     const [
@@ -111,21 +143,21 @@ export const getLineChatContextAdmin = async (uid, userData = {}, date = new Dat
         dailyEvalSnap,
         messagesSnap,
     ] = await Promise.all([
-        userRef.get(),
-        userRef.collection('meals')
+        userDocRef.get(),
+        userDocRef.collection('meals')
             .where('timestamp', '>=', start)
             .where('timestamp', '<=', end)
             .get(),
-        userRef.collection('weights')
+        userDocRef.collection('weights')
             .orderBy('date', 'desc')
             .limit(2)
             .get(),
-        userRef.collection('stockItems').get(),
-        userRef.collection('daily_evaluations')
+        userDocRef.collection('stockItems').get(),
+        userDocRef.collection('daily_evaluations')
             .orderBy('createdAt', 'desc')
             .limit(1)
             .get(),
-        userRef.collection('lineMessages')
+        userDocRef.collection('lineMessages')
             .orderBy('createdAt', 'desc')
             .limit(20)
             .get(),
@@ -175,7 +207,7 @@ export const getLineChatContextAdmin = async (uid, userData = {}, date = new Dat
     };
 };
 
-const lineMessagesRef = (uid) => db.collection('users').doc(uid).collection('lineMessages');
+const lineMessagesRef = (uid) => userRef(uid).collection('lineMessages');
 
 export const pruneLineMessagesAdmin = async (uid, maxMessages = 50) => {
     const snapshot = await lineMessagesRef(uid).orderBy('createdAt', 'asc').get();

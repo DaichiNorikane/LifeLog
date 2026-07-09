@@ -41,6 +41,7 @@ vi.mock('firebase-admin/firestore', () => ({
 import {
   getLineChatContextAdmin,
   pruneLineMessagesAdmin,
+  saveLineAssistantMessageAdmin,
   saveLineChatExchangeAdmin,
 } from '@/lib/firebase/adminHelpers';
 
@@ -153,6 +154,20 @@ describe('line chat admin helpers', () => {
       text: '残り1530kcalだから鶏むねで行こ！',
       createdAt: mocks.serverTimestampSentinel,
     });
+  });
+
+  it('saves a standalone assistant line message before pruning history', async () => {
+    mocks.messagesGet.mockResolvedValue({ docs: [] });
+
+    await saveLineAssistantMessageAdmin('uid-1', 'お昼の記録がまだみたい！');
+
+    expect(mocks.messagesAdd).toHaveBeenCalledTimes(1);
+    expect(mocks.messagesAdd).toHaveBeenCalledWith({
+      role: 'assistant',
+      text: 'お昼の記録がまだみたい！',
+      createdAt: mocks.serverTimestampSentinel,
+    });
+    expect(mocks.messagesOrderBy).toHaveBeenCalledWith('createdAt', 'asc');
   });
 
   it('deletes oldest lineMessages when history exceeds 50 messages', async () => {

@@ -233,3 +233,12 @@ export const saveLineChatExchangeAdmin = async (uid, userText, assistantText) =>
     });
     await pruneLineMessagesAdmin(uid, 50);
 };
+
+export const saveLineAssistantMessageAdmin = async (uid, text) => {
+    await lineMessagesRef(uid).add({
+        role: 'assistant',
+        text: String(text || ''),
+        createdAt: FieldValue.serverTimestamp(),
+    });
+    await pruneLineMessagesAdmin(uid, 50);
+};

@@ -38,4 +38,24 @@ describe('classifyLineIntent', () => {
     expect(schema.properties.intent.enum).toContain('edit_record');
     expect(mocks.generateContent.mock.calls[0][0]).toContain('削除');
   });
+
+  it('keeps food cravings as other instead of log_meal', async () => {
+    mocks.generateContent.mockResolvedValue(makeResponse({ intent: 'other', mealDescription: null }));
+
+    const result = await classifyLineIntent('唐揚げ食べたい');
+
+    expect(result).toEqual({ intent: 'other', mealDescription: null });
+    const prompt = mocks.generateContent.mock.calls[0][0];
+    expect(prompt).toContain('唐揚げ食べたい');
+    expect(prompt).toContain('「唐揚げ食べたい」→ other');
+    expect(prompt).toContain('「唐揚げ食べた」→ log_meal');
+  });
+
+  it('keeps completed meal reports as log_meal', async () => {
+    mocks.generateContent.mockResolvedValue(makeResponse({ intent: 'log_meal', mealDescription: '唐揚げ' }));
+
+    const result = await classifyLineIntent('唐揚げ食べた');
+
+    expect(result).toEqual({ intent: 'log_meal', mealDescription: '唐揚げ' });
+  });
 });

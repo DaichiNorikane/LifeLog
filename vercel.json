@@ -23,6 +23,18 @@
         {
             "path": "/api/cron/weekly-summary",
             "schedule": "0 23 * * 0"
+        },
+        {
+            "path": "/api/cron/meal-nudge/breakfast",
+            "schedule": "30 0 * * *"
+        },
+        {
+            "path": "/api/cron/meal-nudge/lunch",
+            "schedule": "30 4 * * *"
+        },
+        {
+            "path": "/api/cron/meal-nudge/dinner",
+            "schedule": "0 11 * * *"
         }
     ]
 }

@@ -91,4 +91,23 @@ describe('line chat prompt guardrails', () => {
     expect(prompt).toContain('写真か');
     expect(prompt).toContain('◯◯食べた');
   });
+
+  it('includes the mood-based meal suggestion instructions in the prompt', async () => {
+    mocks.generateContent.mockResolvedValue(makeTextResponse('OK'));
+
+    await generateElenaChatReply({
+      ...chatContext,
+      userText: 'ラーメンの気分。ちょっと疲れてる',
+      messageHistory: [
+        { role: 'assistant', text: 'これからなら、今の体調と気分、食べたいものを教えて！' },
+      ],
+    });
+
+    const prompt = mocks.generateContent.mock.calls[0][0];
+    expect(prompt).toContain('食事予定・気分への提案ルール');
+    expect(prompt).toContain('食べたい気持ちに共感');
+    expect(prompt).toContain('現実的なメニューを2〜3個');
+    expect(prompt).toContain('我慢一辺倒の提案はしない');
+    expect(prompt).toContain('食べたら写真か一言で送ってね');
+  });
 });

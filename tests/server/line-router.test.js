@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => {
     showLoadingAnimation: vi.fn().mockResolvedValue({ success: true }),
     replyOrPushMessage: vi.fn().mockResolvedValue({ success: true }),
     handleChatEvent: vi.fn(),
+    handleDailySummaryEvent: vi.fn(),
     handleFollowEvent: vi.fn(),
     handleLinkCodeEvent: vi.fn(),
     handleKeywordSuggestEvent: vi.fn(),
@@ -45,6 +46,14 @@ vi.mock('@/lib/line/client', () => ({
 vi.mock('@/lib/line/handlers/chat', () => ({
   handleChatEvent: mocks.handleChatEvent,
 }));
+
+vi.mock('@/lib/line/handlers/daily-summary', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    handleDailySummaryEvent: mocks.handleDailySummaryEvent,
+  };
+});
 
 vi.mock('@/lib/line/handlers/link', () => ({
   handleFollowEvent: mocks.handleFollowEvent,
@@ -150,6 +159,20 @@ describe('LINE router dispatch', () => {
     expect(classifyTextRoute('朝食')).toEqual({ type: 'keyword', targetType: 'breakfast' });
     await handleLineEvent(event);
     expect(mocks.handleKeywordSuggestEvent).toHaveBeenCalledWith(event, 'breakfast');
+  });
+
+  it('routes summary keywords to the daily summary handler', async () => {
+    expect(classifyTextRoute('サマリー')).toEqual({ type: 'summary' });
+    expect(classifyTextRoute('今日のカロリー')).toEqual({ type: 'summary' });
+    expect(classifyTextRoute('今日の栄養は？')).toEqual({ type: 'summary' });
+    expect(classifyTextRoute('グラフ')).toEqual({ type: 'summary' });
+    // 食事記録の発話には誤爆しない
+    expect(classifyTextRoute('カロリーメイト食べた')).toEqual({ type: 'intent' });
+
+    const event = textEvent('サマリー');
+    await handleLineEvent(event);
+    expect(mocks.handleDailySummaryEvent).toHaveBeenCalledWith(event, { uid: 'uid-1', data: {} });
+    expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
   });
 
   it('routes awaiting correction state before Gemini intent classification', async () => {

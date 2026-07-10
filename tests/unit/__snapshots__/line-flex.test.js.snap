@@ -171,6 +171,370 @@ exports[`LINE meal Flex templates > builds the confirm card 1`] = `
 }
 `;
 
+exports[`LINE meal Flex templates > builds the daily summary card 1`] = `
+{
+  "altText": "今日の栄養サマリー: 1250 / 2000kcal",
+  "contents": {
+    "body": {
+      "contents": [
+        {
+          "contents": [
+            {
+              "color": "#6B7280",
+              "flex": 4,
+              "gravity": "bottom",
+              "size": "sm",
+              "text": "カロリー",
+              "type": "text",
+            },
+            {
+              "align": "end",
+              "color": "#F97316",
+              "flex": 6,
+              "size": "lg",
+              "text": "1250 / 2000kcal",
+              "type": "text",
+              "weight": "bold",
+            },
+          ],
+          "layout": "horizontal",
+          "type": "box",
+        },
+        {
+          "backgroundColor": "#EDF2F7",
+          "contents": [
+            {
+              "backgroundColor": "#10B981",
+              "contents": [
+                {
+                  "type": "filler",
+                },
+              ],
+              "cornerRadius": "4px",
+              "height": "8px",
+              "layout": "vertical",
+              "type": "box",
+              "width": "63%",
+            },
+          ],
+          "cornerRadius": "4px",
+          "height": "8px",
+          "layout": "vertical",
+          "margin": "sm",
+          "type": "box",
+        },
+        {
+          "color": "#6B7280",
+          "margin": "sm",
+          "size": "xs",
+          "text": "残り 750kcal 食べられます🍽️",
+          "type": "text",
+        },
+        {
+          "margin": "lg",
+          "type": "separator",
+        },
+        {
+          "contents": [
+            {
+              "contents": [
+                {
+                  "color": "#6B7280",
+                  "flex": 5,
+                  "size": "sm",
+                  "text": "タンパク質 P",
+                  "type": "text",
+                },
+                {
+                  "align": "end",
+                  "color": "#374151",
+                  "flex": 5,
+                  "size": "sm",
+                  "text": "60 / 100g",
+                  "type": "text",
+                  "weight": "bold",
+                },
+              ],
+              "layout": "horizontal",
+              "type": "box",
+            },
+            {
+              "backgroundColor": "#EDF2F7",
+              "contents": [
+                {
+                  "backgroundColor": "#48BB78",
+                  "contents": [
+                    {
+                      "type": "filler",
+                    },
+                  ],
+                  "cornerRadius": "4px",
+                  "height": "8px",
+                  "layout": "vertical",
+                  "type": "box",
+                  "width": "60%",
+                },
+              ],
+              "cornerRadius": "4px",
+              "height": "8px",
+              "layout": "vertical",
+              "margin": "sm",
+              "type": "box",
+            },
+          ],
+          "layout": "vertical",
+          "margin": "lg",
+          "type": "box",
+        },
+        {
+          "contents": [
+            {
+              "contents": [
+                {
+                  "color": "#6B7280",
+                  "flex": 5,
+                  "size": "sm",
+                  "text": "脂質 F",
+                  "type": "text",
+                },
+                {
+                  "align": "end",
+                  "color": "#374151",
+                  "flex": 5,
+                  "size": "sm",
+                  "text": "35 / 67g",
+                  "type": "text",
+                  "weight": "bold",
+                },
+              ],
+              "layout": "horizontal",
+              "type": "box",
+            },
+            {
+              "backgroundColor": "#EDF2F7",
+              "contents": [
+                {
+                  "backgroundColor": "#ECC94B",
+                  "contents": [
+                    {
+                      "type": "filler",
+                    },
+                  ],
+                  "cornerRadius": "4px",
+                  "height": "8px",
+                  "layout": "vertical",
+                  "type": "box",
+                  "width": "52%",
+                },
+              ],
+              "cornerRadius": "4px",
+              "height": "8px",
+              "layout": "vertical",
+              "margin": "sm",
+              "type": "box",
+            },
+          ],
+          "layout": "vertical",
+          "margin": "lg",
+          "type": "box",
+        },
+        {
+          "contents": [
+            {
+              "contents": [
+                {
+                  "color": "#6B7280",
+                  "flex": 5,
+                  "size": "sm",
+                  "text": "炭水化物 C",
+                  "type": "text",
+                },
+                {
+                  "align": "end",
+                  "color": "#374151",
+                  "flex": 5,
+                  "size": "sm",
+                  "text": "150 / 250g",
+                  "type": "text",
+                  "weight": "bold",
+                },
+              ],
+              "layout": "horizontal",
+              "type": "box",
+            },
+            {
+              "backgroundColor": "#EDF2F7",
+              "contents": [
+                {
+                  "backgroundColor": "#4299E1",
+                  "contents": [
+                    {
+                      "type": "filler",
+                    },
+                  ],
+                  "cornerRadius": "4px",
+                  "height": "8px",
+                  "layout": "vertical",
+                  "type": "box",
+                  "width": "60%",
+                },
+              ],
+              "cornerRadius": "4px",
+              "height": "8px",
+              "layout": "vertical",
+              "margin": "sm",
+              "type": "box",
+            },
+          ],
+          "layout": "vertical",
+          "margin": "lg",
+          "type": "box",
+        },
+        {
+          "margin": "lg",
+          "type": "separator",
+        },
+        {
+          "contents": [
+            {
+              "contents": [
+                {
+                  "color": "#6B7280",
+                  "flex": 5,
+                  "size": "xs",
+                  "text": "食物繊維",
+                  "type": "text",
+                },
+                {
+                  "align": "end",
+                  "color": "#374151",
+                  "flex": 4,
+                  "size": "xs",
+                  "text": "8g",
+                  "type": "text",
+                  "weight": "bold",
+                },
+              ],
+              "flex": 1,
+              "layout": "horizontal",
+              "type": "box",
+            },
+            {
+              "contents": [
+                {
+                  "color": "#6B7280",
+                  "flex": 5,
+                  "size": "xs",
+                  "text": "糖質",
+                  "type": "text",
+                },
+                {
+                  "align": "end",
+                  "color": "#374151",
+                  "flex": 4,
+                  "size": "xs",
+                  "text": "―",
+                  "type": "text",
+                  "weight": "bold",
+                },
+              ],
+              "flex": 1,
+              "layout": "horizontal",
+              "type": "box",
+            },
+          ],
+          "layout": "horizontal",
+          "margin": "lg",
+          "spacing": "lg",
+          "type": "box",
+        },
+        {
+          "contents": [
+            {
+              "contents": [
+                {
+                  "color": "#6B7280",
+                  "flex": 5,
+                  "size": "xs",
+                  "text": "ナトリウム",
+                  "type": "text",
+                },
+                {
+                  "align": "end",
+                  "color": "#374151",
+                  "flex": 4,
+                  "size": "xs",
+                  "text": "2100mg",
+                  "type": "text",
+                  "weight": "bold",
+                },
+              ],
+              "flex": 1,
+              "layout": "horizontal",
+              "type": "box",
+            },
+            {
+              "contents": [
+                {
+                  "color": "#6B7280",
+                  "flex": 5,
+                  "size": "xs",
+                  "text": "カリウム",
+                  "type": "text",
+                },
+                {
+                  "align": "end",
+                  "color": "#374151",
+                  "flex": 4,
+                  "size": "xs",
+                  "text": "―",
+                  "type": "text",
+                  "weight": "bold",
+                },
+              ],
+              "flex": 1,
+              "layout": "horizontal",
+              "type": "box",
+            },
+          ],
+          "layout": "horizontal",
+          "margin": "md",
+          "spacing": "lg",
+          "type": "box",
+        },
+      ],
+      "layout": "vertical",
+      "type": "box",
+    },
+    "header": {
+      "backgroundColor": "#111827",
+      "contents": [
+        {
+          "color": "#FFFFFF",
+          "size": "lg",
+          "text": "今日の栄養サマリー📊",
+          "type": "text",
+          "weight": "bold",
+        },
+        {
+          "color": "#D1D5DB",
+          "margin": "sm",
+          "size": "sm",
+          "text": "2026-07-10・記録3件",
+          "type": "text",
+        },
+      ],
+      "layout": "vertical",
+      "paddingAll": "16px",
+      "type": "box",
+    },
+    "size": "mega",
+    "type": "bubble",
+  },
+  "type": "flex",
+}
+`;
+
 exports[`LINE meal Flex templates > builds the edit confirmation card 1`] = `
 {
   "altText": "食事記録を削除しますか？",

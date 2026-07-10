@@ -3,6 +3,7 @@ import { classifyLineIntent } from '@/app/actions/line-intent';
 import { db } from '@/lib/firebase/admin';
 import { showLoadingAnimation } from '@/lib/line/client';
 import { handleChatEvent } from '@/lib/line/handlers/chat';
+import { handleDailySummaryEvent, isDailySummaryText } from '@/lib/line/handlers/daily-summary';
 import { handleFollowEvent, handleLinkCodeEvent } from '@/lib/line/handlers/link';
 import { handleKeywordSuggestEvent, MEAL_KEYWORDS } from '@/lib/line/handlers/keyword-suggest';
 import { handleMealEditEvent } from '@/lib/line/handlers/meal-edit';
@@ -44,6 +45,7 @@ export const classifyTextRoute = (text, state = null) => {
     if (weight !== null) return { type: 'weight', weight };
 
     if (MEAL_KEYWORDS[trimmed]) return { type: 'keyword', targetType: MEAL_KEYWORDS[trimmed] };
+    if (isDailySummaryText(trimmed)) return { type: 'summary' };
     if (state?.mode === 'awaiting_correction') return { type: 'correction' };
     return { type: 'intent' };
 };
@@ -101,6 +103,11 @@ export const handleLineEvent = async (event) => {
 
     const user = await resolveUserOrReply(event);
     if (!user) return { handled: 'link_required' };
+
+    if (route.type === 'summary') {
+        await handleDailySummaryEvent(event, user);
+        return { handled: 'summary' };
+    }
 
     const state = await getActiveLineState(user.uid);
     const stateAwareRoute = classifyTextRoute(text, state);

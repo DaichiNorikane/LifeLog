@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { buildDailySummaryFlex } from '@/lib/line/flex/dailySummary';
 import { buildEditConfirmFlex } from '@/lib/line/flex/editConfirm';
 import { buildMealConfirmFlex } from '@/lib/line/flex/mealConfirm';
 import { buildMealSavedFlex } from '@/lib/line/flex/mealSaved';
@@ -60,5 +61,15 @@ describe('LINE meal Flex templates', () => {
 
   it('builds the saved card', () => {
     expect(buildMealSavedFlex(meal, { score: 8, reason: 'いい感じ！でも野菜も足したいね✨' })).toMatchSnapshot();
+  });
+
+  it('builds the daily summary card', () => {
+    expect(buildDailySummaryFlex({
+      dateId: '2026-07-10',
+      totalCalories: 1250,
+      targetCalories: 2000,
+      totalMacros: { protein: 60, fat: 35, carbs: 150, fiber: 8, sugar: null, sodium: 2100, potassium: null },
+      mealsCount: 3,
+    })).toMatchSnapshot();
   });
 });

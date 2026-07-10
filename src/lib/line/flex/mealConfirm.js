@@ -8,12 +8,14 @@ const macroText = (meal) => {
 const postbackData = (action, sid, extra = {}) => new URLSearchParams({ action, sid, ...extra }).toString();
 
 const TYPE_BUTTONS = [
-    { type: 'breakfast', label: '朝' },
-    { type: 'lunch', label: '昼' },
-    { type: 'dinner', label: '夕' },
-    { type: 'snack', label: '間食' },
+    { type: 'breakfast', label: '朝で記録' },
+    { type: 'lunch', label: '昼で記録' },
+    { type: 'dinner', label: '夕で記録' },
+    { type: 'snack', label: '間食で記録' },
 ];
 
+// タイプボタンはタップした時点でそのタイプとして即保存する
+// （LINEは送信済みメッセージを書き換えられないため、選択→確定の2段階にするとカードが増殖する）
 const buildTypeButton = (mealType, sid, option) => {
     const selected = mealType === option.type;
     return {
@@ -24,7 +26,7 @@ const buildTypeButton = (mealType, sid, option) => {
         action: {
             type: 'postback',
             label: option.label,
-            data: postbackData('set_type', sid, { type: option.type }),
+            data: postbackData('save_meal', sid, { type: option.type }),
         },
     };
 };
@@ -50,7 +52,7 @@ export const buildMealConfirmFlex = (meal, sid) => ({
                 },
                 {
                     type: 'text',
-                    text: '違っていたら直してから保存しましょう！✨',
+                    text: '食事タイプのボタンを押すと、そのタイプで記録します✨ 内容が違っていたら「修正する」からどうぞ！',
                     color: '#D1D5DB',
                     size: 'sm',
                     margin: 'sm',
@@ -117,17 +119,13 @@ export const buildMealConfirmFlex = (meal, sid) => ({
                     type: 'box',
                     layout: 'horizontal',
                     spacing: 'xs',
-                    contents: TYPE_BUTTONS.map(option => buildTypeButton(meal.mealType, sid, option)),
+                    contents: TYPE_BUTTONS.slice(0, 2).map(option => buildTypeButton(meal.mealType, sid, option)),
                 },
                 {
-                    type: 'button',
-                    style: 'primary',
-                    color: '#10B981',
-                    action: {
-                        type: 'postback',
-                        label: '✅ 記録する',
-                        data: postbackData('save_meal', sid),
-                    },
+                    type: 'box',
+                    layout: 'horizontal',
+                    spacing: 'xs',
+                    contents: TYPE_BUTTONS.slice(2).map(option => buildTypeButton(meal.mealType, sid, option)),
                 },
                 {
                     type: 'button',

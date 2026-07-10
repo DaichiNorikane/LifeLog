@@ -2,6 +2,8 @@ import { evaluateSingleMeal } from '@/app/actions/daily-evaluation';
 import {
     addMealAdmin,
     deleteMealsAdmin,
+    getLineChatContextAdmin,
+    saveLineChatExchangeAdmin,
     updateMealsTypeAdmin,
 } from '@/lib/firebase/adminHelpers';
 import { replyOrPushMessage } from '@/lib/line/client';
@@ -107,24 +109,6 @@ export const handlePostbackEvent = async (event) => {
         return;
     }
 
-    if (action === 'set_type') {
-        if (!MEAL_TYPE_LABELS[type]) {
-            await replyOrPushMessage(event, EXPIRED_CARD_MESSAGE);
-            return;
-        }
-        const updatedMeal = {
-            ...state.pendingMeal,
-            mealType: type,
-        };
-        await setLineState(user.uid, {
-            pendingMeal: updatedMeal,
-            mode: state.mode,
-            sid: state.sid,
-        });
-        await replyOrPushMessage(event, buildMealConfirmFlex(updatedMeal, state.sid));
-        return;
-    }
-
     if (action === 'edit_meal') {
         await setLineState(user.uid, {
             pendingMeal: state.pendingMeal,
@@ -147,19 +131,21 @@ export const handlePostbackEvent = async (event) => {
         return;
     }
 
-    if (action !== 'save_meal') {
+    // 'set_type' はデプロイ前に送信済みの旧カード用（現在はタイプボタンも即保存）
+    if (action !== 'save_meal' && action !== 'set_type') {
         await replyOrPushMessage(event, EXPIRED_CARD_MESSAGE);
         return;
     }
 
     const meal = {
         ...state.pendingMeal,
+        ...(MEAL_TYPE_LABELS[type] ? { mealType: type } : {}),
         timestamp: new Date().toISOString(),
         image: null,
     };
 
     try {
-        await addMealAdmin(user.uid, meal);
+        meal.id = await addMealAdmin(user.uid, meal);
         await clearLineState(user.uid);
     } catch (e) {
         console.error("Meal save failed:", e);
@@ -170,10 +156,18 @@ export const handlePostbackEvent = async (event) => {
         return;
     }
 
+    const mealTypeLabel = MEAL_TYPE_LABELS[meal.mealType] || '食事';
+    let replyText = `${mealTypeLabel}に記録しました✅`;
+
     try {
-        const evaluation = await evaluateSingleMeal(meal);
+        const context = await getLineChatContextAdmin(user.uid, user.data || {});
+        const evaluation = await evaluateSingleMeal(meal, context.today?.meals || [], {
+            messageHistory: context.messageHistory || [],
+        });
         if (!evaluation?.error && evaluation?.score != null && evaluation?.reason) {
             await replyOrPushMessage(event, buildMealSavedFlex(meal, evaluation));
+            replyText = evaluation.reason;
+            await saveMealExchangeToHistory(user.uid, meal, mealTypeLabel, replyText);
             return;
         }
     } catch (e) {
@@ -182,6 +176,20 @@ export const handlePostbackEvent = async (event) => {
 
     await replyOrPushMessage(event, {
         type: 'text',
-        text: '記録しました✅',
+        text: replyText,
     });
+    await saveMealExchangeToHistory(user.uid, meal, mealTypeLabel, replyText);
+};
+
+// 記録イベントをチャット履歴に残し、以降の自由チャットが記録の文脈を把握できるようにする
+const saveMealExchangeToHistory = async (uid, meal, mealTypeLabel, assistantText) => {
+    try {
+        await saveLineChatExchangeAdmin(
+            uid,
+            `（食事を記録: ${meal.foodName} ${meal.calories}kcal / ${mealTypeLabel}）`,
+            assistantText,
+        );
+    } catch (e) {
+        console.warn("Meal exchange history save failed:", e.message);
+    }
 };

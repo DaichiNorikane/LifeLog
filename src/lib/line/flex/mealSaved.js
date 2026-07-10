@@ -1,3 +1,5 @@
+import { MEAL_TYPE_LABELS } from '@/lib/line/mealUtils';
+
 export const buildMealSavedFlex = (meal, evaluation) => ({
     type: 'flex',
     altText: `${meal.foodName}を記録しました`,
@@ -11,7 +13,7 @@ export const buildMealSavedFlex = (meal, evaluation) => ({
             contents: [
                 {
                     type: 'text',
-                    text: '記録しました✅',
+                    text: `${MEAL_TYPE_LABELS[meal.mealType] || '食事'}に記録しました✅`,
                     weight: 'bold',
                     size: 'xl',
                     color: '#111827',

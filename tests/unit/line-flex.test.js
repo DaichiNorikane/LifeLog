@@ -23,24 +23,27 @@ describe('LINE meal Flex templates', () => {
     expect(buildMealConfirmFlex(meal, 'sid-test')).toMatchSnapshot();
   });
 
-  it('builds the confirm card with type switch buttons', () => {
+  it('builds the confirm card with direct-save type buttons', () => {
     const flex = buildMealConfirmFlex(meal, 'sid-test');
-    const typeRow = flex.contents.footer.contents[0];
+    const typeRowTop = flex.contents.footer.contents[0];
+    const typeRowBottom = flex.contents.footer.contents[1];
 
-    expect(typeRow.layout).toBe('horizontal');
-    expect(typeRow.contents).toHaveLength(4);
-    expect(typeRow.contents.map(button => button.action.data)).toEqual([
-      'action=set_type&sid=sid-test&type=breakfast',
-      'action=set_type&sid=sid-test&type=lunch',
-      'action=set_type&sid=sid-test&type=dinner',
-      'action=set_type&sid=sid-test&type=snack',
+    expect(typeRowTop.layout).toBe('horizontal');
+    expect(typeRowTop.contents).toHaveLength(2);
+    expect(typeRowBottom.contents).toHaveLength(2);
+    const allButtons = [...typeRowTop.contents, ...typeRowBottom.contents];
+    expect(allButtons.map(button => button.action.data)).toEqual([
+      'action=save_meal&sid=sid-test&type=breakfast',
+      'action=save_meal&sid=sid-test&type=lunch',
+      'action=save_meal&sid=sid-test&type=dinner',
+      'action=save_meal&sid=sid-test&type=snack',
     ]);
-    expect(typeRow.contents[1]).toEqual(expect.objectContaining({
+    expect(allButtons[1]).toEqual(expect.objectContaining({
       height: 'sm',
       style: 'primary',
       color: '#10B981',
     }));
-    expect(typeRow.contents[0]).toEqual(expect.objectContaining({
+    expect(allButtons[0]).toEqual(expect.objectContaining({
       height: 'sm',
       style: 'secondary',
     }));

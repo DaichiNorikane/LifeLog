@@ -67,8 +67,8 @@ exports[`LINE meal Flex templates > builds the confirm card 1`] = `
           "contents": [
             {
               "action": {
-                "data": "action=set_type&sid=sid-test&type=breakfast",
-                "label": "朝",
+                "data": "action=save_meal&sid=sid-test&type=breakfast",
+                "label": "朝で記録",
                 "type": "postback",
               },
               "height": "sm",
@@ -77,8 +77,8 @@ exports[`LINE meal Flex templates > builds the confirm card 1`] = `
             },
             {
               "action": {
-                "data": "action=set_type&sid=sid-test&type=lunch",
-                "label": "昼",
+                "data": "action=save_meal&sid=sid-test&type=lunch",
+                "label": "昼で記録",
                 "type": "postback",
               },
               "color": "#10B981",
@@ -86,10 +86,17 @@ exports[`LINE meal Flex templates > builds the confirm card 1`] = `
               "style": "primary",
               "type": "button",
             },
+          ],
+          "layout": "horizontal",
+          "spacing": "xs",
+          "type": "box",
+        },
+        {
+          "contents": [
             {
               "action": {
-                "data": "action=set_type&sid=sid-test&type=dinner",
-                "label": "夕",
+                "data": "action=save_meal&sid=sid-test&type=dinner",
+                "label": "夕で記録",
                 "type": "postback",
               },
               "height": "sm",
@@ -98,8 +105,8 @@ exports[`LINE meal Flex templates > builds the confirm card 1`] = `
             },
             {
               "action": {
-                "data": "action=set_type&sid=sid-test&type=snack",
-                "label": "間食",
+                "data": "action=save_meal&sid=sid-test&type=snack",
+                "label": "間食で記録",
                 "type": "postback",
               },
               "height": "sm",
@@ -110,16 +117,6 @@ exports[`LINE meal Flex templates > builds the confirm card 1`] = `
           "layout": "horizontal",
           "spacing": "xs",
           "type": "box",
-        },
-        {
-          "action": {
-            "data": "action=save_meal&sid=sid-test",
-            "label": "✅ 記録する",
-            "type": "postback",
-          },
-          "color": "#10B981",
-          "style": "primary",
-          "type": "button",
         },
         {
           "action": {
@@ -158,7 +155,7 @@ exports[`LINE meal Flex templates > builds the confirm card 1`] = `
           "color": "#D1D5DB",
           "margin": "sm",
           "size": "sm",
-          "text": "違っていたら直してから保存しましょう！✨",
+          "text": "食事タイプのボタンを押すと、そのタイプで記録します✨ 内容が違っていたら「修正する」からどうぞ！",
           "type": "text",
           "wrap": true,
         },
@@ -277,7 +274,7 @@ exports[`LINE meal Flex templates > builds the saved card 1`] = `
         {
           "color": "#111827",
           "size": "xl",
-          "text": "記録しました✅",
+          "text": "昼食に記録しました✅",
           "type": "text",
           "weight": "bold",
         },

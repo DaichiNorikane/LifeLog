@@ -206,9 +206,21 @@ ${data.historySummary || "履歴なし"}
     return { error: "Failed to evaluate log" };
 };
 
-export const evaluateSingleMeal = async (meal, contextMeals = []) => {
+export const evaluateSingleMeal = async (meal, contextMeals = [], options = {}) => {
     if (!apiKey) return { error: "API Key missing", score: 5, reason: "APIキーなし" };
     const genAI = getGenAI();
+
+    // LINE経由の場合は直近の会話履歴を渡し、チャットの流れと矛盾しないコメントにする
+    const messageHistory = Array.isArray(options.messageHistory) ? options.messageHistory : [];
+    const historyInfo = messageHistory.length
+        ? `
+【直近のLINE会話履歴（古い順）】
+${messageHistory.map(m => `${m.role === 'assistant' ? 'エレナ' : 'ユーザー'}: ${m.text}`).join('\n')}
+
+**会話ルール**: 上の会話の流れを必ず踏まえてコメントしてください。
+- 事前にユーザーが「食べたいもの」を相談していて、あなたが条件付きでOKを出していた場合、その提案に沿った選択なら「約束通りにできたこと」をまず褒めてください。頭ごなしに叱るのは禁止です。
+- 会話と関係ない食事なら、通常通り評価してください。`
+        : '';
 
     const otherMealsInSameMeal = contextMeals.filter(m =>
         m.id !== meal.id && m.mealType === meal.mealType
@@ -246,6 +258,7 @@ ${ELENA_PERSONA}
 - PFC: P${meal.macros?.protein || 0}g / F${meal.macros?.fat || 0}g / C${meal.macros?.carbs || 0}g
 - 時間帯: ${mealTypeLabel}
 ${contextInfo}
+${historyInfo}
 
 【採点基準 (0-10点)】
 - **10点**: 完璧。「完璧です！美味しそう〜✨」

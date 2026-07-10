@@ -4,6 +4,11 @@ const mocks = vi.hoisted(() => ({
   addMealAdmin: vi.fn().mockResolvedValue('meal-1'),
   deleteMealsAdmin: vi.fn().mockResolvedValue(1),
   updateMealsTypeAdmin: vi.fn().mockResolvedValue(1),
+  getLineChatContextAdmin: vi.fn().mockResolvedValue({
+    today: { meals: [] },
+    messageHistory: [{ role: 'user', text: 'カップヌードルが食べたい' }],
+  }),
+  saveLineChatExchangeAdmin: vi.fn().mockResolvedValue(undefined),
   evaluateSingleMeal: vi.fn().mockResolvedValue({ score: 8, reason: 'いい感じ！' }),
   replyOrPushMessage: vi.fn().mockResolvedValue({ success: true }),
   resolveUserOrReply: vi.fn().mockResolvedValue({ uid: 'uid-1', data: {} }),
@@ -20,6 +25,8 @@ vi.mock('@/lib/firebase/adminHelpers', () => ({
   addMealAdmin: mocks.addMealAdmin,
   deleteMealsAdmin: mocks.deleteMealsAdmin,
   updateMealsTypeAdmin: mocks.updateMealsTypeAdmin,
+  getLineChatContextAdmin: mocks.getLineChatContextAdmin,
+  saveLineChatExchangeAdmin: mocks.saveLineChatExchangeAdmin,
 }));
 
 vi.mock('@/lib/line/client', () => ({
@@ -109,25 +116,51 @@ describe('LINE postback meal confirmation', () => {
     }));
   });
 
-  it('updates pending meal type and resends the confirmation card', async () => {
+  it('saves directly with the tapped meal type', async () => {
     mocks.getActiveLineState.mockResolvedValue(state);
 
     await handlePostbackEvent({
       ...event,
-      postback: { data: 'action=set_type&sid=sid-1&type=dinner' },
+      postback: { data: 'action=save_meal&sid=sid-1&type=dinner' },
     });
 
-    expect(mocks.setLineState).toHaveBeenCalledWith('uid-1', {
-      pendingMeal: {
-        ...state.pendingMeal,
-        mealType: 'dinner',
-      },
-      mode: state.mode,
-      sid: 'sid-1',
-    });
+    expect(mocks.addMealAdmin).toHaveBeenCalledWith('uid-1', expect.objectContaining({
+      foodName: 'カレー',
+      mealType: 'dinner',
+    }));
+    expect(mocks.clearLineState).toHaveBeenCalledTimes(1);
     const flex = mocks.replyOrPushMessage.mock.calls[0][1];
     expect(flex.type).toBe('flex');
-    expect(flex.contents.footer.contents[0].contents[2].style).toBe('primary');
+  });
+
+  it('passes chat history to the evaluation and records the exchange', async () => {
+    mocks.getActiveLineState.mockResolvedValue(state);
+
+    await handlePostbackEvent(event);
+
+    expect(mocks.evaluateSingleMeal).toHaveBeenCalledWith(
+      expect.objectContaining({ foodName: 'カレー', id: 'meal-1' }),
+      [],
+      { messageHistory: [{ role: 'user', text: 'カップヌードルが食べたい' }] },
+    );
+    expect(mocks.saveLineChatExchangeAdmin).toHaveBeenCalledWith(
+      'uid-1',
+      '（食事を記録: カレー 650kcal / 昼食）',
+      'いい感じ！',
+    );
+  });
+
+  it('handles legacy set_type postbacks by saving with that type', async () => {
+    mocks.getActiveLineState.mockResolvedValue(state);
+
+    await handlePostbackEvent({
+      ...event,
+      postback: { data: 'action=set_type&sid=sid-1&type=snack' },
+    });
+
+    expect(mocks.addMealAdmin).toHaveBeenCalledWith('uid-1', expect.objectContaining({
+      mealType: 'snack',
+    }));
   });
 
   it('applies a pending delete edit', async () => {

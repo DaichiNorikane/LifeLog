@@ -4,11 +4,11 @@ import { getJSTToday, sendPushWithLimit, getTodayMeals, getOrRunEvaluation } fro
 
 // Breakfast-focused reminder messages (no prior meals)
 const ELENA_MESSAGES = [
-    { title: 'エレナだよ〜🍎', body: '朝ごはんの記録まだ？食べたならサクッと入れちゃお！' },
-    { title: 'ちょっと！📝', body: '午前中の食事、記録してないみたい？忘れないうちにね♪' },
-    { title: 'エレナより💪', body: '朝食の記録が大事なの！まだなら今のうちに入れておこう！' },
-    { title: 'リマインド！🔔', body: '朝ごはん食べた？食べてないなら…ちゃんと食べてね？記録も忘れずに！' },
-    { title: 'エレナです😊', body: '記録を続けるのが大事なの！午前中の分、サクッと入れちゃお？' },
+    { title: 'エレナです🍎', body: '朝ごはんの記録はまだですか？食べたならサクッと入れちゃいましょう！' },
+    { title: 'ちょっと！📝', body: '午前中の食事、記録していないみたいですよ？忘れないうちにどうぞ♪' },
+    { title: 'エレナより💪', body: '朝食の記録が大事なんです！まだなら今のうちに入れておきましょう！' },
+    { title: 'リマインド！🔔', body: '朝ごはんは食べましたか？食べていないなら…ちゃんと食べてくださいね？記録も忘れずに！' },
+    { title: 'エレナです😊', body: '記録を続けるのが大事なんです！午前中の分、サクッと入れちゃいましょう？' },
 ];
 
 export async function GET(request) {
@@ -57,11 +57,11 @@ export async function GET(request) {
                     const evalData = evalDoc.data();
                     const score = evalData.score || 0;
                     if (score >= 70) {
-                        title = 'エレナだよ〜🍎';
-                        body = `昨日は${score}点✨いい調子！朝ごはんの記録でさらに加速しよ♪`;
+                        title = 'エレナです🍎';
+                        body = `昨日は${score}点✨いい調子です！朝ごはんの記録でさらに加速しましょう♪`;
                     } else {
                         title = 'エレナより💪';
-                        body = `昨日は${score}点だったね。朝食をしっかり記録して今日は巻き返そう！`;
+                        body = `昨日は${score}点でしたね。朝食をしっかり記録して今日は巻き返しましょう！`;
                     }
                 } else {
                     const msg = ELENA_MESSAGES[Math.floor(Math.random() * ELENA_MESSAGES.length)];

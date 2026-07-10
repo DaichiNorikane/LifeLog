@@ -13,7 +13,7 @@ import { clearLineState, getActiveLineState, setLineState } from '@/lib/line/sta
 
 export const EXPIRED_CARD_MESSAGE = {
     type: 'text',
-    text: 'そのカードは期限切れみたい💦 もう一度送ってね！',
+    text: 'そのカードは期限切れみたいです💦 もう一度送ってくださいね！',
 };
 
 export const parsePostbackData = (data) => {
@@ -47,12 +47,12 @@ const editSuccessText = (pendingEdit) => {
     const count = pendingEdit.targetIds?.length || 0;
     if (pendingEdit.operation === 'delete') {
         const nameText = (pendingEdit.targetNames || []).join('、') || '対象の記録';
-        return `${nameText}、記録から消しといたよ🗑 これでスッキリ！`;
+        return `${nameText}、記録から消しておきました🗑 これでスッキリですね！`;
     }
     if (pendingEdit.operation === 'change_type') {
-        return `${count}件、${MEAL_TYPE_LABELS[pendingEdit.mealType] || '食事'}に変えたよ✨ Web側の集計にも反映されるからね！`;
+        return `${count}件、${MEAL_TYPE_LABELS[pendingEdit.mealType] || '食事'}に変えました✨ Web側の集計にも反映されますからね！`;
     }
-    return '変更したよ✨';
+    return '変更しました✨';
 };
 
 export const handlePostbackEvent = async (event) => {
@@ -72,7 +72,7 @@ export const handlePostbackEvent = async (event) => {
             await clearLineState(user.uid);
             await replyOrPushMessage(event, {
                 type: 'text',
-                text: 'そのままにしておくね👌',
+                text: 'そのままにしておきますね👌',
             });
             return;
         }
@@ -95,7 +95,7 @@ export const handlePostbackEvent = async (event) => {
             console.error("Meal edit apply failed:", e);
             await replyOrPushMessage(event, {
                 type: 'text',
-                text: 'ごめん、うまく変更できなかった😢',
+                text: 'ごめんなさい、うまく変更できませんでした😢',
             });
         }
         return;
@@ -133,7 +133,7 @@ export const handlePostbackEvent = async (event) => {
         });
         await replyOrPushMessage(event, {
             type: 'text',
-            text: 'どこを直す？そのまま送って！\n例: 「ご飯半分」「ドレッシングなし」「卵を追加」✏️',
+            text: 'どこを直しますか？そのまま送ってください！\n例: 「ご飯半分」「ドレッシングなし」「卵を追加」✏️',
         });
         return;
     }
@@ -142,7 +142,7 @@ export const handlePostbackEvent = async (event) => {
         await clearLineState(user.uid);
         await replyOrPushMessage(event, {
             type: 'text',
-            text: '記録はやめておいたよ。迷ったらまた写真か食べたものを送ってね📷',
+            text: '記録はやめておきました。迷ったらまた写真か食べたものを送ってくださいね📷',
         });
         return;
     }
@@ -165,7 +165,7 @@ export const handlePostbackEvent = async (event) => {
         console.error("Meal save failed:", e);
         await replyOrPushMessage(event, {
             type: 'text',
-            text: 'ごめん、保存に失敗しちゃった😢 少し時間を置いてもう一度試して！',
+            text: 'ごめんなさい、保存に失敗しちゃいました😢 少し時間を置いてもう一度試してください！',
         });
         return;
     }
@@ -182,6 +182,6 @@ export const handlePostbackEvent = async (event) => {
 
     await replyOrPushMessage(event, {
         type: 'text',
-        text: '記録したよ✅',
+        text: '記録しました✅',
     });
 };

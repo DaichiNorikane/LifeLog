@@ -1,6 +1,6 @@
 export const buildMealSavedFlex = (meal, evaluation) => ({
     type: 'flex',
-    altText: `${meal.foodName}を記録したよ`,
+    altText: `${meal.foodName}を記録しました`,
     contents: {
         type: 'bubble',
         size: 'mega',
@@ -11,7 +11,7 @@ export const buildMealSavedFlex = (meal, evaluation) => ({
             contents: [
                 {
                     type: 'text',
-                    text: '記録したよ✅',
+                    text: '記録しました✅',
                     weight: 'bold',
                     size: 'xl',
                     color: '#111827',

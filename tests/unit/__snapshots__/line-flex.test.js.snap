@@ -2,7 +2,7 @@
 
 exports[`LINE meal Flex templates > builds the confirm card 1`] = `
 {
-  "altText": "サラダチキンとおにぎりを記録する？",
+  "altText": "サラダチキンとおにぎりを記録しますか？",
   "contents": {
     "body": {
       "contents": [
@@ -150,7 +150,7 @@ exports[`LINE meal Flex templates > builds the confirm card 1`] = `
         {
           "color": "#FFFFFF",
           "size": "lg",
-          "text": "この内容で記録する？",
+          "text": "この内容で記録しますか？",
           "type": "text",
           "weight": "bold",
         },
@@ -158,7 +158,7 @@ exports[`LINE meal Flex templates > builds the confirm card 1`] = `
           "color": "#D1D5DB",
           "margin": "sm",
           "size": "sm",
-          "text": "違ってたら直してから保存しよ！✨",
+          "text": "違っていたら直してから保存しましょう！✨",
           "type": "text",
           "wrap": true,
         },
@@ -176,7 +176,7 @@ exports[`LINE meal Flex templates > builds the confirm card 1`] = `
 
 exports[`LINE meal Flex templates > builds the edit confirmation card 1`] = `
 {
-  "altText": "食事記録を削除する？",
+  "altText": "食事記録を削除しますか？",
   "contents": {
     "body": {
       "contents": [
@@ -244,7 +244,7 @@ exports[`LINE meal Flex templates > builds the edit confirmation card 1`] = `
         {
           "color": "#FFFFFF",
           "size": "lg",
-          "text": "本当に削除する？",
+          "text": "本当に削除しますか？",
           "type": "text",
           "weight": "bold",
         },
@@ -252,7 +252,7 @@ exports[`LINE meal Flex templates > builds the edit confirmation card 1`] = `
           "color": "#FEE2E2",
           "margin": "sm",
           "size": "sm",
-          "text": "消した記録は戻せないから注意してね⚠️",
+          "text": "消した記録は戻せないので注意してくださいね⚠️",
           "type": "text",
           "wrap": true,
         },
@@ -270,14 +270,14 @@ exports[`LINE meal Flex templates > builds the edit confirmation card 1`] = `
 
 exports[`LINE meal Flex templates > builds the saved card 1`] = `
 {
-  "altText": "サラダチキンとおにぎりを記録したよ",
+  "altText": "サラダチキンとおにぎりを記録しました",
   "contents": {
     "body": {
       "contents": [
         {
           "color": "#111827",
           "size": "xl",
-          "text": "記録したよ✅",
+          "text": "記録しました✅",
           "type": "text",
           "weight": "bold",
         },

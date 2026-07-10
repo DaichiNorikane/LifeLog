@@ -18,7 +18,7 @@ export const handleMealTextEvent = async (event, user, description) => {
         console.error("Meal text flow failed:", e);
         await replyOrPushMessage(event, {
             type: 'text',
-            text: 'ごめん、栄養計算がうまくできなかった😢 料理名と量をもう少し具体的に送って！',
+            text: 'ごめんなさい、栄養計算がうまくできませんでした😢 料理名と量をもう少し具体的に送ってください！',
         });
     }
 };
@@ -27,7 +27,7 @@ export const handleMealCorrectionEvent = async (event, user, state, correctionTe
     if (!state?.pendingMeal) {
         await replyOrPushMessage(event, {
             type: 'text',
-            text: 'そのカードは期限切れみたい💦 もう一度送ってね！',
+            text: 'そのカードは期限切れみたいです💦 もう一度送ってくださいね！',
         });
         return;
     }
@@ -52,7 +52,7 @@ export const handleMealCorrectionEvent = async (event, user, state, correctionTe
         console.error("Meal correction flow failed:", e);
         await replyOrPushMessage(event, {
             type: 'text',
-            text: 'ごめん、修正内容を反映できなかった😢 「ご飯半分」「卵を追加」みたいにもう一度送って！',
+            text: 'ごめんなさい、修正内容を反映できませんでした😢 「ご飯半分」「卵を追加」のようにもう一度送ってください！',
         });
     }
 };

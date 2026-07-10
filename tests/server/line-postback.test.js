@@ -105,7 +105,7 @@ describe('LINE postback meal confirmation', () => {
       sid: 'sid-1',
     });
     expect(mocks.replyOrPushMessage).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
-      text: expect.stringContaining('どこを直す'),
+      text: expect.stringContaining('どこを直しますか'),
     }));
   });
 
@@ -142,7 +142,7 @@ describe('LINE postback meal confirmation', () => {
     expect(mocks.updateMealsTypeAdmin).not.toHaveBeenCalled();
     expect(mocks.clearLineState).toHaveBeenCalledTimes(1);
     expect(mocks.replyOrPushMessage).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
-      text: expect.stringContaining('消しといた'),
+      text: expect.stringContaining('消しておきました'),
     }));
   });
 
@@ -166,7 +166,7 @@ describe('LINE postback meal confirmation', () => {
     expect(mocks.deleteMealsAdmin).not.toHaveBeenCalled();
     expect(mocks.clearLineState).toHaveBeenCalledTimes(1);
     expect(mocks.replyOrPushMessage).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
-      text: expect.stringContaining('昼食に変えた'),
+      text: expect.stringContaining('昼食に変えました'),
     }));
   });
 
@@ -182,7 +182,7 @@ describe('LINE postback meal confirmation', () => {
     expect(mocks.deleteMealsAdmin).not.toHaveBeenCalled();
     expect(mocks.replyOrPushMessage).toHaveBeenCalledWith(expect.any(Object), {
       type: 'text',
-      text: 'そのままにしておくね👌',
+      text: 'そのままにしておきますね👌',
     });
   });
 

@@ -32,7 +32,7 @@ export const resolveMealEditPlan = async (userText, meals = []) => {
             mealType: null,
             targetIds: [],
             confirmText: "",
-            notFoundReason: "ごめん、今は記録の変更を考えられないみたい😢 少ししてからもう一度お願い！",
+            notFoundReason: "ごめんなさい、今は記録の変更を考えられないみたいです😢 少ししてからもう一度お願いします！",
         };
     }
 
@@ -53,7 +53,7 @@ ${formatMealList(meals) || 'なし'}
 - 「今日」「さっき」「さっきの」は jstDateTime を根拠に解釈してください。より新しい記録ほど「さっき」に近いです。
 - 「全部」「全て」「今日の朝食を全部」などは複数件を targetIds に入れてください。
 - targetIds は必ず上の食事一覧に存在する id だけにしてください。捏造は禁止。
-- 対象が曖昧、存在しない、操作不能なら operation="none"、targetIds=[]、notFoundReason にエレナ口調の理由を入れてください。
+- 対象が曖昧、存在しない、操作不能なら operation="none"、targetIds=[]、notFoundReason にエレナ口調（絵文字ありの丁寧語。語尾は必ずです・ます調）の理由を入れてください。
 - confirmText は「チョコレート(間食/145kcal)を削除」「朝食3件を昼食に変更」のように、人間向けに短く説明してください。
     `.trim();
 
@@ -81,6 +81,6 @@ ${formatMealList(meals) || 'なし'}
         mealType: null,
         targetIds: [],
         confirmText: "",
-        notFoundReason: `ごめん、変更内容をうまく読み取れなかった…😢 もう少し具体的に言ってくれる？（${lastError?.message || 'AI失敗'}）`,
+        notFoundReason: `ごめんなさい、変更内容をうまく読み取れませんでした…😢 もう少し具体的に言ってもらえますか？（${lastError?.message || 'AI失敗'}）`,
     };
 };

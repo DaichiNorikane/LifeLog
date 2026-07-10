@@ -13,7 +13,7 @@ export const buildEditConfirmFlex = (plan, sid) => {
     const targetNames = plan.targetNames || [];
     return {
         type: 'flex',
-        altText: isDelete ? '食事記録を削除する？' : '食事記録を変更する？',
+        altText: isDelete ? '食事記録を削除しますか？' : '食事記録を変更しますか？',
         contents: {
             type: 'bubble',
             size: 'mega',
@@ -25,14 +25,14 @@ export const buildEditConfirmFlex = (plan, sid) => {
                 contents: [
                     {
                         type: 'text',
-                        text: isDelete ? '本当に削除する？' : 'この変更でいい？',
+                        text: isDelete ? '本当に削除しますか？' : 'この変更でいいですか？',
                         color: '#FFFFFF',
                         weight: 'bold',
                         size: 'lg',
                     },
                     {
                         type: 'text',
-                        text: isDelete ? '消した記録は戻せないから注意してね⚠️' : '保存済みの食事タイプを更新するよ✨',
+                        text: isDelete ? '消した記録は戻せないので注意してくださいね⚠️' : '保存済みの食事タイプを更新しますね✨',
                         color: '#FEE2E2',
                         size: 'sm',
                         margin: 'sm',

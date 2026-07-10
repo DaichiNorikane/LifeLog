@@ -31,7 +31,7 @@ const buildTypeButton = (mealType, sid, option) => {
 
 export const buildMealConfirmFlex = (meal, sid) => ({
     type: 'flex',
-    altText: `${meal.foodName}を記録する？`,
+    altText: `${meal.foodName}を記録しますか？`,
     contents: {
         type: 'bubble',
         size: 'mega',
@@ -43,14 +43,14 @@ export const buildMealConfirmFlex = (meal, sid) => ({
             contents: [
                 {
                     type: 'text',
-                    text: 'この内容で記録する？',
+                    text: 'この内容で記録しますか？',
                     color: '#FFFFFF',
                     weight: 'bold',
                     size: 'lg',
                 },
                 {
                     type: 'text',
-                    text: '違ってたら直してから保存しよ！✨',
+                    text: '違っていたら直してから保存しましょう！✨',
                     color: '#D1D5DB',
                     size: 'sm',
                     margin: 'sm',

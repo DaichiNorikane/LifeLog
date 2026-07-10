@@ -311,19 +311,19 @@ export default function Home() {
       const s = savedEval.score;
       if (s === 100) return { imageSrc: "/images/elena/elena_score_100.webp", message: savedEval.title || "完璧な一日！パーフェクト✨", score: s };
       if (s >= 90) return { imageSrc: "/images/elena/elena_score_90_99.webp", message: savedEval.title || "素晴らしい！もうちょっとで満点！", score: s };
-      if (s >= 75) return { imageSrc: "/images/elena/elena_score_75_90.webp", message: savedEval.title || "いい調子！この調子でいこう！", score: s };
-      if (s >= 50) return { imageSrc: "/images/elena.webp", message: savedEval.title || "まあまあだね。もう少し頑張ろう！", score: s };
-      if (s >= 20) return { imageSrc: "/images/elena/elena_score_20_50.webp", message: savedEval.title || "ちょっと心配かな…頑張って！", score: s };
-      return { imageSrc: "/images/elena/elena_score_0_20.webp", message: savedEval.title || "もっと気をつけてよ！！", score: s };
+      if (s >= 75) return { imageSrc: "/images/elena/elena_score_75_90.webp", message: savedEval.title || "いい調子！この調子でいきましょう！", score: s };
+      if (s >= 50) return { imageSrc: "/images/elena.webp", message: savedEval.title || "まあまあですね。もう少し頑張りましょう！", score: s };
+      if (s >= 20) return { imageSrc: "/images/elena/elena_score_20_50.webp", message: savedEval.title || "ちょっと心配です…頑張ってくださいね！", score: s };
+      return { imageSrc: "/images/elena/elena_score_0_20.webp", message: savedEval.title || "もっと気をつけてください！！", score: s };
     }
     const ratio = targetCalories > 0 ? totalCalories / targetCalories : 0;
-    if (totalCalories === 0) return { imageSrc: "/images/elena/elena_score_20_50.webp", message: "まだ何も食べてないよ！記録してね🍽️", score: null };
-    if (ratio < 0.5) return { imageSrc: "/images/elena/elena_score_20_50.webp", message: "もっと食べないと！バランスよくね💪", score: null };
-    if (ratio < 0.8) return { imageSrc: "/images/elena.webp", message: "いい感じ！この調子でいこう！😊", score: null };
-    if (ratio <= 1.0) return { imageSrc: "/images/elena/elena_score_75_90.webp", message: "目標達成目前！あと少し頑張れ！🔥", score: null };
-    if (ratio <= 1.1) return { imageSrc: "/images/elena/elena_score_75_90.webp", message: "目標カロリー達成！今日もよく頑張ったね✨", score: null };
-    if (ratio <= 1.3) return { imageSrc: "/images/elena/elena_score_20_50.webp", message: "ちょっと食べすぎかも…気をつけて！🤔", score: null };
-    return { imageSrc: "/images/elena/elena_score_0_20.webp", message: "食べすぎ警報！！明日はしっかり管理しよう！😤", score: null };
+    if (totalCalories === 0) return { imageSrc: "/images/elena/elena_score_20_50.webp", message: "まだ何も食べていませんよ！記録してくださいね🍽️", score: null };
+    if (ratio < 0.5) return { imageSrc: "/images/elena/elena_score_20_50.webp", message: "もっと食べないとダメですよ！バランスよくいきましょう💪", score: null };
+    if (ratio < 0.8) return { imageSrc: "/images/elena.webp", message: "いい感じ！この調子でいきましょう！😊", score: null };
+    if (ratio <= 1.0) return { imageSrc: "/images/elena/elena_score_75_90.webp", message: "目標達成目前！あと少し頑張りましょう！🔥", score: null };
+    if (ratio <= 1.1) return { imageSrc: "/images/elena/elena_score_75_90.webp", message: "目標カロリー達成！今日もよく頑張りましたね✨", score: null };
+    if (ratio <= 1.3) return { imageSrc: "/images/elena/elena_score_20_50.webp", message: "ちょっと食べすぎかもしれません…気をつけてくださいね！🤔", score: null };
+    return { imageSrc: "/images/elena/elena_score_0_20.webp", message: "食べすぎ警報！！明日はしっかり管理しましょう！😤", score: null };
   }, [evaluationsCache, currentDateKey, totalCalories, targetCalories]);
 
   // Statistics for Leon (memoized)

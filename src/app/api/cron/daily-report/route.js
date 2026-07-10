@@ -6,16 +6,16 @@ import { sendPushToUser, getJSTToday } from '@/lib/pushHelper';
 
 // Elena's random one-liners
 const ELENA_HITOKOTO = [
-    '明日の自分は、今日の選択で作られるよ✨',
-    '完璧じゃなくていい。続けることが一番大事💪',
-    '今日も記録してくれてありがとう！それだけで偉い🌟',
-    '小さな積み重ねが、大きな変化になるからね🍀',
-    '食べることは生きること。楽しんでいこ！🍽️',
-    '無理しすぎないでね。あなたのペースでいいの😊',
-    '昨日より1ミリでも前に進めたら、それは勝ちだよ🏆',
-    '体は正直。ちゃんと記録してる人は必ず結果が出る📊',
-    '今日の頑張りを、未来のあなたが褒めてくれるよ🌈',
-    'エレナはいつでもあなたの味方だからね♪',
+    '明日の自分は、今日の選択で作られますよ✨',
+    '完璧じゃなくていいんです。続けることが一番大事です💪',
+    '今日も記録してくれてありがとうございます！それだけで偉いです🌟',
+    '小さな積み重ねが、大きな変化になりますからね🍀',
+    '食べることは生きること。楽しんでいきましょう！🍽️',
+    '無理しすぎないでくださいね。あなたのペースでいいんですよ😊',
+    '昨日より1ミリでも前に進めたら、それは勝ちです🏆',
+    '体は正直です。ちゃんと記録している人は必ず結果が出ます📊',
+    '今日の頑張りを、未来のあなたが褒めてくれますよ🌈',
+    'エレナはいつでもあなたの味方ですからね♪',
 ];
 
 export async function GET(request) {
@@ -99,7 +99,7 @@ export async function GET(request) {
                 if (!weightDoc.exists) {
                     await sendPushToUser(userId, pushSubscription, {
                         title: 'エレナより📏',
-                        body: '今日の体重、まだ記録してないみたい。寝る前にサクッと量っておこう！',
+                        body: '今日の体重、まだ記録していないみたいですよ。寝る前にサクッと量っておきましょう！',
                         tag: `weight-reminder-${todayStr}`,
                     });
                 }
@@ -110,16 +110,16 @@ export async function GET(request) {
                 const streak = await calculateStreak(userId, todayStr);
                 if (streak >= 3 && streak % 1 === 0) {
                     const streakMessages = {
-                        3: '3日連続記録達成！いい調子じゃん✨ この勢いで続けよう！',
-                        7: '1週間連続！すごいよ！🎉 習慣になってきたね！',
-                        14: '2週間連続！もう立派な習慣だよ🏅',
-                        30: '1ヶ月連続！！信じられない…感動してる😭✨',
+                        3: '3日連続記録達成！いい調子じゃないですか✨ この勢いで続けましょう！',
+                        7: '1週間連続！すごいです！🎉 習慣になってきましたね！',
+                        14: '2週間連続！もう立派な習慣ですよ🏅',
+                        30: '1ヶ月連続！！信じられません…感動しています😭✨',
                     };
                     // Notify at milestones: 3, 5, 7, 10, 14, 21, 30, then every 10
                     const milestones = [3, 5, 7, 10, 14, 21, 30];
                     const isMilestone = milestones.includes(streak) || (streak > 30 && streak % 10 === 0);
                     if (isMilestone) {
-                        const body = streakMessages[streak] || `${streak}日連続記録！あなたの継続力、本当にすごい💪✨`;
+                        const body = streakMessages[streak] || `${streak}日連続記録！あなたの継続力、本当にすごいです💪✨`;
                         await sendPushToUser(userId, pushSubscription, {
                             title: `🔥 ${streak}日連続記録達成！`,
                             body,

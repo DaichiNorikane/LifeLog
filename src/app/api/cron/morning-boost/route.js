@@ -3,21 +3,21 @@ import { db } from '@/lib/firebase/admin';
 import { getJSTToday, sendPushWithLimit } from '@/lib/pushHelper';
 
 const MESSAGES_GOOD = [
-    { title: 'おはよ！🌅', body: '昨日は{score}点！素晴らしい✨ 今日も{target}kcal目標で頑張ろ！' },
-    { title: 'エレナです☀️', body: '昨日{score}点のいい調子！今日の目標は{target}kcal。この波に乗っていこ🔥' },
-    { title: 'グッドモーニング💪', body: '昨日の{score}点、さすがだね！今日も{target}kcalでいい1日にしよ！' },
+    { title: 'おはようございます！🌅', body: '昨日は{score}点！素晴らしいです✨ 今日も{target}kcal目標で頑張りましょう！' },
+    { title: 'エレナです☀️', body: '昨日{score}点のいい調子です！今日の目標は{target}kcal。この波に乗っていきましょう🔥' },
+    { title: 'グッドモーニング💪', body: '昨日の{score}点、さすがです！今日も{target}kcalでいい1日にしましょう！' },
 ];
 
 const MESSAGES_NORMAL = [
-    { title: 'おはよ〜🌞', body: '今日も新しい1日！目標{target}kcalでいってみよう💪' },
-    { title: 'エレナだよ☀️', body: '昨日は{score}点だったね。今日は{target}kcal目標で巻き返そ！' },
-    { title: '朝ですよ〜🔔', body: '昨日の反省を活かして、今日は{target}kcal。きっとできるよ✨' },
+    { title: 'おはようございます🌞', body: '今日も新しい1日！目標{target}kcalでいってみましょう💪' },
+    { title: 'エレナです☀️', body: '昨日は{score}点でしたね。今日は{target}kcal目標で巻き返しましょう！' },
+    { title: '朝ですよ〜🔔', body: '昨日の反省を活かして、今日は{target}kcal。きっとできますよ✨' },
 ];
 
 const MESSAGES_MISS = [
-    { title: 'おはよう😊', body: '昨日は忙しかったかな？今日はリセット日！{target}kcal目標でいこう♪' },
-    { title: 'エレナより💕', body: '記録ない日もあるよ！大事なのは今日。{target}kcalでスタートしよう🍀' },
-    { title: '新しい朝！🌈', body: '昨日はお休みだったね。今日から再開！{target}kcal目指そう！' },
+    { title: 'おはようございます😊', body: '昨日は忙しかったですか？今日はリセット日！{target}kcal目標でいきましょう♪' },
+    { title: 'エレナより💕', body: '記録がない日もあります！大事なのは今日。{target}kcalでスタートしましょう🍀' },
+    { title: '新しい朝！🌈', body: '昨日はお休みでしたね。今日から再開！{target}kcalを目指しましょう！' },
 ];
 
 function pickRandom(arr) {

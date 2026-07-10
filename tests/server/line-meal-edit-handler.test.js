@@ -91,7 +91,7 @@ describe('LINE meal edit handler', () => {
     });
     expect(mocks.replyOrPushMessage).toHaveBeenCalledWith(event, expect.objectContaining({
       type: 'flex',
-      altText: '食事記録を削除する？',
+      altText: '食事記録を削除しますか？',
     }));
   });
 
@@ -115,7 +115,7 @@ describe('LINE meal edit handler', () => {
       },
     }));
     const flex = mocks.replyOrPushMessage.mock.calls[0][1];
-    expect(flex.altText).toBe('食事記録を変更する？');
+    expect(flex.altText).toBe('食事記録を変更しますか？');
     expect(flex.contents.body.contents[0].text).toContain('朝食2件を昼食に変更');
   });
 

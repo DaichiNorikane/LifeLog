@@ -108,6 +108,6 @@ describe('line chat prompt guardrails', () => {
     expect(prompt).toContain('食べたい気持ちに共感');
     expect(prompt).toContain('現実的なメニューを2〜3個');
     expect(prompt).toContain('我慢一辺倒の提案はしない');
-    expect(prompt).toContain('食べたら写真か一言で送ってね');
+    expect(prompt).toContain('食べたら写真か一言で送ってくださいね');
   });
 });

@@ -3,15 +3,15 @@ import { db } from '@/lib/firebase/admin';
 import { getJSTToday, sendPushWithLimit, getTodayMeals, getOrRunEvaluation } from '@/lib/pushHelper';
 
 const MESSAGES_NO_LUNCH = [
-    { title: 'エレナだよ🍱', body: 'ランチの記録まだかな？忘れないうちにサクッと入れちゃお！' },
-    { title: 'ちょっと！📝', body: 'お昼ご飯食べた？記録、待ってるからね♪' },
-    { title: 'リマインド🔔', body: '午後も頑張るために、まずはランチの記録からっ！' },
+    { title: 'エレナです🍱', body: 'ランチの記録はまだですか？忘れないうちにサクッと入れちゃいましょう！' },
+    { title: 'ちょっと！📝', body: 'お昼ご飯は食べましたか？記録、待っていますからね♪' },
+    { title: 'リマインド🔔', body: '午後も頑張るために、まずはランチの記録からです！' },
 ];
 
 const MESSAGES_NONE = [
-    { title: 'エレナです😊', body: '今日まだ何も記録してないよ？朝昼まとめてでもOKだから！' },
-    { title: 'ねえねえ📱', body: '今日の記録ゼロだよ…？忙しくてもサクッと入れてね！' },
-    { title: 'エレナより💪', body: '朝もお昼もまだ未記録！まとめて記録しちゃおう♪' },
+    { title: 'エレナです😊', body: '今日はまだ何も記録していませんよ？朝昼まとめてでもOKですから！' },
+    { title: 'ねえねえ📱', body: '今日の記録がゼロですよ…？忙しくてもサクッと入れてくださいね！' },
+    { title: 'エレナより💪', body: '朝もお昼もまだ未記録です！まとめて記録しちゃいましょう♪' },
 ];
 
 function pickRandom(arr) {
@@ -60,7 +60,7 @@ export async function GET(request) {
                     const target = userData.targetCalories || 2000;
                     const remaining = target - consumed;
                     title = `午前は${evaluation.score}点📊`;
-                    body = `ここまで${consumed}kcal。残り${remaining}kcalだよ！ランチの記録もよろしくね♪`;
+                    body = `ここまで${consumed}kcal。残り${remaining}kcalです！ランチの記録もよろしくお願いしますね♪`;
                 } else {
                     const msg = pickRandom(MESSAGES_NO_LUNCH);
                     title = msg.title;

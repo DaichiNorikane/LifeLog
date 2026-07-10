@@ -44,29 +44,29 @@ export async function GET(request) {
                 if (evalAdvice) {
                     body = `${consumed}kcal消費、あと${remaining}kcal余裕あり！${evalAdvice.slice(0, 80)}`;
                 } else {
-                    body = `今日はまだ${consumed}kcal。あと${remaining}kcalも余裕あるよ！好きなもの食べていいんじゃない？😋`;
+                    body = `今日はまだ${consumed}kcal。あと${remaining}kcalも余裕がありますよ！好きなものを食べていいと思います😋`;
                 }
             } else if (remaining > 200) {
-                title = score ? `現在${score}点、夕食が勝負🤔` : '夕食どうする？🤔';
+                title = score ? `現在${score}点、夕食が勝負🤔` : '夕食どうしますか？🤔';
                 if (evalAdvice) {
                     body = `残り${remaining}kcal。${evalAdvice.slice(0, 100)}`;
                 } else {
-                    body = `残り${remaining}kcalだよ。バランス良く、タンパク質多めの夕食がおすすめ💪`;
+                    body = `残り${remaining}kcalです。バランス良く、タンパク質多めの夕食がおすすめですよ💪`;
                 }
             } else if (remaining > 0) {
                 title = score ? `${score}点、ラストスパート⚠️` : 'ちょっと注意⚠️';
                 if (evalAdvice) {
                     body = `残り${remaining}kcal！${evalAdvice.slice(0, 100)}`;
                 } else {
-                    body = `残り${remaining}kcalしかないよ！サラダ+チキンとか、軽めでいこう🥗`;
+                    body = `残り${remaining}kcalしかありませんよ！サラダ+チキンなど、軽めでいきましょう🥗`;
                 }
             } else {
                 const over = Math.abs(remaining);
-                title = score ? `${score}点、リカバリーしよ📊` : 'エレナからお知らせ📊';
+                title = score ? `${score}点、リカバリーしましょう📊` : 'エレナからお知らせ📊';
                 if (evalAdvice) {
                     body = `${over}kcalオーバー。${evalAdvice.slice(0, 100)}`;
                 } else {
-                    body = `${over}kcalオーバー気味だけど、軽い夕食にすればリカバリーできるよ！諦めないで💪`;
+                    body = `${over}kcalオーバー気味ですが、軽い夕食にすればリカバリーできますよ！諦めないでくださいね💪`;
                 }
             }
 

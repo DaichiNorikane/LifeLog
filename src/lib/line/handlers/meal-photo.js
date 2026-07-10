@@ -23,7 +23,7 @@ export const handleMealPhotoEvent = async (event) => {
         console.error("Meal photo flow failed:", e);
         await replyOrPushMessage(event, {
             type: 'text',
-            text: 'ごめん、写真の解析に失敗しちゃった😢 もう一度送るか、食べたものを文字で教えて！',
+            text: 'ごめんなさい、写真の解析に失敗しちゃいました😢 もう一度送るか、食べたものを文字で教えてください！',
         });
     }
 };

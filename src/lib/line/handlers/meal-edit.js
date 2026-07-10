@@ -6,7 +6,7 @@ import { createSid, MEAL_TYPE_LABELS } from '@/lib/line/mealUtils';
 import { resolveUserOrReply } from '@/lib/line/resolveUser';
 import { setLineState } from '@/lib/line/state';
 
-const NOT_FOUND_MESSAGE = '見つからなかったよ😢 もう少し具体的に「今日の朝食」「さっきのカレー」みたいに教えて！';
+const NOT_FOUND_MESSAGE = '見つかりませんでした😢 もう少し具体的に「今日の朝食」「さっきのカレー」のように教えてください！';
 
 const jstFormatter = new Intl.DateTimeFormat('ja-JP', {
     timeZone: 'Asia/Tokyo',
@@ -45,7 +45,7 @@ export const handleMealEditEvent = async (event, user = null, text = event?.mess
     if (recentMeals.length === 0) {
         await replyOrPushMessage(event, {
             type: 'text',
-            text: 'まだ今日の記録がないみたい📝 まずは写真か「◯◯食べた」で記録してね！',
+            text: 'まだ今日の記録がないみたいです📝 まずは写真か「◯◯食べた」で記録してくださいね！',
         });
         return null;
     }
@@ -66,7 +66,7 @@ export const handleMealEditEvent = async (event, user = null, text = event?.mess
     if (plan.operation === 'change_type' && !MEAL_TYPE_LABELS[plan.mealType]) {
         await replyOrPushMessage(event, {
             type: 'text',
-            text: '変更先の食事タイプが読み取れなかったよ😢 朝食・昼食・夕食・間食のどれかで言ってね！',
+            text: '変更先の食事タイプが読み取れませんでした😢 朝食・昼食・夕食・間食のどれかで教えてくださいね！',
         });
         return null;
     }

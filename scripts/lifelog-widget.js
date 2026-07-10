@@ -23,11 +23,11 @@ const COLORS = {
 
 // エレナのステータス別メッセージ & 絵文字
 const ELENA_MSG = {
-    waiting: { emoji: "😴", msg: "まだ何も食べてないの？" },
-    encourage: { emoji: "💪", msg: "いい感じ！この調子！" },
-    normal: { emoji: "😊", msg: "順調だよ〜" },
-    cheer: { emoji: "🎉", msg: "パーフェクト！" },
-    logic: { emoji: "🤔", msg: "ちょっと食べすぎかも…" },
+    waiting: { emoji: "😴", msg: "まだ何も食べていませんか？" },
+    encourage: { emoji: "💪", msg: "いい感じ！この調子です！" },
+    normal: { emoji: "😊", msg: "順調ですよ〜" },
+    cheer: { emoji: "🎉", msg: "パーフェクトです！" },
+    logic: { emoji: "🤔", msg: "ちょっと食べすぎかもです…" },
     scold: { emoji: "😤", msg: "食べすぎ注意！！" },
 };
 
@@ -43,13 +43,23 @@ async function fetchData() {
     }
 }
 
+async function fetchElenaImage(url) {
+    try {
+        const req = new Request(url);
+        req.timeoutInterval = 8;
+        return await req.loadImage();
+    } catch (e) {
+        return null;
+    }
+}
+
 function getCalorieColor(ratio) {
     if (ratio <= 80) return COLORS.green;
     if (ratio <= 105) return COLORS.yellow;
     return COLORS.red;
 }
 
-function createSmallWidget(data) {
+async function createSmallWidget(data, elenaImg) {
     const w = new ListWidget();
     w.backgroundColor = COLORS.bg;
     w.setPadding(12, 14, 12, 14);
@@ -63,12 +73,18 @@ function createSmallWidget(data) {
 
     const elena = ELENA_MSG[data.elenaStatus] || ELENA_MSG.normal;
 
-    // エレナ絵文字 + ステータス
+    // エレナ画像 or 絵文字 + タイトル
     const header = w.addStack();
     header.layoutHorizontally();
     header.centerAlignContent();
-    const emojiText = header.addText(elena.emoji);
-    emojiText.font = Font.systemFont(20);
+    if (elenaImg) {
+        const imgEl = header.addImage(elenaImg);
+        imgEl.imageSize = new Size(28, 36);
+        imgEl.cornerRadius = 6;
+    } else {
+        const emojiText = header.addText(elena.emoji);
+        emojiText.font = Font.systemFont(20);
+    }
     header.addSpacer(6);
     const titleText = header.addText("Lifelog");
     titleText.font = Font.boldSystemFont(13);
@@ -131,7 +147,7 @@ function createSmallWidget(data) {
     return w;
 }
 
-function createMediumWidget(data) {
+async function createMediumWidget(data, elenaImg) {
     const w = new ListWidget();
     w.backgroundColor = COLORS.bg;
     w.setPadding(14, 16, 14, 16);
@@ -149,8 +165,14 @@ function createMediumWidget(data) {
     const header = w.addStack();
     header.layoutHorizontally();
     header.centerAlignContent();
-    const emojiText = header.addText(elena.emoji);
-    emojiText.font = Font.systemFont(22);
+    if (elenaImg) {
+        const imgEl = header.addImage(elenaImg);
+        imgEl.imageSize = new Size(32, 42);
+        imgEl.cornerRadius = 6;
+    } else {
+        const emojiText = header.addText(elena.emoji);
+        emojiText.font = Font.systemFont(22);
+    }
     header.addSpacer(6);
     const titleText = header.addText(`エレナ: ${elena.msg}`);
     titleText.font = Font.mediumSystemFont(13);
@@ -257,11 +279,14 @@ function createMediumWidget(data) {
 const data = await fetchData();
 const widgetSize = config.widgetFamily || "small";
 
+// エレナ画像を事前取得（失敗しても絵文字フォールバックあり）
+const elenaImg = data?.elenaImageUrl ? await fetchElenaImage(data.elenaImageUrl) : null;
+
 let widget;
 if (widgetSize === "medium" || widgetSize === "large") {
-    widget = createMediumWidget(data);
+    widget = await createMediumWidget(data, elenaImg);
 } else {
-    widget = createSmallWidget(data);
+    widget = await createSmallWidget(data, elenaImg);
 }
 
 // アプリタップ時にLifelogを開く

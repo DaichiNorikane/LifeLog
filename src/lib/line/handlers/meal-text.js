@@ -2,7 +2,7 @@ import { estimateMealFromText } from '@/app/actions/food-search';
 import { replyOrPushMessage } from '@/lib/line/client';
 import { buildMealConfirmFlex } from '@/lib/line/flex/mealConfirm';
 import { createSid, normalizeMealForLine } from '@/lib/line/mealUtils';
-import { setLineState } from '@/lib/line/state';
+import { clearLineState, setLineState } from '@/lib/line/state';
 
 export const handleMealTextEvent = async (event, user, description) => {
     try {
@@ -45,6 +45,8 @@ export const handleMealCorrectionEvent = async (event, user, state, correctionTe
 
         const meal = normalizeMealForLine(result, { mealType: original.mealType });
         const sid = createSid();
+        // 修正前の古いカードの状態を掃除してから、新しいカードの状態を作る
+        if (state.sid) await clearLineState(user.uid, state.sid);
         await setLineState(user.uid, { pendingMeal: meal, mode: null, sid });
 
         await replyOrPushMessage(event, buildMealConfirmFlex(meal, sid));

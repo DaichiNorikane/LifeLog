@@ -11,7 +11,7 @@ import { buildMealConfirmFlex } from '@/lib/line/flex/mealConfirm';
 import { buildMealSavedFlex } from '@/lib/line/flex/mealSaved';
 import { MEAL_TYPE_LABELS } from '@/lib/line/mealUtils';
 import { resolveUserOrReply } from '@/lib/line/resolveUser';
-import { clearLineState, getActiveLineState, setLineState } from '@/lib/line/state';
+import { clearLineState, getLineStateBySid, setLineState } from '@/lib/line/state';
 
 export const EXPIRED_CARD_MESSAGE = {
     type: 'text',
@@ -27,20 +27,14 @@ export const parsePostbackData = (data) => {
     };
 };
 
-const getStateForSid = async (uid, sid) => {
-    const state = await getActiveLineState(uid);
-    if (!state?.sid || state.sid !== sid) return null;
-    return state;
-};
-
 const getValidMealStateForPostback = async (uid, sid) => {
-    const state = await getStateForSid(uid, sid);
+    const state = await getLineStateBySid(uid, sid);
     if (!state?.pendingMeal) return null;
     return state;
 };
 
 const getValidEditStateForPostback = async (uid, sid) => {
-    const state = await getStateForSid(uid, sid);
+    const state = await getLineStateBySid(uid, sid);
     if (!state?.pendingEdit) return null;
     return state;
 };
@@ -71,7 +65,7 @@ export const handlePostbackEvent = async (event) => {
         }
 
         if (action === 'cancel_edit') {
-            await clearLineState(user.uid);
+            await clearLineState(user.uid, sid);
             await replyOrPushMessage(event, {
                 type: 'text',
                 text: 'そのままにしておきますね👌',
@@ -88,7 +82,7 @@ export const handlePostbackEvent = async (event) => {
             } else {
                 throw new Error(`Unsupported edit operation: ${edit.operation}`);
             }
-            await clearLineState(user.uid);
+            await clearLineState(user.uid, sid);
             await replyOrPushMessage(event, {
                 type: 'text',
                 text: editSuccessText(edit),
@@ -123,7 +117,7 @@ export const handlePostbackEvent = async (event) => {
     }
 
     if (action === 'cancel_meal') {
-        await clearLineState(user.uid);
+        await clearLineState(user.uid, sid);
         await replyOrPushMessage(event, {
             type: 'text',
             text: '記録はやめておきました。迷ったらまた写真か食べたものを送ってくださいね📷',
@@ -146,7 +140,7 @@ export const handlePostbackEvent = async (event) => {
 
     try {
         meal.id = await addMealAdmin(user.uid, meal);
-        await clearLineState(user.uid);
+        await clearLineState(user.uid, sid);
     } catch (e) {
         console.error("Meal save failed:", e);
         await replyOrPushMessage(event, {

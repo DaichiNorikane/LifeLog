@@ -2,7 +2,9 @@ import { db } from '@/lib/firebase/admin';
 
 export const LINE_STATE_TTL_MS = 10 * 60 * 1000;
 
-const stateRef = (uid) => db.collection('users').doc(uid).collection('lineState').doc('current');
+// sid（カードID）ごとに独立したドキュメントで保持する。
+// 複数の写真・テキストを連続で送っても、それぞれの確認カードが並行して有効になる。
+const statesRef = (uid) => db.collection('users').doc(uid).collection('lineStates');
 
 const toMillis = (value) => {
     if (!value) return 0;
@@ -22,19 +24,49 @@ export const isLineStateFresh = (state, now = Date.now()) => {
     return Boolean(updatedAt && now - updatedAt <= LINE_STATE_TTL_MS);
 };
 
-export const getActiveLineState = async (uid, now = Date.now()) => {
-    const snap = await stateRef(uid).get();
+export const getLineStateBySid = async (uid, sid, now = Date.now()) => {
+    if (!sid) return null;
+    const snap = await statesRef(uid).doc(sid).get();
     if (!snap.exists) return null;
 
     const state = snap.data() || {};
     if (!isLineStateFresh(state, now)) {
-        await stateRef(uid).delete().catch(() => {});
+        await snap.ref.delete().catch(() => {});
         return null;
     }
     return state;
 };
 
+// 有効な状態を新しい順で返す。期限切れドキュメントはこのタイミングで掃除する
+export const getActiveLineStates = async (uid, now = Date.now()) => {
+    const snapshot = await statesRef(uid).get();
+    const fresh = [];
+    const staleRefs = [];
+
+    for (const doc of snapshot.docs || []) {
+        const state = doc.data() || {};
+        if (isLineStateFresh(state, now)) {
+            fresh.push(state);
+        } else {
+            staleRefs.push(doc.ref);
+        }
+    }
+
+    if (staleRefs.length > 0) {
+        await Promise.all(staleRefs.map(ref => ref.delete().catch(() => {})));
+    }
+
+    return fresh.sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt));
+};
+
+// 「✏️ 修正する」タップ後の自由テキストをどのカードに紐付けるか（最新の修正待ちを採用）
+export const getAwaitingCorrectionState = async (uid, now = Date.now()) => {
+    const states = await getActiveLineStates(uid, now);
+    return states.find(state => state.mode === 'awaiting_correction' && state.pendingMeal) || null;
+};
+
 export const setLineState = async (uid, state) => {
+    if (!state?.sid) throw new Error('LINE state requires a sid');
     const payload = {
         pendingMeal: state.pendingMeal || null,
         pendingEdit: state.pendingEdit || null,
@@ -42,10 +74,11 @@ export const setLineState = async (uid, state) => {
         sid: state.sid,
         updatedAt: new Date().toISOString(),
     };
-    await stateRef(uid).set(payload, { merge: false });
+    await statesRef(uid).doc(state.sid).set(payload, { merge: false });
     return payload;
 };
 
-export const clearLineState = async (uid) => {
-    await stateRef(uid).delete();
+export const clearLineState = async (uid, sid) => {
+    if (!sid) return;
+    await statesRef(uid).doc(sid).delete();
 };

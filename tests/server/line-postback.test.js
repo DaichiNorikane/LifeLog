@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   replyOrPushMessage: vi.fn().mockResolvedValue({ success: true }),
   resolveUserOrReply: vi.fn().mockResolvedValue({ uid: 'uid-1', data: {} }),
   clearLineState: vi.fn().mockResolvedValue(undefined),
-  getActiveLineState: vi.fn(),
+  getLineStateBySid: vi.fn(),
   setLineState: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -39,7 +39,7 @@ vi.mock('@/lib/line/resolveUser', () => ({
 
 vi.mock('@/lib/line/state', () => ({
   clearLineState: mocks.clearLineState,
-  getActiveLineState: mocks.getActiveLineState,
+  getLineStateBySid: mocks.getLineStateBySid,
   setLineState: mocks.setLineState,
 }));
 
@@ -87,7 +87,7 @@ beforeEach(() => {
 
 describe('LINE postback meal confirmation', () => {
   it('saves once and rejects the same sid after state is consumed', async () => {
-    mocks.getActiveLineState
+    mocks.getLineStateBySid
       .mockResolvedValueOnce(state)
       .mockResolvedValueOnce(null);
 
@@ -96,11 +96,12 @@ describe('LINE postback meal confirmation', () => {
 
     expect(mocks.addMealAdmin).toHaveBeenCalledTimes(1);
     expect(mocks.clearLineState).toHaveBeenCalledTimes(1);
+    expect(mocks.clearLineState).toHaveBeenCalledWith('uid-1', 'sid-1');
     expect(mocks.replyOrPushMessage).toHaveBeenLastCalledWith(event, EXPIRED_CARD_MESSAGE);
   });
 
   it('moves the state into correction mode on edit', async () => {
-    mocks.getActiveLineState.mockResolvedValue(state);
+    mocks.getLineStateBySid.mockResolvedValue(state);
     await handlePostbackEvent({
       ...event,
       postback: { data: 'action=edit_meal&sid=sid-1' },
@@ -117,7 +118,7 @@ describe('LINE postback meal confirmation', () => {
   });
 
   it('saves directly with the tapped meal type', async () => {
-    mocks.getActiveLineState.mockResolvedValue(state);
+    mocks.getLineStateBySid.mockResolvedValue(state);
 
     await handlePostbackEvent({
       ...event,
@@ -134,7 +135,7 @@ describe('LINE postback meal confirmation', () => {
   });
 
   it('passes chat history to the evaluation and records the exchange', async () => {
-    mocks.getActiveLineState.mockResolvedValue(state);
+    mocks.getLineStateBySid.mockResolvedValue(state);
 
     await handlePostbackEvent(event);
 
@@ -151,7 +152,7 @@ describe('LINE postback meal confirmation', () => {
   });
 
   it('handles legacy set_type postbacks by saving with that type', async () => {
-    mocks.getActiveLineState.mockResolvedValue(state);
+    mocks.getLineStateBySid.mockResolvedValue(state);
 
     await handlePostbackEvent({
       ...event,
@@ -164,7 +165,7 @@ describe('LINE postback meal confirmation', () => {
   });
 
   it('applies a pending delete edit', async () => {
-    mocks.getActiveLineState.mockResolvedValue(editState);
+    mocks.getLineStateBySid.mockResolvedValue(editState);
 
     await handlePostbackEvent({
       ...event,
@@ -180,7 +181,7 @@ describe('LINE postback meal confirmation', () => {
   });
 
   it('applies a pending change_type edit', async () => {
-    mocks.getActiveLineState.mockResolvedValue({
+    mocks.getLineStateBySid.mockResolvedValue({
       ...editState,
       pendingEdit: {
         operation: 'change_type',
@@ -204,7 +205,7 @@ describe('LINE postback meal confirmation', () => {
   });
 
   it('cancels a pending edit', async () => {
-    mocks.getActiveLineState.mockResolvedValue(editState);
+    mocks.getLineStateBySid.mockResolvedValue(editState);
 
     await handlePostbackEvent({
       ...event,
@@ -220,7 +221,7 @@ describe('LINE postback meal confirmation', () => {
   });
 
   it('rejects expired edit cards', async () => {
-    mocks.getActiveLineState.mockResolvedValue(null);
+    mocks.getLineStateBySid.mockResolvedValue(null);
 
     await handlePostbackEvent({
       ...event,

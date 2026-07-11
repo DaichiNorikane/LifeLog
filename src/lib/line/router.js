@@ -12,7 +12,7 @@ import { handleMealPhotoEvent } from '@/lib/line/handlers/meal-photo';
 import { handlePostbackEvent } from '@/lib/line/handlers/postback';
 import { handleWeightEvent, parseWeightText } from '@/lib/line/handlers/weight';
 import { resolveUserOrReply } from '@/lib/line/resolveUser';
-import { getActiveLineState } from '@/lib/line/state';
+import { getAwaitingCorrectionState } from '@/lib/line/state';
 
 const isAlreadyExistsError = (error) => {
     const code = String(error?.code || error?.details || '').toLowerCase();
@@ -109,7 +109,7 @@ export const handleLineEvent = async (event) => {
         return { handled: 'summary' };
     }
 
-    const state = await getActiveLineState(user.uid);
+    const state = await getAwaitingCorrectionState(user.uid);
     const stateAwareRoute = classifyTextRoute(text, state);
     if (stateAwareRoute.type === 'correction') {
         await handleMealCorrectionEvent(event, user, state, text);
@@ -130,10 +130,11 @@ export const handleLineEvent = async (event) => {
     return { handled: 'chat' };
 };
 
-export const handleLineEvents = async (events = []) => {
-    const results = [];
-    for (const event of events) {
-        results.push(await handleLineEvent(event));
-    }
-    return results;
-};
+// 複数の写真・メッセージが同時に届いても並列で処理する（各イベントは独立したカードになる）
+// 1件の失敗が他のイベントを巻き込まないよう、エラーはイベント単位で握りつぶす
+export const handleLineEvents = async (events = []) => Promise.all(
+    events.map(event => handleLineEvent(event).catch(e => {
+        console.error("LINE event handling failed:", e);
+        return { error: e.message };
+    })),
+);

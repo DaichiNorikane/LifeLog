@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => {
     handlePostbackEvent: vi.fn(),
     handleWeightEvent: vi.fn(),
     resolveUserOrReply: vi.fn().mockResolvedValue({ uid: 'uid-1', data: {} }),
-    getActiveLineState: vi.fn().mockResolvedValue(null),
+    getAwaitingCorrectionState: vi.fn().mockResolvedValue(null),
     classifyLineIntent: vi.fn().mockResolvedValue({ intent: 'other', mealDescription: null }),
   };
 });
@@ -97,14 +97,14 @@ vi.mock('@/lib/line/resolveUser', () => ({
 }));
 
 vi.mock('@/lib/line/state', () => ({
-  getActiveLineState: mocks.getActiveLineState,
+  getAwaitingCorrectionState: mocks.getAwaitingCorrectionState,
 }));
 
 vi.mock('@/app/actions/line-intent', () => ({
   classifyLineIntent: mocks.classifyLineIntent,
 }));
 
-import { classifyEventRoute, classifyTextRoute, handleLineEvent } from '@/lib/line/router';
+import { classifyEventRoute, classifyTextRoute, handleLineEvent, handleLineEvents } from '@/lib/line/router';
 
 const textEvent = (text, extra = {}) => ({
   type: 'message',
@@ -119,7 +119,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.webhookCreate.mockResolvedValue(undefined);
   mocks.resolveUserOrReply.mockResolvedValue({ uid: 'uid-1', data: {} });
-  mocks.getActiveLineState.mockResolvedValue(null);
+  mocks.getAwaitingCorrectionState.mockResolvedValue(null);
   mocks.classifyLineIntent.mockResolvedValue({ intent: 'other', mealDescription: null });
 });
 
@@ -178,7 +178,7 @@ describe('LINE router dispatch', () => {
   it('routes awaiting correction state before Gemini intent classification', async () => {
     const event = textEvent('ご飯半分');
     const state = { mode: 'awaiting_correction', pendingMeal: { foodName: 'カレー' }, sid: 'sid-1' };
-    mocks.getActiveLineState.mockResolvedValue(state);
+    mocks.getAwaitingCorrectionState.mockResolvedValue(state);
 
     await handleLineEvent(event);
     expect(mocks.handleMealCorrectionEvent).toHaveBeenCalledWith(event, { uid: 'uid-1', data: {} }, state, 'ご飯半分');
@@ -216,5 +216,36 @@ describe('LINE router dispatch', () => {
     const result = await handleLineEvent(event);
     expect(result).toEqual({ skipped: true, reason: 'duplicate' });
     expect(mocks.showLoadingAnimation).not.toHaveBeenCalled();
+  });
+
+  it('processes multiple events in parallel (multi-photo send)', async () => {
+    const events = [
+      { type: 'message', webhookEventId: 'evt-img-1', message: { id: 'img-1', type: 'image' }, source: { userId: 'line-user-1' }, replyToken: 'r1' },
+      { type: 'message', webhookEventId: 'evt-img-2', message: { id: 'img-2', type: 'image' }, source: { userId: 'line-user-1' }, replyToken: 'r2' },
+      textEvent('唐揚げ定食食べた'),
+    ];
+    mocks.classifyLineIntent.mockResolvedValue({ intent: 'log_meal', mealDescription: '唐揚げ定食' });
+
+    const results = await handleLineEvents(events);
+
+    expect(results).toHaveLength(3);
+    expect(mocks.handleMealPhotoEvent).toHaveBeenCalledTimes(2);
+    expect(mocks.handleMealTextEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('isolates a failing event so the others still succeed', async () => {
+    const events = [
+      { type: 'message', webhookEventId: 'evt-img-a', message: { id: 'img-a', type: 'image' }, source: { userId: 'line-user-1' }, replyToken: 'r1' },
+      { type: 'message', webhookEventId: 'evt-img-b', message: { id: 'img-b', type: 'image' }, source: { userId: 'line-user-1' }, replyToken: 'r2' },
+    ];
+    mocks.handleMealPhotoEvent
+      .mockRejectedValueOnce(new Error('analysis blew up'))
+      .mockResolvedValueOnce(undefined);
+
+    const results = await handleLineEvents(events);
+
+    expect(results).toHaveLength(2);
+    expect(results.filter(r => r?.error)).toHaveLength(1);
+    expect(mocks.handleMealPhotoEvent).toHaveBeenCalledTimes(2);
   });
 });

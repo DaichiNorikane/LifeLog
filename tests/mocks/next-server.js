@@ -3,7 +3,7 @@
  */
 
 export function setupNextServerMock(vi) {
-  vi.mock('next/server', () => ({
+  vi.doMock('next/server', () => ({
     NextResponse: {
       json: vi.fn((body, init = {}) => {
         const status = init.status || 200;

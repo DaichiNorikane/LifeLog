@@ -31,6 +31,13 @@ const getBMICategory = (bmi) => {
     return { label: '肥満(3度以上)', color: '#F56565' };
 };
 
+const normalizeNullableNumber = (value) => {
+    if (value === undefined || value === null) return null;
+    if (typeof value === 'string' && value.trim() === '') return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+};
+
 export default function WeightTracker({ user, userProfile, weights, activeDate, onClose, onUpdateWeights, ...props }) {
     // Current Goals from User Profile
     const [targetWeight, setTargetWeight] = useState(userProfile?.targetWeight || '');
@@ -154,6 +161,7 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
             x: new Date(w.date).getTime(),
             date: w.date.substring(5), // Keep for tooltip if needed, but main x is number
             weight: w.weight,
+            bodyFat: normalizeNullableNumber(w.bodyFat),
             isTarget: false
         }));
 
@@ -166,12 +174,20 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
                     x: tDate.getTime(),
                     date: targetDate.substring(5),
                     weight: parseFloat(targetWeight),
+                    bodyFat: null,
                     isTarget: true
                 });
             }
         }
         return data;
     }, [weights, targetDate, targetWeight]);
+
+    const hasBodyFatData = chartData.some(d => !d.isTarget && d.bodyFat !== null);
+
+    const recentWeights = useMemo(() => weights.slice(0, 10).map(w => ({
+        ...w,
+        bodyFat: normalizeNullableNumber(w.bodyFat),
+    })), [weights]);
 
     // Calculate Insights
     const currentWeight = weights.length > 0 ? weights[0].weight : null;
@@ -463,7 +479,7 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
                     {/* Chart */}
                     <div style={{ height: '300px', width: '100%', background: '#fff', borderRadius: '16px', padding: '10px' }}>
                         <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                            <LineChart data={chartData} margin={{ top: 20, right: hasBodyFatData ? 42 : 30, left: 0, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
                                 <XAxis
                                     dataKey="x"
@@ -477,16 +493,20 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
                                     axisLine={false}
                                     tickLine={false}
                                 />
-                                <YAxis domain={['auto', 'auto']} tick={{ fontSize: 12, fill: '#aaa' }} axisLine={false} tickLine={false} unit="kg" />
+                                <YAxis yAxisId="weight" domain={['auto', 'auto']} tick={{ fontSize: 12, fill: '#aaa' }} axisLine={false} tickLine={false} unit="kg" />
+                                {hasBodyFatData && (
+                                    <YAxis yAxisId="bodyFat" orientation="right" domain={['auto', 'auto']} tick={{ fontSize: 12, fill: '#F59E0B' }} axisLine={false} tickLine={false} unit="%" />
+                                )}
                                 <Tooltip
                                     labelFormatter={(unixTime) => new Date(unixTime).toLocaleDateString()}
                                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                                     formatter={(value, name, props) => [
-                                        `${value} kg`,
-                                        props.payload.isTarget ? '目標' : '体重'
+                                        props.dataKey === 'bodyFat' ? `${value}%` : `${value} kg`,
+                                        props.dataKey === 'bodyFat' ? '体脂肪率' : (props.payload.isTarget ? '目標' : '体重')
                                     ]}
                                 />
                                 <Line
+                                    yAxisId="weight"
                                     type="monotone"
                                     dataKey="weight"
                                     stroke="var(--primary)"
@@ -500,14 +520,51 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
                                     }}
                                     activeDot={{ r: 6 }}
                                 />
+                                {hasBodyFatData && (
+                                    <Line
+                                        yAxisId="bodyFat"
+                                        type="monotone"
+                                        dataKey="bodyFat"
+                                        name="体脂肪率"
+                                        stroke="#F59E0B"
+                                        strokeWidth={2}
+                                        dot={{ r: 3, fill: '#F59E0B', stroke: 'none' }}
+                                        activeDot={{ r: 5 }}
+                                        connectNulls
+                                    />
+                                )}
                                 {targetWeight && (
-                                    <ReferenceLine y={parseFloat(targetWeight)} stroke="#F56565" strokeDasharray="3 3" label={{ value: `目標:${targetWeight}kg`, position: 'right', fill: '#F56565', fontSize: 10 }} />
+                                    <ReferenceLine yAxisId="weight" y={parseFloat(targetWeight)} stroke="#F56565" strokeDasharray="3 3" label={{ value: `目標:${targetWeight}kg`, position: 'right', fill: '#F56565', fontSize: 10 }} />
                                 )}
                                 {targetBMIWeight && height && (
-                                    <ReferenceLine y={parseFloat(targetBMIWeight)} stroke="#48BB78" strokeDasharray="5 5" label={{ value: `BMI${targetBMI}:${targetBMIWeight}kg`, position: 'right', fill: '#48BB78', fontSize: 10 }} />
+                                    <ReferenceLine yAxisId="weight" y={parseFloat(targetBMIWeight)} stroke="#48BB78" strokeDasharray="5 5" label={{ value: `BMI${targetBMI}:${targetBMIWeight}kg`, position: 'right', fill: '#48BB78', fontSize: 10 }} />
                                 )}
                             </LineChart>
                         </ResponsiveContainer>
+                    </div>
+
+                    {/* Weight History */}
+                    <div className="glass-panel" style={{ padding: '20px', borderRadius: '16px' }}>
+                        <h3 style={{ margin: '0 0 15px 0', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Calendar size={18} /> 最近の記録
+                        </h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {recentWeights.length === 0 ? (
+                                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>まだ体重記録がありません</div>
+                            ) : recentWeights.map(w => (
+                                <div key={w.id || w.date} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '10px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+                                    <div style={{ minWidth: 0 }}>
+                                        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{w.date}</div>
+                                        {w.bodyFat !== null && (
+                                            <div style={{ fontSize: '0.75rem', color: '#B45309', marginTop: '2px' }}>体脂肪 {w.bodyFat}%</div>
+                                        )}
+                                    </div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                                        <span>{`${w.weight} kg`}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
 
                     {/* Goal Settings Form */}

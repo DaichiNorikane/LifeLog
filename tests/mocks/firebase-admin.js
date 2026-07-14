@@ -47,11 +47,11 @@ export function createChainableMock() {
 export function setupFirebaseAdminMock(vi) {
   const chainable = createChainableMock();
 
-  vi.mock('@/lib/firebase/admin', () => ({
+  vi.doMock('@/lib/firebase/admin', () => ({
     db: chainable.db,
   }));
 
-  vi.mock('firebase-admin/firestore', () => ({
+  vi.doMock('firebase-admin/firestore', () => ({
     FieldValue: {
       delete: vi.fn().mockReturnValue('__DELETE__'),
       serverTimestamp: vi.fn().mockReturnValue('__SERVER_TIMESTAMP__'),

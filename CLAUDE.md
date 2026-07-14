@@ -39,6 +39,7 @@ src/
 │       ├── line/webhook/    # LINE Webhook
 │       ├── line/push/       # LINE Push通知
 │       ├── widget/calories/ # iOSウィジェット用データAPI
+│       ├── health/weight/   # HealthKit体組成データ受信API
 │       ├── push/send/       # Web Push通知送信
 │       ├── push/subscribe/  # Web Push購読管理
 │       ├── manifest/        # PWAマニフェスト
@@ -101,6 +102,8 @@ macros: {
 
 **重要**: `fiber/sugar/sodium/potassium` は `null` と `0` を区別して保存する。
 `null` = AI が推定できなかった（表示は `―`）、`0` = 実際にゼロ。
+
+体重記録 `users/{uid}/weights/{YYYY-MM-DD}` には、HealthKit連携で `bodyFat` / `bmi` / `leanBodyMass` が追加される。いずれも `number|null` で保存し、未取得は `0` ではなく `null` にする。
 
 ## Gemini API の設計
 

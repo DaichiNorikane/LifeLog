@@ -49,6 +49,15 @@ export const getLogicalDateKey = (date = new Date(), boundaryHour = DAY_BOUNDARY
     return getCalendarDateKey(shifted);
 };
 
+/**
+ * 論理日の中での「通し時刻」。0:00〜3:59 は 24〜27 時として扱う。
+ * 深夜1時のコーヒーを「1時＝朝より前」と誤判定しないために必要。
+ */
+export const getLogicalHour = (date = new Date()) => {
+    const { hour } = getJstParts(date);
+    return hour < DAY_BOUNDARY_HOUR ? hour + 24 : hour;
+};
+
 /** 日付キーを n 日ずらす（負値で過去へ） */
 export const shiftDateKey = (dateKey, days) => {
     const [y, m, d] = String(dateKey).split('-').map(Number);
@@ -100,6 +109,16 @@ export const hoursUntilBedtime = (mealTimestamp, dateKey, bedtime) => {
     if (Number.isNaN(meal.getTime())) return null;
     return (bed.getTime() - meal.getTime()) / (60 * 60 * 1000);
 };
+
+/** その論理日に属する食事だけを取り出す（時刻の昇順） */
+export const filterMealsForLogicalDate = (meals = [], dateKey) =>
+    meals
+        .filter((meal) => {
+            const t = new Date(meal?.timestamp);
+            if (Number.isNaN(t.getTime())) return false;
+            return getLogicalDateKey(t) === dateKey;
+        })
+        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
 /** プロフィール未設定時の既定値 */
 export const DEFAULT_SLEEP_SCHEDULE = {

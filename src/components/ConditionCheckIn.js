@@ -26,7 +26,10 @@ const SCALE = [
 // 集中力を朝に聞いても答えようがないので、この時刻以降だけ表示する
 const FOCUS_PROMPT_FROM_HOUR = 14;
 
-export default function ConditionCheckIn({ user, userProfile, onProfileUpdate }) {
+export default function ConditionCheckIn({
+    user, userProfile, onProfileUpdate,
+    openSettings = false, onSettingsHandled,
+}) {
     const [sleepValue, setSleepValue] = useState(null);
     const [focusValue, setFocusValue] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -53,6 +56,13 @@ export default function ConditionCheckIn({ user, userProfile, onProfileUpdate })
         setBedtime(userProfile?.bedtime || DEFAULT_SLEEP_SCHEDULE.bedtime);
         setWakeTime(userProfile?.wakeTime || DEFAULT_SLEEP_SCHEDULE.wakeTime);
     }, [userProfile?.bedtime, userProfile?.wakeTime]);
+
+    // コンディションカードの「就寝時刻を設定」からも開けるようにする
+    useEffect(() => {
+        if (!openSettings) return;
+        setShowSettings(true);
+        onSettingsHandled?.();
+    }, [openSettings, onSettingsHandled]);
 
     useEffect(() => {
         if (!user?.uid) {

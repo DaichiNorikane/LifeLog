@@ -1,7 +1,7 @@
 "use client";
 import { evaluateDailyLog, evaluateSingleMeal } from './actions/daily-evaluation';
 import { calculateRecipeWithGemini } from './actions/recipe';
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 
 const FoodLogger = dynamic(() => import('@/components/FoodLogger'), { ssr: false });
@@ -15,14 +15,18 @@ const CategoryEvaluationModal = dynamic(() => import('@/components/CategoryEvalu
 const ElenaChallengeModal = dynamic(() => import('@/components/ElenaChallengeModal'), { ssr: false });
 const ConditionCheckIn = dynamic(() => import('@/components/ConditionCheckIn'), { ssr: false });
 const DrinkQuickLog = dynamic(() => import('@/components/DrinkQuickLog'), { ssr: false });
+const ConditionCard = dynamic(() => import('@/components/ConditionCard'), { ssr: false });
+const ConditionModal = dynamic(() => import('@/components/ConditionModal'), { ssr: false });
 import { Camera, XCircle, ChevronLeft, ChevronRight, Calculator, Weight, Utensils, Flame, Activity, Sparkles, Loader2, LogIn, Refrigerator, Gamepad2, Trophy, Brain, Bell, BellOff } from 'lucide-react';
 import PullToRefresh from 'react-simple-pull-to-refresh';
 
 import { useAuth } from '@/lib/contexts/AuthContext';
-import { addMealToFirestore, getMealsFromFirestore, deleteMealFromFirestore, getWeightsFromFirestore, getUserProfile, updateMealInFirestore, addStockItem, getStockItems, deleteStockItem, saveDailyEvaluation, getDailyEvaluation } from '@/lib/firebase/firestore';
+import { addMealToFirestore, getMealsFromFirestore, deleteMealFromFirestore, getWeightsFromFirestore, getUserProfile, updateMealInFirestore, addStockItem, getStockItems, deleteStockItem, saveDailyEvaluation, getDailyEvaluation, saveConditionPrediction } from '@/lib/firebase/firestore';
 import { getCache, setCache } from '@/utils/db';
 import { usePushNotification } from '@/lib/usePushNotification';
 import { sumMacroTotals } from '@/lib/health/nutrients';
+import { evaluateCondition, toPredictedScores, hasAnyScore, ENGINE_VERSION } from '@/lib/health/conditionEngine';
+import { getLogicalDateKey } from '@/lib/health/conditionDate';
 
 export default function Home() {
   const { user, logOut, googleSignIn, loading } = useAuth();
@@ -40,6 +44,8 @@ export default function Home() {
   const [targetMealType, setTargetMealType] = useState('dinner'); // For Advisor
   const [showStockManager, setShowStockManager] = useState(false); // Stock Manager
   const [showGame, setShowGame] = useState(false); // Mini Game
+  const [showConditionModal, setShowConditionModal] = useState(false); // コンディション内訳
+  const [openBedtimeSetting, setOpenBedtimeSetting] = useState(false); // 就寝時刻の設定を開く要求
   const [showQuiz, setShowQuiz] = useState(false); // Elena's Challenge
   const [showRanking, setShowRanking] = useState(false); // Meal Ranking
   const [selectedCategory, setSelectedCategory] = useState(null); // 'breakfast', 'lunch', 'dinner', 'snack'
@@ -242,9 +248,52 @@ export default function Home() {
 
   const dayTotals = useMemo(() => getDailyTotals(currentDate), [meals, currentDate]);
 
+
+
   // Derived Values (memoized)
   const displayMeals = useMemo(() => meals.filter(meal => isSameDay(new Date(meal.timestamp), currentDate)), [meals, currentDate]);
   const selectedWeightEntry = useMemo(() => weights.find(w => w.date === currentDateKey), [weights, currentDateKey]);
+  // ===== コンディション予測（決定論エンジン。API呼び出しなしで即時更新される） =====
+  // 日付は「論理日」(4:00区切り)。深夜の食事を前日の夜として扱うため、
+  // ダッシュボードのカレンダー日とは意図的にずらしている。
+  const conditionInput = useMemo(() => {
+    if (isToday(currentDate)) {
+      return { dateKey: getLogicalDateKey(new Date()), now: new Date() };
+    }
+    // 過去日は「その日が終わった時点」で評価する
+    const dateKey = getLocalDateKey(currentDate);
+    const endOfLogicalDay = new Date(currentDate);
+    endOfLogicalDay.setHours(23, 59, 0, 0);
+    return { dateKey, now: endOfLogicalDay };
+  }, [currentDate]);
+
+  const conditionResult = useMemo(() => evaluateCondition({
+    dateKey: conditionInput.dateKey,
+    meals,
+    profile: {
+      bedtime: userProfile?.bedtime,
+      targetCalories: userProfile?.targetCalories,
+      currentWeight: selectedWeightEntry?.weight ?? userProfile?.currentWeight,
+    },
+    now: conditionInput.now,
+  }), [conditionInput, meals, userProfile, selectedWeightEntry]);
+
+  // 予測を日次スナップショットとして保存する。
+  // ルールを後から改訂しても過去の予測が書き換わらず、Phase 4 の相関分析が壊れない。
+  const lastSavedPredictionRef = useRef(null);
+  useEffect(() => {
+    if (!user?.uid || !isToday(currentDate)) return;
+    if (!hasAnyScore(conditionResult)) return;
+
+    const predicted = toPredictedScores(conditionResult);
+    const signature = `${conditionInput.dateKey}:${JSON.stringify(predicted)}`;
+    if (lastSavedPredictionRef.current === signature) return;
+    lastSavedPredictionRef.current = signature;
+
+    saveConditionPrediction(user.uid, conditionInput.dateKey, predicted, ENGINE_VERSION)
+      .catch(e => console.warn('[Condition] prediction save failed:', e));
+  }, [user?.uid, currentDate, conditionResult, conditionInput.dateKey]);
+
 
   // --- Dynamic Calorie Target Logic ---
   const baseTarget = userProfile?.targetCalories || 2200;
@@ -929,12 +978,22 @@ export default function Home() {
             </div>
           )}
 
+          {/* コンディション予測（4軸ミニゲージ） */}
+          <ConditionCard
+            result={conditionResult}
+            onOpenDetail={() => setShowConditionModal(true)}
+            needsBedtime={isToday(currentDate) && !userProfile?.bedtime}
+            onRequestBedtime={() => setOpenBedtimeSetting(true)}
+          />
+
           {/* 体感チェックイン + マイドリンク（今日のみ。過去日を見ている時は聞かない） */}
           {isToday(currentDate) && (
             <>
               <ConditionCheckIn
                 user={user}
                 userProfile={userProfile}
+                openSettings={openBedtimeSetting}
+                onSettingsHandled={() => setOpenBedtimeSetting(false)}
                 onProfileUpdate={(patch) => setUserProfile(prev => ({ ...(prev || {}), ...patch }))}
               />
               <DrinkQuickLog user={user} onLogDrink={handleLogMeal} />
@@ -1448,6 +1507,14 @@ export default function Home() {
       `}</style>
 
       {/* Diet Shooter Game Overlay */}
+      {showConditionModal && (
+        <ConditionModal
+          isOpen={showConditionModal}
+          result={conditionResult}
+          onClose={() => setShowConditionModal(false)}
+        />
+      )}
+
       {showGame && (
         <DietShooter meals={meals} user={user} userProfile={userProfile} onClose={() => setShowGame(false)} />
       )}

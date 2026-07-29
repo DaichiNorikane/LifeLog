@@ -4,7 +4,9 @@
 食事記録・ダイエット支援Webアプリ。AIキャラクター「エレナ」が専属トレーナーとしてユーザーを指導する。
 エレナのIP育成が最優先目標。ダイエットトレーナー → 習慣トレーナーへの進化を計画中。
 
-**将来計画**: iOSネイティブアプリ化を予定（`docs/ios-migration-plan.md` 参照）
+**将来計画**:
+- iOSネイティブアプリ化を予定（`docs/ios-migration-plan.md` 参照）
+- 食事が集中力・睡眠・体調に与える影響の可視化（`docs/condition-impact-design.md` 参照）
 
 ## 技術スタック
 - **Framework**: Next.js 16 (App Router) + React 19

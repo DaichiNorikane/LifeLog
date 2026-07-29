@@ -2,6 +2,7 @@
 import {
     apiKey, getGenAI, MODELS_TO_TRY, THINKING, createModel, FOOD_SEARCH_SCHEMA, FOOD_ANALYSIS_SCHEMA
 } from "./gemini-client";
+import { EXTENDED_NUTRIENTS_INSTRUCTION } from "@/lib/health/nutrients";
 
 export const searchAiFood = async (query, historyContext = "") => {
     if (!apiKey) {
@@ -20,14 +21,6 @@ export const searchAiFood = async (query, historyContext = "") => {
 
     const isMulti = queries.length > 1;
     const queryListText = queries.map((q, i) => `  ${i + 1}. 「${q}」`).join('\n');
-
-    const EXTENDED_NUTRIENTS_INSTRUCTION = `
-【拡張栄養素（macros内に含める）】
-可能な限り正確な値を推定してください。信頼できるデータがない場合は null を設定（0ではなくnull）。
-- fiber: 食物繊維 (g)
-- sugar: 糖質 (g)（炭水化物から食物繊維を除いた値）
-- sodium: ナトリウム (mg)
-- potassium: カリウム (mg)`;
 
     const prompt = isMulti ? `
 あなたは厳格な栄養データベースです。ユーザーが以下の複数の食事を一度に検索しました。
@@ -106,13 +99,8 @@ ${correctionContext || "特になし"}
 - 複数品目が含まれていても、1食として合算してください。
 - 料理名 foodName は、合算内容が伝わる短い名前にしてください。
 - 補足がある場合は必ず優先してください（例: ご飯半分、ドレッシングなし、プロテイン追加）。
-- 根拠の薄い拡張栄養素は null を設定してください。0 と null を混同しないでください。
 
-【拡張栄養素（macros内）】
-- fiber: 食物繊維 (g)
-- sugar: 糖質 (g)
-- sodium: ナトリウム (mg)
-- potassium: カリウム (mg)
+${EXTENDED_NUTRIENTS_INSTRUCTION}
     `.trim();
 
     let lastError = null;

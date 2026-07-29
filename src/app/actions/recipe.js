@@ -3,6 +3,7 @@ import {
     apiKey, getGenAI, MODELS_TO_TRY, THINKING, createModel,
     RECIPE_HYBRID_SCHEMA, RECIPE_CALC_SCHEMA, RECIPE_SEARCH_SCHEMA
 } from "./gemini-client";
+import { EXTENDED_NUTRIENTS_INSTRUCTION } from "@/lib/health/nutrients";
 
 export const calculateRecipeHybrid = async (ingredients) => {
     if (!apiKey) return { error: "API Key missing" };
@@ -53,6 +54,8 @@ ${unknownListStr || "(なし)"}
 5. このレシピ全体が「何人前」に相当するか推測してください。（例: 米300gと肉200gなら約2-3人前）
 6. **1人前あたり**の数値を計算してください。
 
+${EXTENDED_NUTRIENTS_INSTRUCTION}
+
 reasoning には計算の根拠を記載してください。
     `.trim();
 
@@ -86,6 +89,8 @@ ${ingredients}
 1. リストの内容を解釈し、一般的な料理名を推測してください。
 2. 提供された食材リスト全体が「何人前」に相当するか推定してください。（例: 豆腐300gとひき肉100gなら概ね2人前など）
 3. **1人前あたり**のカロリーとPFCを計算してください。（全体の栄養価 ÷ 推定人数）
+
+${EXTENDED_NUTRIENTS_INSTRUCTION}
 
 reasoning には計算の根拠（例: 全体を2人前と推定。合計XXXkcal ÷ 2...）を記載してください。
     `.trim();

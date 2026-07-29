@@ -1,6 +1,7 @@
 // Shared utilities for Gemini API - NOT a server action file
 // (Individual action files have their own "use server" directive)
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+import { EXTENDED_NUTRIENT_KEYS } from "@/lib/health/nutrients";
 
 export const apiKey = process.env.GEMINI_API_KEY;
 
@@ -71,13 +72,12 @@ export const extractJSONArray = (text) => {
 
 // ========== Shared Schemas ==========
 
-// 拡張栄養素（ダイエット関連）- macrosに含める共通プロパティ
-const EXTENDED_MACROS_PROPERTIES = {
-    fiber: { type: SchemaType.NUMBER, nullable: true },     // 食物繊維 (g)
-    sugar: { type: SchemaType.NUMBER, nullable: true },     // 糖質 (g)
-    sodium: { type: SchemaType.NUMBER, nullable: true },    // ナトリウム (mg)
-    potassium: { type: SchemaType.NUMBER, nullable: true }, // カリウム (mg)
-};
+// 拡張栄養素 - macrosに含める共通プロパティ
+// フィールド定義は src/lib/health/nutrients.js（唯一の真実）から生成する。
+// 全て nullable: 推定できなかった場合は 0 ではなく null を返させるため。
+const EXTENDED_MACROS_PROPERTIES = Object.fromEntries(
+    EXTENDED_NUTRIENT_KEYS.map(key => [key, { type: SchemaType.NUMBER, nullable: true }])
+);
 
 // 食事画像解析スキーマ
 export const FOOD_ANALYSIS_SCHEMA = {

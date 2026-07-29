@@ -16,6 +16,7 @@ import {
     Timestamp
 } from "firebase/firestore";
 import { cleanData } from "@/utils/cleanData";
+import { normalizeMacros } from "@/lib/health/nutrients";
 
 // Get User Profile
 export const getUserProfile = async (userId) => {
@@ -496,6 +497,127 @@ export const saveLinkCode = async (userId, code) => {
         throw e;
     }
 };
+// ========== Condition Logs (体感ログ) ==========
+// users/{uid}/conditionLogs/{YYYY-MM-DD}
+// 日付キーは「論理日」(4:00区切り)。ルールは src/lib/health/conditionDate.js を参照。
+
+const getConditionLogRef = (userId, dateKey) =>
+    doc(db, "users", userId, "conditionLogs", dateKey);
+
+/** 体感ログを部分更新（マージ）。既存フィールドは壊さない */
+export const saveConditionLog = async (userId, dateKey, patch) => {
+    if (!userId || !dateKey) return;
+    try {
+        const payload = cleanData({
+            ...patch,
+            date: dateKey,
+            updatedAt: Timestamp.now(),
+        });
+        await setDoc(getConditionLogRef(userId, dateKey), payload, { merge: true });
+    } catch (e) {
+        console.error("Error saving condition log:", e);
+        throw e;
+    }
+};
+
+/**
+ * 体感の1タップ入力を保存する。
+ * @param {'sleep'|'focus'|'energy'|'mood'} axis
+ * @param {number|null} value 1-5 の主観スコア
+ */
+export const saveConditionCheckIn = async (userId, dateKey, axis, value) => {
+    const numeric = value === null || value === undefined ? null : Number(value);
+    if (numeric !== null && (!Number.isFinite(numeric) || numeric < 1 || numeric > 5)) {
+        throw new Error(`Invalid condition value for ${axis}: ${value}`);
+    }
+    const entry = {
+        subjective: numeric,
+        recordedAt: new Date().toISOString(),
+    };
+    // 睡眠は HealthKit 由来の客観値とマージされるため source を明示する
+    if (axis === 'sleep') entry.source = 'manual';
+
+    await saveConditionLog(userId, dateKey, { [axis]: entry });
+};
+
+/** その日の予測スコアをスナップショット保存（ルール改訂後も過去の分析が壊れないように） */
+export const saveConditionPrediction = async (userId, dateKey, predicted, engineVersion) => {
+    await saveConditionLog(userId, dateKey, { predicted, engineVersion });
+};
+
+export const getConditionLog = async (userId, dateKey) => {
+    if (!userId || !dateKey) return null;
+    try {
+        const snap = await getDoc(getConditionLogRef(userId, dateKey));
+        return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+    } catch (e) {
+        console.error("Error fetching condition log:", e);
+        return null;
+    }
+};
+
+/** 相関分析用にまとめて取得（新しい順） */
+export const getConditionLogs = async (userId, limitCount = 60) => {
+    if (!userId) return [];
+    try {
+        const q = query(
+            collection(db, "users", userId, "conditionLogs"),
+            orderBy("date", "desc"),
+            limit(limitCount)
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+        console.error("Error fetching condition logs:", e);
+        return [];
+    }
+};
+
+// ========== Drink Presets (マイドリンク) ==========
+// 「コーヒー」からカフェイン量をAIに当てさせるのは精度が出ないため、
+// よく飲むものを固定値のプリセットとして持つ。睡眠判定の主要ドライバーなので精度を優先する。
+
+const getDrinkPresetsRef = (userId) => collection(db, "users", userId, "drinkPresets");
+
+export const addDrinkPreset = async (userId, preset) => {
+    if (!userId || !preset?.name) return null;
+    try {
+        const payload = cleanData({
+            name: preset.name,
+            calories: Number(preset.calories) || 0,
+            macros: normalizeMacros(preset.macros),
+            createdAt: Timestamp.now(),
+        });
+        const docRef = await addDoc(getDrinkPresetsRef(userId), payload);
+        return docRef.id;
+    } catch (e) {
+        console.error("Error adding drink preset:", e);
+        throw e;
+    }
+};
+
+export const getDrinkPresets = async (userId) => {
+    if (!userId) return [];
+    try {
+        const q = query(getDrinkPresetsRef(userId), orderBy("createdAt", "desc"), limit(50));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+        console.error("Error fetching drink presets:", e);
+        return [];
+    }
+};
+
+export const deleteDrinkPreset = async (userId, presetId) => {
+    if (!userId || !presetId) return;
+    try {
+        await deleteDoc(doc(db, "users", userId, "drinkPresets", presetId));
+    } catch (e) {
+        console.error("Error deleting drink preset:", e);
+        throw e;
+    }
+};
+
 // ========== Search History ==========
 
 export const addSearchHistory = async (userId, item) => {
@@ -507,13 +629,10 @@ export const addSearchHistory = async (userId, item) => {
         const q = query(historyRef, where("foodName", "==", item.foodName), limit(1));
         const snapshot = await getDocs(q);
 
+        // 拡張栄養素: nullは明示的に保存（0と未取得を区別するため）
         const macrosPayload = cleanData({
             ...(item.macros || {}),
-            // 拡張栄養素: nullは明示的に保存（0と未取得を区別するため）
-            fiber: item.macros?.fiber !== undefined ? item.macros.fiber : null,
-            sugar: item.macros?.sugar !== undefined ? item.macros.sugar : null,
-            sodium: item.macros?.sodium !== undefined ? item.macros.sodium : null,
-            potassium: item.macros?.potassium !== undefined ? item.macros.potassium : null,
+            ...normalizeMacros(item.macros),
         });
 
         const payload = cleanData({

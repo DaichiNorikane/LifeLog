@@ -2,6 +2,7 @@
 import {
     apiKey, getGenAI, MODELS_TO_TRY, THINKING, createModel, FOOD_ANALYSIS_SCHEMA
 } from "./gemini-client";
+import { EXTENDED_NUTRIENTS_INSTRUCTION } from "@/lib/health/nutrients";
 
 export const analyzeImageWithGemini = async (base64Image, context = "") => {
     if (!apiKey) {
@@ -34,12 +35,7 @@ ${context
 2. ユーザーの補足情報があれば、それを最優先で反映させる（分量変更など）
 3. 一般的な提供量・調理法から栄養価を推定する
 
-【拡張栄養素（macros内に含める）】
-可能な限り正確な値を推定してください。信頼できるデータがない場合は null を設定してください（0ではなくnull）。
-- fiber: 食物繊維 (g)
-- sugar: 糖質 (g)（炭水化物から食物繊維を除いた値）
-- sodium: ナトリウム (mg)（食塩相当量×393に相当）
-- potassium: カリウム (mg)
+${EXTENDED_NUTRIENTS_INSTRUCTION}
 
 reasoning には分析の根拠とユーザーの補足情報の反映について日本語で説明してください。
     `.trim();

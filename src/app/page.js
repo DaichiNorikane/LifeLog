@@ -13,6 +13,8 @@ const DietShooter = dynamic(() => import('@/components/DietShooter'), { ssr: fal
 const MealRankingModal = dynamic(() => import('@/components/MealRankingModal'), { ssr: false });
 const CategoryEvaluationModal = dynamic(() => import('@/components/CategoryEvaluationModal'), { ssr: false });
 const ElenaChallengeModal = dynamic(() => import('@/components/ElenaChallengeModal'), { ssr: false });
+const ConditionCheckIn = dynamic(() => import('@/components/ConditionCheckIn'), { ssr: false });
+const DrinkQuickLog = dynamic(() => import('@/components/DrinkQuickLog'), { ssr: false });
 import { Camera, XCircle, ChevronLeft, ChevronRight, Calculator, Weight, Utensils, Flame, Activity, Sparkles, Loader2, LogIn, Refrigerator, Gamepad2, Trophy, Brain, Bell, BellOff } from 'lucide-react';
 import PullToRefresh from 'react-simple-pull-to-refresh';
 
@@ -20,6 +22,7 @@ import { useAuth } from '@/lib/contexts/AuthContext';
 import { addMealToFirestore, getMealsFromFirestore, deleteMealFromFirestore, getWeightsFromFirestore, getUserProfile, updateMealInFirestore, addStockItem, getStockItems, deleteStockItem, saveDailyEvaluation, getDailyEvaluation } from '@/lib/firebase/firestore';
 import { getCache, setCache } from '@/utils/db';
 import { usePushNotification } from '@/lib/usePushNotification';
+import { sumMacroTotals } from '@/lib/health/nutrients';
 
 export default function Home() {
   const { user, logOut, googleSignIn, loading } = useAuth();
@@ -216,31 +219,11 @@ export default function Home() {
   const currentDateKey = getLocalDateKey(currentDate);
 
   // Calculate Totals for Today
+  // 拡張栄養素は null をスキップして合算し、`{key}Recorded` に何件分かを持つ
+  // （定義は src/lib/health/nutrients.js が唯一の真実）
   const getDailyTotals = (date) => {
     const dailyMeals = meals.filter(m => isSameDay(new Date(m.timestamp), date));
-    return dailyMeals.reduce((acc, meal) => {
-      const c = Number(meal.calories);
-      const p = Number(meal.macros?.protein);
-      const f = Number(meal.macros?.fat);
-      const cb = Number(meal.macros?.carbs);
-      const fiber = meal.macros?.fiber;
-      const sugar = meal.macros?.sugar;
-      const sodium = meal.macros?.sodium;
-      const potassium = meal.macros?.potassium;
-      return {
-        calories: acc.calories + (isNaN(c) ? 0 : c),
-        protein: acc.protein + (isNaN(p) ? 0 : p),
-        fat: acc.fat + (isNaN(f) ? 0 : f),
-        carbs: acc.carbs + (isNaN(cb) ? 0 : cb),
-        fiber: fiber != null ? acc.fiber + Number(fiber) : acc.fiber,
-        sugar: sugar != null ? acc.sugar + Number(sugar) : acc.sugar,
-        sodium: sodium != null ? acc.sodium + Number(sodium) : acc.sodium,
-        potassium: potassium != null ? acc.potassium + Number(potassium) : acc.potassium,
-        // 記録件数（null除外のため合計が何件分の合算かを把握）
-        fiberRecorded: fiber != null ? acc.fiberRecorded + 1 : acc.fiberRecorded,
-        sodiumRecorded: sodium != null ? acc.sodiumRecorded + 1 : acc.sodiumRecorded,
-      };
-    }, { calories: 0, protein: 0, fat: 0, carbs: 0, fiber: 0, sugar: 0, sodium: 0, potassium: 0, fiberRecorded: 0, sodiumRecorded: 0 });
+    return sumMacroTotals(dailyMeals);
   };
 
   // FoodLoggerに渡すrecentMeals（meals stateから重複除去）
@@ -944,6 +927,18 @@ export default function Home() {
                 <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '8px 0 0', textAlign: 'right' }}>― は未取得（AI解析時に自動記録されます）</p>
               )}
             </div>
+          )}
+
+          {/* 体感チェックイン + マイドリンク（今日のみ。過去日を見ている時は聞かない） */}
+          {isToday(currentDate) && (
+            <>
+              <ConditionCheckIn
+                user={user}
+                userProfile={userProfile}
+                onProfileUpdate={(patch) => setUserProfile(prev => ({ ...(prev || {}), ...patch }))}
+              />
+              <DrinkQuickLog user={user} onLogDrink={handleLogMeal} />
+            </>
           )}
 
           {/* Meal Timeline - Grouped by Meal Type */}

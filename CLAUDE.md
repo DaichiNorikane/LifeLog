@@ -7,6 +7,7 @@
 **将来計画**:
 - iOSネイティブアプリ化を予定（`docs/ios-migration-plan.md` 参照）
 - 食事が集中力・睡眠・体調に与える影響の可視化（`docs/condition-impact-design.md` 参照）
+- 運動・スクリーンタイム連携と行動ログの可視化（`docs/activity-screentime-design.md` 参照）
 
 ## 技術スタック
 - **Framework**: Next.js 16 (App Router) + React 19

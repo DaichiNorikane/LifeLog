@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
-import { verifyWidgetToken, writeWeight } from '@/lib/health/ingest';
+import { verifyWidgetToken, writeActivity } from '@/lib/health/ingest';
 
-// HealthKit（iOSショートカット経由）からの体組成データ受信API。
-// eufy 体組成計 → EufyLife → Apple ヘルスケア → ショートカット、という経路で届く。
-// 手順は docs/eufy-healthkit-setup.md を参照。
+// HealthKit（iOSショートカット経由）からの日次アクティビティ受信API。
+// 認証・日付キーの扱いは /api/health/weight と同じ方式に揃えている。
 
 export async function POST(request) {
     if (!verifyWidgetToken(request)) {
@@ -13,26 +12,23 @@ export async function POST(request) {
     let body;
     try {
         body = await request.json();
-    } catch (error) {
+    } catch {
         return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
     }
 
     const { uid, ...payload } = body || {};
-
     if (!uid) {
         return NextResponse.json({ error: 'Missing uid' }, { status: 400 });
     }
 
     try {
-        const result = await writeWeight(uid, payload);
+        const result = await writeActivity(uid, payload);
         if (!result.ok) {
             return NextResponse.json({ error: result.error }, { status: result.status || 400 });
         }
-
-        const { ok, ...values } = result;
-        return NextResponse.json({ success: true, ...values });
+        return NextResponse.json({ success: true, date: result.date, metrics: result.metrics });
     } catch (error) {
-        console.error('[Health Weight] Error:', error);
+        console.error('[Health Activity] Error:', error);
         return NextResponse.json({ error: 'Internal error' }, { status: 500 });
     }
 }

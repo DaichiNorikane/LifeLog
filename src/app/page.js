@@ -18,17 +18,18 @@ const ConditionCheckIn = dynamic(() => import('@/components/ConditionCheckIn'), 
 const DrinkQuickLog = dynamic(() => import('@/components/DrinkQuickLog'), { ssr: false });
 const ConditionCard = dynamic(() => import('@/components/ConditionCard'), { ssr: false });
 const ConditionModal = dynamic(() => import('@/components/ConditionModal'), { ssr: false });
+const ActivityCard = dynamic(() => import('@/components/ActivityCard'), { ssr: false });
 import { Camera, XCircle, ChevronLeft, ChevronRight, Calculator, Weight, Utensils, Flame, Activity, Sparkles, Loader2, LogIn, Refrigerator, Gamepad2, Trophy, Brain, Bell, BellOff } from 'lucide-react';
 import PullToRefresh from 'react-simple-pull-to-refresh';
 
 import { useAuth } from '@/lib/contexts/AuthContext';
-import { addMealToFirestore, getMealsFromFirestore, deleteMealFromFirestore, getWeightsFromFirestore, getUserProfile, updateMealInFirestore, addStockItem, getStockItems, deleteStockItem, saveDailyEvaluation, getDailyEvaluation, saveConditionPrediction, getConditionLog, getConditionLogs, getConditionModel } from '@/lib/firebase/firestore';
+import { addMealToFirestore, getMealsFromFirestore, deleteMealFromFirestore, getWeightsFromFirestore, getUserProfile, updateMealInFirestore, addStockItem, getStockItems, deleteStockItem, saveDailyEvaluation, getDailyEvaluation, saveConditionPrediction, getConditionLog, getConditionLogs, getConditionModel, getActivityLogs, getRecentWorkouts } from '@/lib/firebase/firestore';
 import { getCache, setCache } from '@/utils/db';
 import { usePushNotification } from '@/lib/usePushNotification';
 import { sumMacroTotals, isNutritionallyTrivial, EXTENDED_NUTRIENTS } from '@/lib/health/nutrients';
 import { evaluateCondition, toPredictedScores, toFiredDrivers, hasAnyScore, ENGINE_VERSION } from '@/lib/health/conditionEngine';
 import { toDisplayableFindings } from '@/lib/health/correlation';
-import { getLogicalDateKey } from '@/lib/health/conditionDate';
+import { getLogicalDateKey, getSleepTargetDateKey } from '@/lib/health/conditionDate';
 
 export default function Home() {
   const { user, logOut, googleSignIn, loading } = useAuth();
@@ -49,7 +50,9 @@ export default function Home() {
   const [showConditionModal, setShowConditionModal] = useState(false); // コンディション内訳
   const [openBedtimeSetting, setOpenBedtimeSetting] = useState(false); // 就寝時刻の設定を開く要求
   const [conditionModel, setConditionModel] = useState(null); // 学習した個人係数（Phase 4）
-  const [conditionLogs, setConditionLogs] = useState([]); // 推移グラフ用（モーダルを開いた時だけ読む）
+  const [conditionLogs, setConditionLogs] = useState([]); // 推移グラフ＋実測睡眠の表示に使う
+  const [activityLogs, setActivityLogs] = useState([]);   // HealthKit 由来の日次アクティビティ
+  const [workouts, setWorkouts] = useState([]);           // HealthKit 由来のワークアウト
   const [showQuiz, setShowQuiz] = useState(false); // Elena's Challenge
   const [showRanking, setShowRanking] = useState(false); // Meal Ranking
   const [selectedCategory, setSelectedCategory] = useState(null); // 'breakfast', 'lunch', 'dinner', 'snack'
@@ -74,16 +77,22 @@ export default function Home() {
     // Step 1: Show cached data instantly
     if (!forceRefresh) {
       try {
-        const [cachedMeals, cachedWeights, cachedProfile, cachedStock] = await Promise.all([
+        const [cachedMeals, cachedWeights, cachedProfile, cachedStock, cachedActivity, cachedWorkouts, cachedConditionLogs] = await Promise.all([
           getCache(`meals_${uid}`),
           getCache(`weights_${uid}`),
           getCache(`profile_${uid}`),
           getCache(`stock_${uid}`),
+          getCache(`activityLogs_${uid}`),
+          getCache(`workouts_${uid}`),
+          getCache(`conditionLogs_${uid}`),
         ]);
         if (cachedMeals?.data) setMeals(cachedMeals.data);
         if (cachedWeights?.data) setWeights(cachedWeights.data);
         if (cachedProfile?.data) setUserProfile(cachedProfile.data);
         if (cachedStock?.data) setStockItems(cachedStock.data);
+        if (cachedActivity?.data) setActivityLogs(cachedActivity.data);
+        if (cachedWorkouts?.data) setWorkouts(cachedWorkouts.data);
+        if (cachedConditionLogs?.data) setConditionLogs(cachedConditionLogs.data);
 
         // If all caches are fresh, skip Firestore
         if (cachedMeals && !cachedMeals.stale && cachedWeights && !cachedWeights.stale) {
@@ -95,16 +104,23 @@ export default function Home() {
 
     // Step 2: Fetch from Firestore and update cache
     try {
-      const [firestoreMeals, firestoreWeights, profile, firestoreStock] = await Promise.all([
+      const [firestoreMeals, firestoreWeights, profile, firestoreStock, firestoreActivity, firestoreWorkouts, firestoreConditionLogs] = await Promise.all([
         getMealsFromFirestore(uid),
         getWeightsFromFirestore(uid),
         getUserProfile(uid),
-        getStockItems(uid)
+        getStockItems(uid),
+        // HealthKit 連携の実測データ。取れなくても本体は動く（空配列で返る）
+        getActivityLogs(uid, 30),
+        getRecentWorkouts(uid, 30),
+        getConditionLogs(uid, 30),
       ]);
       setMeals(firestoreMeals);
       setWeights(firestoreWeights);
       setStockItems(firestoreStock || []);
       setUserProfile(profile || { targetCalories: 2200 });
+      setActivityLogs(firestoreActivity || []);
+      setWorkouts(firestoreWorkouts || []);
+      setConditionLogs(firestoreConditionLogs || []);
 
       // 学習済みの個人係数（無ければ一般論のまま動く）。失敗しても本体は止めない。
       getConditionModel(uid)
@@ -117,6 +133,9 @@ export default function Home() {
         setCache(`weights_${uid}`, firestoreWeights),
         setCache(`profile_${uid}`, profile || { targetCalories: 2200 }),
         setCache(`stock_${uid}`, firestoreStock || []),
+        setCache(`activityLogs_${uid}`, firestoreActivity || []),
+        setCache(`workouts_${uid}`, firestoreWorkouts || []),
+        setCache(`conditionLogs_${uid}`, firestoreConditionLogs || []),
       ]).catch(() => {});
 
       // Auto-evaluate in background (don't block startup)
@@ -262,6 +281,22 @@ export default function Home() {
   // Derived Values (memoized)
   const displayMeals = useMemo(() => meals.filter(meal => isSameDay(new Date(meal.timestamp), currentDate)), [meals, currentDate]);
   const selectedWeightEntry = useMemo(() => weights.find(w => w.date === currentDateKey), [weights, currentDateKey]);
+
+  // --- HealthKit の実測データ（表示中の日付のぶんだけ取り出す）---
+  const activityForDate = useMemo(
+    () => activityLogs.find(a => a.date === currentDateKey) || null,
+    [activityLogs, currentDateKey]
+  );
+  const workoutsForDate = useMemo(
+    () => workouts.filter(w => w.date === currentDateKey),
+    [workouts, currentDateKey]
+  );
+  // 睡眠は「その夜を引き起こした食事の日」に紐づいている（conditionDate.js 参照）。
+  // 今日を見ている時はまだ今夜が来ていないので、直近で完了した夜＝前日キーを出す。
+  const sleepForDate = useMemo(() => {
+    const key = isToday(currentDate) ? getSleepTargetDateKey() : currentDateKey;
+    return conditionLogs.find(l => l.date === key)?.sleep?.objective || null;
+  }, [conditionLogs, currentDate, currentDateKey]);
   // ===== コンディション予測（決定論エンジン。API呼び出しなしで即時更新される） =====
   // 日付は「論理日」(4:00区切り)。深夜の食事を前日の夜として扱うため、
   // ダッシュボードのカレンダー日とは意図的にずらしている。
@@ -1048,6 +1083,16 @@ export default function Home() {
             onOpenDetail={() => setShowConditionModal(true)}
             needsBedtime={isToday(currentDate) && !userProfile?.bedtime}
             onRequestBedtime={() => setOpenBedtimeSetting(true)}
+          />
+
+          {/* ヘルスケアから届いた実測値（予測の真下に置いて答え合わせできるようにする） */}
+          <ActivityCard
+            title={isToday(currentDate) ? '今日のからだ' : 'この日のからだ'}
+            activity={activityForDate}
+            body={selectedWeightEntry}
+            sleep={sleepForDate}
+            sleepLabel={isToday(currentDate) ? '昨夜の睡眠' : 'この日の夜の睡眠'}
+            workouts={workoutsForDate}
           />
 
           {/* 体感チェックイン + マイドリンク（今日のみ。過去日を見ている時は聞かない） */}

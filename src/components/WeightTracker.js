@@ -4,6 +4,7 @@ import { X, Save, TrendingDown, Calendar, Target, AlertCircle, Ruler, Loader2, S
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea } from 'recharts';
 import { saveUserProfile, addWeightToFirestore } from '@/lib/firebase/firestore';
 import { analyzeGoalFeasibility } from '@/app/actions/daily-evaluation';
+import { calcFatMass } from '@/lib/health/healthMetrics';
 
 
 // BMI計算関数
@@ -184,10 +185,18 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
 
     const hasBodyFatData = chartData.some(d => !d.isTarget && d.bodyFat !== null);
 
-    const recentWeights = useMemo(() => weights.slice(0, 10).map(w => ({
-        ...w,
-        bodyFat: normalizeNullableNumber(w.bodyFat),
-    })), [weights]);
+    // 体組成計（eufy → Apple ヘルスケア）から届く値は、体脂肪率だけでなく
+    // BMI・除脂肪体重も入っている。せっかく同期されているので全部出す。
+    const recentWeights = useMemo(() => weights.slice(0, 10).map(w => {
+        const bodyFat = normalizeNullableNumber(w.bodyFat);
+        return {
+            ...w,
+            bodyFat,
+            bmi: normalizeNullableNumber(w.bmi),
+            leanBodyMass: normalizeNullableNumber(w.leanBodyMass),
+            fatMass: calcFatMass(w.weight, bodyFat),
+        };
+    }), [weights]);
 
     // Calculate Insights
     const currentWeight = weights.length > 0 ? weights[0].weight : null;
@@ -555,9 +564,13 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
                                 <div key={w.id || w.date} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '10px 0', borderBottom: '1px solid var(--border-subtle)' }}>
                                     <div style={{ minWidth: 0 }}>
                                         <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{w.date}</div>
-                                        {w.bodyFat !== null && (
-                                            <div style={{ fontSize: '0.75rem', color: '#B45309', marginTop: '2px' }}>体脂肪 {w.bodyFat}%</div>
-                                        )}
+                                        {/* 未取得(null)の項目は出さない。0 と「取れなかった」を混同しないため */}
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', marginTop: '2px', fontSize: '0.75rem', color: '#B45309' }}>
+                                            {w.bodyFat !== null && <span>体脂肪 {w.bodyFat}%</span>}
+                                            {w.fatMass !== null && <span>脂肪 {w.fatMass}kg</span>}
+                                            {w.leanBodyMass !== null && <span>除脂肪 {w.leanBodyMass}kg</span>}
+                                            {w.bmi !== null && <span>BMI {w.bmi}</span>}
+                                        </div>
                                     </div>
                                     <div style={{ fontSize: '1rem', fontWeight: 'bold', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                                         <span>{`${w.weight} kg`}</span>

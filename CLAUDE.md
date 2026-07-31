@@ -42,6 +42,10 @@ src/
 │       ├── line/webhook/    # LINE Webhook
 │       ├── line/push/       # LINE Push通知
 │       ├── widget/calories/ # iOSウィジェット用データAPI
+│       ├── health/sync/     # HealthKitまとめて受信API（ショートカットはこれ1本でよい）
+│       ├── health/activity/ # HealthKit日次アクティビティ受信API
+│       ├── health/workout/  # HealthKitワークアウト受信API（冪等）
+│       ├── health/sleep/    # HealthKit睡眠データ受信API
 │       ├── health/weight/   # HealthKit体組成データ受信API
 │       ├── push/send/       # Web Push通知送信
 │       ├── push/subscribe/  # Web Push購読管理
@@ -58,7 +62,8 @@ src/
 │   │                        # ※recentMealsはpage.jsからpropsで受け取る（Firestoreクエリ不要）
 │   ├── EvaluationModal.js   # エレナの日次評価（スコア+表情変化）
 │   ├── AdvisorModal.js      # 食事アドバイザー
-│   ├── WeightTracker.js     # 体重管理
+│   ├── WeightTracker.js     # 体重管理（体脂肪率/BMI/除脂肪体重/体脂肪量も表示）
+│   ├── ActivityCard.js      # ヘルスケア実測値カード（歩数/消費/睡眠/体組成/ワークアウト）
 │   ├── StockManager.js      # 食材メモ
 │   ├── DietShooter.js       # ミニゲーム（Canvasゲーム）
 │   ├── ElenaChallengeModal.js # クイズ
@@ -74,6 +79,8 @@ src/
 │   ├── line.js              # LINE SDK
 │   ├── usePushNotification.js # Web Push購読フック
 │   ├── pushHelper.js        # Push通知ヘルパー（サーバー側）
+│   ├── health/healthMetrics.js # HealthKit指標の定義（唯一の真実）
+│   ├── health/ingest.js     # HealthKit受信の共通処理（認証・検証・書き込み）
 │   └── game/                # SoundManager
 ├── data/
 │   └── elena-character.js   # エレナのキャラクター定義
@@ -106,7 +113,22 @@ macros: {
 **重要**: `fiber/sugar/sodium/potassium` は `null` と `0` を区別して保存する。
 `null` = AI が推定できなかった（表示は `―`）、`0` = 実際にゼロ。
 
-体重記録 `users/{uid}/weights/{YYYY-MM-DD}` には、HealthKit連携で `bodyFat` / `bmi` / `leanBodyMass` が追加される。いずれも `number|null` で保存し、未取得は `0` ではなく `null` にする。
+体重記録 `users/{uid}/weights/{YYYY-MM-DD}` には、HealthKit連携で `bodyFat` / `bmi` / `leanBodyMass` / `height` が追加される。いずれも `number|null` で保存し、未取得は `0` ではなく `null` にする。
+HealthKitから取得できる体組成はこの5項目で全部（筋肉量・体水分率・内臓脂肪に相当する型がHealthKitに存在しないため、体組成計アプリに表示があっても取得できない）。
+体脂肪量(kg)は**保存しない**。体重を手入力で上書きすると導出値が古いまま残るため、表示時に `calcFatMass()` で毎回計算する。
+
+## HealthKit連携のデータ構造
+
+| コレクション | 日付キー | 内容 |
+|---|---|---|
+| `users/{uid}/weights/{YYYY-MM-DD}` | カレンダー日 | 体組成5項目 |
+| `users/{uid}/activityLogs/{YYYY-MM-DD}` | カレンダー日 | 歩数・消費カロリー・歩行指標など（定義は `healthMetrics.js`） |
+| `users/{uid}/workouts/{workoutId}` | ID=開始時刻+種目（冪等キー） | 個別ワークアウト |
+| `users/{uid}/conditionLogs/{YYYY-MM-DD}.sleep.objective` | **論理日 -1**（その睡眠を引き起こした食事の日） | 実測睡眠 |
+
+**注意**: アクティビティ・体重はカレンダー日、睡眠だけ帰属日がずれる（意図的な非対称）。理由は `conditionDate.js` 参照。
+新しい指標を足すときは `healthMetrics.js` に1件追加するだけでよい（API検証とUI表示に自動反映される）。
+セットアップ手順は `docs/healthkit-activity-setup.md`。
 
 ## Gemini API の設計
 

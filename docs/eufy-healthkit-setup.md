@@ -1,5 +1,9 @@
 # eufy体組成計データをLifelogへ自動送信する設定手順
 
+> **これから設定する場合は `docs/healthkit-activity-setup.md` を見てください。**
+> 体組成に加えて歩数・消費カロリー・睡眠まで、**1つのショートカット**で送れます。
+> このページは、体組成だけを送る従来の手順です（引き続き動作します）。
+
 この手順では、EufyLifeアプリでApple Health連携を有効にし、iPhoneのショートカットからLifelogへ体重・体脂肪率・BMI・除脂肪体重を送ります。
 
 ## 1. EufyLifeとApple Healthを連携する
@@ -49,7 +53,8 @@ https://<デプロイURL>/api/health/weight
   "weight": "体重の値",
   "bodyFat": "体脂肪率の値",
   "bmi": "BMIの値",
-  "leanBodyMass": "除脂肪体重の値"
+  "leanBodyMass": "除脂肪体重の値",
+  "height": "身長の値"
 }
 ```
 

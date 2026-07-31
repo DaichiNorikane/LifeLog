@@ -7,6 +7,37 @@ const VALID_MEAL_TYPES = new Set(['breakfast', 'lunch', 'dinner', 'snack']);
 const userRef = (uid) => db.collection('users').doc(uid);
 const mealsRef = (uid) => userRef(uid).collection('meals');
 
+/**
+ * 相関分析用に体感ログをまとめて取得する（Admin SDK）。
+ * 予測スナップショット（predicted / firedDrivers）と実測（主観スコア）が同じドキュメントに入っている。
+ */
+export const getConditionLogsAdmin = async (uid, limitCount = 60) => {
+    if (!uid) return [];
+    try {
+        const snapshot = await db.collection('users').doc(uid)
+            .collection('conditionLogs')
+            .orderBy('date', 'desc')
+            .limit(limitCount)
+            .get();
+        return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+        console.error('[adminHelpers] getConditionLogsAdmin failed:', e.message);
+        return [];
+    }
+};
+
+/** 学習した個人係数を保存する（Admin SDK） */
+export const saveConditionModelAdmin = async (uid, model) => {
+    if (!uid || !model) return;
+    try {
+        await db.collection('users').doc(uid)
+            .collection('insights').doc('conditionModel')
+            .set({ ...model, updatedAt: new Date().toISOString() });
+    } catch (e) {
+        console.error('[adminHelpers] saveConditionModelAdmin failed:', e.message);
+    }
+};
+
 export const findUserByLineId = async (lineUserId) => {
     if (!lineUserId) return null;
     const snapshot = await db.collection('users')

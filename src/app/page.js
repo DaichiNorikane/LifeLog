@@ -22,11 +22,12 @@ import { Camera, XCircle, ChevronLeft, ChevronRight, Calculator, Weight, Utensil
 import PullToRefresh from 'react-simple-pull-to-refresh';
 
 import { useAuth } from '@/lib/contexts/AuthContext';
-import { addMealToFirestore, getMealsFromFirestore, deleteMealFromFirestore, getWeightsFromFirestore, getUserProfile, updateMealInFirestore, addStockItem, getStockItems, deleteStockItem, saveDailyEvaluation, getDailyEvaluation, saveConditionPrediction, getConditionLog } from '@/lib/firebase/firestore';
+import { addMealToFirestore, getMealsFromFirestore, deleteMealFromFirestore, getWeightsFromFirestore, getUserProfile, updateMealInFirestore, addStockItem, getStockItems, deleteStockItem, saveDailyEvaluation, getDailyEvaluation, saveConditionPrediction, getConditionLog, getConditionLogs, getConditionModel } from '@/lib/firebase/firestore';
 import { getCache, setCache } from '@/utils/db';
 import { usePushNotification } from '@/lib/usePushNotification';
 import { sumMacroTotals, isNutritionallyTrivial } from '@/lib/health/nutrients';
-import { evaluateCondition, toPredictedScores, hasAnyScore, ENGINE_VERSION } from '@/lib/health/conditionEngine';
+import { evaluateCondition, toPredictedScores, toFiredDrivers, hasAnyScore, ENGINE_VERSION } from '@/lib/health/conditionEngine';
+import { toDisplayableFindings } from '@/lib/health/correlation';
 import { getLogicalDateKey } from '@/lib/health/conditionDate';
 
 export default function Home() {
@@ -47,6 +48,8 @@ export default function Home() {
   const [showGame, setShowGame] = useState(false); // Mini Game
   const [showConditionModal, setShowConditionModal] = useState(false); // コンディション内訳
   const [openBedtimeSetting, setOpenBedtimeSetting] = useState(false); // 就寝時刻の設定を開く要求
+  const [conditionModel, setConditionModel] = useState(null); // 学習した個人係数（Phase 4）
+  const [conditionLogs, setConditionLogs] = useState([]); // 推移グラフ用（モーダルを開いた時だけ読む）
   const [showQuiz, setShowQuiz] = useState(false); // Elena's Challenge
   const [showRanking, setShowRanking] = useState(false); // Meal Ranking
   const [selectedCategory, setSelectedCategory] = useState(null); // 'breakfast', 'lunch', 'dinner', 'snack'
@@ -102,6 +105,11 @@ export default function Home() {
       setWeights(firestoreWeights);
       setStockItems(firestoreStock || []);
       setUserProfile(profile || { targetCalories: 2200 });
+
+      // 学習済みの個人係数（無ければ一般論のまま動く）。失敗しても本体は止めない。
+      getConditionModel(uid)
+        .then(model => { if (model) setConditionModel(model); })
+        .catch(() => {});
 
       // Update IndexedDB cache in background
       Promise.all([
@@ -277,7 +285,9 @@ export default function Home() {
       currentWeight: selectedWeightEntry?.weight ?? userProfile?.currentWeight,
     },
     now: conditionInput.now,
-  }), [conditionInput, meals, userProfile, selectedWeightEntry]);
+    // 学習済みなら個人係数を適用（未学習なら一般論のまま）
+    driverWeights: conditionModel?.driverWeights || null,
+  }), [conditionInput, meals, userProfile, selectedWeightEntry, conditionModel]);
 
   // 日次評価に1行だけ渡す要約。エレナがダッシュボードと矛盾したことを言わないようにする。
   const conditionSummary = useMemo(() => {
@@ -303,8 +313,17 @@ export default function Home() {
         timestamp: m.timestamp, mealType: m.mealType,
       })),
       conditionLog,
+      findings: toDisplayableFindings(conditionModel),
     });
-  }, [user?.uid, conditionInput.dateKey, displayMeals]);
+  }, [user?.uid, conditionInput.dateKey, displayMeals, conditionModel]);
+
+  // 推移グラフ用の履歴。モーダルを開くまで読み込まない（普段は無駄なので）
+  useEffect(() => {
+    if (!showConditionModal || !user?.uid) return;
+    getConditionLogs(user.uid, 30)
+      .then(setConditionLogs)
+      .catch(() => {});
+  }, [showConditionModal, user?.uid]);
 
   // 予測を日次スナップショットとして保存する。
   // ルールを後から改訂しても過去の予測が書き換わらず、Phase 4 の相関分析が壊れない。
@@ -314,11 +333,12 @@ export default function Home() {
     if (!hasAnyScore(conditionResult)) return;
 
     const predicted = toPredictedScores(conditionResult);
-    const signature = `${conditionInput.dateKey}:${JSON.stringify(predicted)}`;
+    const firedDrivers = toFiredDrivers(conditionResult);
+    const signature = `${conditionInput.dateKey}:${JSON.stringify(predicted)}:${JSON.stringify(firedDrivers)}`;
     if (lastSavedPredictionRef.current === signature) return;
     lastSavedPredictionRef.current = signature;
 
-    saveConditionPrediction(user.uid, conditionInput.dateKey, predicted, ENGINE_VERSION)
+    saveConditionPrediction(user.uid, conditionInput.dateKey, predicted, ENGINE_VERSION, firedDrivers)
       .catch(e => console.warn('[Condition] prediction save failed:', e));
   }, [user?.uid, currentDate, conditionResult, conditionInput.dateKey]);
 
@@ -1557,6 +1577,7 @@ export default function Home() {
           result={conditionResult}
           onClose={() => setShowConditionModal(false)}
           onRequestAnalysis={handleRequestConditionAnalysis}
+          historyLogs={conditionLogs}
         />
       )}
 

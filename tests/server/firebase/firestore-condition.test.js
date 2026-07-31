@@ -42,6 +42,8 @@ vi.mock('firebase/firestore', () => ({
 }));
 
 import {
+  saveConditionModel,
+  getConditionModel,
   saveConditionLog,
   saveConditionCheckIn,
   saveConditionPrediction,
@@ -55,6 +57,8 @@ beforeEach(() => {
   mockGetDocs.mockResolvedValue(mockQuerySnap);
   mockSetDoc.mockResolvedValue(undefined);
   mockDocSnap.exists.mockReturnValue(true);
+  // data() を戻さないとモデルのテストが後続のログ取得テストに漏れる
+  mockDocSnap.data.mockReturnValue({ date: '2026-07-29', sleep: { subjective: 4 } });
 });
 
 describe('saveConditionLog', () => {
@@ -123,6 +127,53 @@ describe('saveConditionPrediction', () => {
     const [, payload] = mockSetDoc.mock.calls[0];
     expect(payload.predicted).toEqual(predicted);
     expect(payload.engineVersion).toBe(1);
+  });
+
+  it('stores the fired drivers so correlations can be computed later', async () => {
+    const fired = { focus: ['breakfast_protein'], sleep: ['caffeine_late'], energy: [], mood: [] };
+    await saveConditionPrediction('u1', '2026-07-29', { focus: 72 }, 1, fired);
+
+    const [, payload] = mockSetDoc.mock.calls[0];
+    expect(payload.firedDrivers).toEqual(fired);
+  });
+
+  it('omits firedDrivers when not provided（既存データを消さない）', async () => {
+    await saveConditionPrediction('u1', '2026-07-29', { focus: 72 }, 1);
+    const [, payload] = mockSetDoc.mock.calls[0];
+    expect(payload).not.toHaveProperty('firedDrivers');
+  });
+});
+
+describe('conditionModel（学習した個人係数）', () => {
+  it('saves the model to users/{uid}/insights/conditionModel', async () => {
+    const model = { sampleDays: 21, driverWeights: { sleep: { caffeine_late: 1.4 } }, findings: [] };
+    await saveConditionModel('u1', model);
+
+    expect(mockDoc).toHaveBeenCalledWith({}, 'users', 'u1', 'insights', 'conditionModel');
+    const [, payload] = mockSetDoc.mock.calls[0];
+    expect(payload.driverWeights).toEqual(model.driverWeights);
+  });
+
+  it('does nothing without a uid or model', async () => {
+    await saveConditionModel(null, { a: 1 });
+    await saveConditionModel('u1', null);
+    expect(mockSetDoc).not.toHaveBeenCalled();
+  });
+
+  it('reads the model back', async () => {
+    mockDocSnap.data.mockReturnValue({ driverWeights: { sleep: { caffeine_late: 1.4 } } });
+    const model = await getConditionModel('u1');
+    expect(model.driverWeights.sleep.caffeine_late).toBe(1.4);
+  });
+
+  it('returns null when nothing has been learned yet', async () => {
+    mockDocSnap.exists.mockReturnValue(false);
+    expect(await getConditionModel('u1')).toBeNull();
+  });
+
+  it('returns null instead of throwing on read failure', async () => {
+    mockGetDoc.mockRejectedValue(new Error('offline'));
+    expect(await getConditionModel('u1')).toBeNull();
   });
 });
 

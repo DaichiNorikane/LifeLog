@@ -540,9 +540,45 @@ export const saveConditionCheckIn = async (userId, dateKey, axis, value) => {
     await saveConditionLog(userId, dateKey, { [axis]: entry });
 };
 
-/** その日の予測スコアをスナップショット保存（ルール改訂後も過去の分析が壊れないように） */
-export const saveConditionPrediction = async (userId, dateKey, predicted, engineVersion) => {
-    await saveConditionLog(userId, dateKey, { predicted, engineVersion });
+/**
+ * その日の予測をスナップショット保存（ルール改訂後も過去の分析が壊れないように）。
+ * 発火したドライバーも一緒に残す。これが無いと「どの要因が効いた日か」が分からず
+ * 相関分析ができない。
+ */
+export const saveConditionPrediction = async (userId, dateKey, predicted, engineVersion, firedDrivers = null) => {
+    const patch = { predicted, engineVersion };
+    if (firedDrivers) patch.firedDrivers = firedDrivers;
+    await saveConditionLog(userId, dateKey, patch);
+};
+
+// ========== Condition Model（学習した個人係数）==========
+// users/{uid}/insights/conditionModel
+
+const getConditionModelRef = (userId) =>
+    doc(db, "users", userId, "insights", "conditionModel");
+
+export const saveConditionModel = async (userId, model) => {
+    if (!userId || !model) return;
+    try {
+        await setDoc(getConditionModelRef(userId), cleanData({
+            ...model,
+            updatedAt: Timestamp.now(),
+        }));
+    } catch (e) {
+        console.error("Error saving condition model:", e);
+        throw e;
+    }
+};
+
+export const getConditionModel = async (userId) => {
+    if (!userId) return null;
+    try {
+        const snap = await getDoc(getConditionModelRef(userId));
+        return snap.exists() ? snap.data() : null;
+    } catch (e) {
+        console.error("Error fetching condition model:", e);
+        return null;
+    }
 };
 
 export const getConditionLog = async (userId, dateKey) => {

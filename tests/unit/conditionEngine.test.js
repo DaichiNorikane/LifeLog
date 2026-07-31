@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import {
     evaluateCondition,
     toPredictedScores,
+    toFiredDrivers,
     hasAnyScore,
     ENGINE_VERSION,
 } from '@/lib/health/conditionEngine';
@@ -489,5 +490,86 @@ describe('異常な入力への耐性', () => {
 
     it('引数なしでも落ちない', () => {
         expect(() => evaluateCondition({ dateKey: DATE })).not.toThrow();
+    });
+});
+
+describe('個人係数（Phase 4 のパーソナライズ）', () => {
+    const coffeeDay = () => [
+        ...baseDay(),
+        meal({ foodName: 'コーヒー', mealType: 'snack', calories: 5, timestamp: at('15:00').toISOString(), macros: { caffeine: 90 } }),
+    ];
+
+    it('係数が無ければ一般論の重みのまま', () => {
+        const result = run(coffeeDay());
+        expect(driver(result, 'sleep', 'caffeine_late').delta).toBe(DRIVER_WEIGHTS.sleep.caffeine_late);
+    });
+
+    it('係数が大きければ影響も大きくなる', () => {
+        const result = evaluateCondition({
+            dateKey: DATE, meals: coffeeDay(), profile: PROFILE, now: at('22:00'),
+            driverWeights: { sleep: { caffeine_late: 1.5 } },
+        });
+        expect(driver(result, 'sleep', 'caffeine_late').delta).toBe(Math.round(DRIVER_WEIGHTS.sleep.caffeine_late * 1.5));
+        expect(driver(result, 'sleep', 'caffeine_late').personalized).toBe(true);
+    });
+
+    it('係数が小さければ影響も小さくなる', () => {
+        const result = evaluateCondition({
+            dateKey: DATE, meals: coffeeDay(), profile: PROFILE, now: at('22:00'),
+            driverWeights: { sleep: { caffeine_late: 0.5 } },
+        });
+        const delta = driver(result, 'sleep', 'caffeine_late').delta;
+        expect(Math.abs(delta)).toBeLessThan(Math.abs(DRIVER_WEIGHTS.sleep.caffeine_late));
+    });
+
+    it('係数を適用した結果スコアも変わる', () => {
+        const weak = evaluateCondition({
+            dateKey: DATE, meals: coffeeDay(), profile: PROFILE, now: at('22:00'),
+            driverWeights: { sleep: { caffeine_late: 0.5 } },
+        });
+        const strong = evaluateCondition({
+            dateKey: DATE, meals: coffeeDay(), profile: PROFILE, now: at('22:00'),
+            driverWeights: { sleep: { caffeine_late: 1.5 } },
+        });
+        expect(weak.axes.sleep.score).toBeGreaterThan(strong.axes.sleep.score);
+    });
+
+    it('指定されていないドライバーは影響を受けない', () => {
+        const result = evaluateCondition({
+            dateKey: DATE, meals: coffeeDay(), profile: PROFILE, now: at('22:00'),
+            driverWeights: { sleep: { caffeine_late: 1.5 } },
+        });
+        const other = driver(result, 'focus', 'breakfast_protein');
+        expect(other.delta).toBe(DRIVER_WEIGHTS.focus.breakfast_protein);
+        expect(other.personalized).toBe(false);
+    });
+
+    it('他の軸の係数は混ざらない', () => {
+        const result = evaluateCondition({
+            dateKey: DATE, meals: coffeeDay(), profile: PROFILE, now: at('22:00'),
+            driverWeights: { focus: { caffeine_late: 1.5 } },
+        });
+        expect(driver(result, 'sleep', 'caffeine_late').delta).toBe(DRIVER_WEIGHTS.sleep.caffeine_late);
+    });
+});
+
+describe('toFiredDrivers（相関分析の材料）', () => {
+    it('軸ごとに発火したキーを返す', () => {
+        const result = run([
+            ...baseDay(),
+            meal({ foodName: 'コーヒー', mealType: 'snack', calories: 5, timestamp: at('15:00').toISOString(), macros: { caffeine: 90 } }),
+        ]);
+        const fired = toFiredDrivers(result);
+        expect(fired.sleep).toContain('caffeine_late');
+        expect(Object.keys(fired).sort()).toEqual([...AXES].sort());
+    });
+
+    it('発火が無ければ空配列（キー自体は必ず存在する）', () => {
+        const fired = toFiredDrivers(run([]));
+        for (const axis of AXES) expect(fired[axis]).toEqual([]);
+    });
+
+    it('null でも落ちない', () => {
+        expect(() => toFiredDrivers(null)).not.toThrow();
     });
 });

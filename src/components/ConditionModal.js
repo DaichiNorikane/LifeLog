@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, TrendingUp, TrendingDown, Loader2, Sparkles } from 'lucide-react';
 import { AXES, AXIS_LABELS, AXIS_DESCRIPTIONS, GRADES, CONFIDENCE_LABELS } from '@/lib/health/conditionRules';
+import ConditionTrendChart from './ConditionTrendChart';
 
 /**
  * コンディションの内訳。
@@ -11,7 +12,7 @@ import { AXES, AXIS_LABELS, AXIS_DESCRIPTIONS, GRADES, CONFIDENCE_LABELS } from 
  * エレナの解説はこのモーダルを開いた時にだけ取得する。
  * 食事追加のたびに呼ぶとコストが嵩むうえ、コーヒー1杯で語りが書き換わるのは体験として不自然。
  */
-export default function ConditionModal({ isOpen, result, onClose, onRequestAnalysis }) {
+export default function ConditionModal({ isOpen, result, onClose, onRequestAnalysis, historyLogs = [] }) {
     const [analysis, setAnalysis] = useState(null);
     const [loading, setLoading] = useState(false);
     const requestedForRef = useRef(null);
@@ -103,6 +104,15 @@ export default function ConditionModal({ isOpen, result, onClose, onRequestAnaly
                         />
                     ))}
                 </div>
+
+                {historyLogs.length > 0 && (
+                    <section style={{ background: 'var(--bg-main)', borderRadius: '12px', padding: '14px', marginTop: '16px' }}>
+                        <h3 style={{ margin: '0 0 10px', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                            予測と実際のズレ
+                        </h3>
+                        <ConditionTrendChart logs={historyLogs} axis="sleep" />
+                    </section>
+                )}
 
                 <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: '18px 0 0' }}>
                     ここに出ている数値は、食事内容と時刻から機械的に計算した予測です。

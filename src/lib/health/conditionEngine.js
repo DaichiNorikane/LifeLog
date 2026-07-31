@@ -38,7 +38,7 @@ const sumMacro = (meals, key) =>
  * 判定に必要な文脈を1度だけ組み立てる。
  * ドライバーはこの ctx だけを見る（副作用も再計算もしない）。
  */
-const buildContext = ({ dateKey, meals, profile, now }) => {
+const buildContext = ({ dateKey, meals, profile, now, driverWeights }) => {
     const dayMeals = filterMealsForLogicalDate(meals, dateKey);
     const totals = sumMacroTotals(dayMeals);
 
@@ -55,6 +55,7 @@ const buildContext = ({ dateKey, meals, profile, now }) => {
     return {
         dateKey,
         now,
+        driverWeights: driverWeights || null,
         meals: dayMeals,
         totals,
         profile: profile || {},
@@ -407,11 +408,18 @@ const evaluateAxis = (ctx, axis) => {
     for (const [key, detect] of Object.entries(DRIVERS_BY_AXIS[axis])) {
         const hit = detect(ctx);
         if (!hit || !hit.delta) continue;
+
+        // 個人係数（Phase 4 の相関分析が入れる）。未学習なら 1 のまま。
+        const coefficient = ctx.driverWeights?.[axis]?.[key] ?? 1;
+        const delta = Math.round(hit.delta * coefficient);
+        if (!delta) continue;
+
         drivers.push({
             key,
             label: DRIVER_LABELS[key] || key,
-            delta: hit.delta,
+            delta,
             detail: hit.detail || null,
+            personalized: coefficient !== 1,
         });
     }
 
@@ -432,9 +440,10 @@ const evaluateAxis = (ctx, axis) => {
  * @param {Array}  input.meals   食事（他の日が混ざっていてもよい。内部で絞り込む）
  * @param {object} input.profile { bedtime, targetCalories, currentWeight }
  * @param {Date}   input.now     評価時点
+ * @param {object} input.driverWeights 個人係数 { [axis]: { [driverKey]: 0.5〜1.5 } }。未学習なら省略
  */
-export const evaluateCondition = ({ dateKey, meals = [], profile = {}, now = new Date() }) => {
-    const ctx = buildContext({ dateKey, meals, profile, now });
+export const evaluateCondition = ({ dateKey, meals = [], profile = {}, now = new Date(), driverWeights = null }) => {
+    const ctx = buildContext({ dateKey, meals, profile, now, driverWeights });
 
     const axes = {};
     for (const axis of AXES) {
@@ -467,6 +476,20 @@ export const evaluateCondition = ({ dateKey, meals = [], profile = {}, now = new
 export const toPredictedScores = (result) =>
     AXES.reduce((acc, axis) => {
         acc[axis] = result?.axes?.[axis]?.score ?? null;
+        return acc;
+    }, {});
+
+/**
+ * その日に発火したドライバーのキー一覧。
+ *
+ * スコアだけでは「どの要因が効いた日か」が分からず相関分析ができないため、
+ * 予測スナップショットと一緒に保存する。
+ * 後からルールを変えても過去の分析が壊れないという原則もここで守られる
+ * （過去のメニューから再計算せず、当時発火した事実をそのまま残す）。
+ */
+export const toFiredDrivers = (result) =>
+    AXES.reduce((acc, axis) => {
+        acc[axis] = (result?.axes?.[axis]?.drivers || []).map(d => d.key);
         return acc;
     }, {});
 

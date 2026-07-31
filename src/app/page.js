@@ -1,5 +1,6 @@
 "use client";
 import { evaluateDailyLog, evaluateSingleMeal } from './actions/daily-evaluation';
+import { analyzeCondition } from './actions/condition-analysis';
 import { calculateRecipeWithGemini } from './actions/recipe';
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
@@ -21,10 +22,10 @@ import { Camera, XCircle, ChevronLeft, ChevronRight, Calculator, Weight, Utensil
 import PullToRefresh from 'react-simple-pull-to-refresh';
 
 import { useAuth } from '@/lib/contexts/AuthContext';
-import { addMealToFirestore, getMealsFromFirestore, deleteMealFromFirestore, getWeightsFromFirestore, getUserProfile, updateMealInFirestore, addStockItem, getStockItems, deleteStockItem, saveDailyEvaluation, getDailyEvaluation, saveConditionPrediction } from '@/lib/firebase/firestore';
+import { addMealToFirestore, getMealsFromFirestore, deleteMealFromFirestore, getWeightsFromFirestore, getUserProfile, updateMealInFirestore, addStockItem, getStockItems, deleteStockItem, saveDailyEvaluation, getDailyEvaluation, saveConditionPrediction, getConditionLog } from '@/lib/firebase/firestore';
 import { getCache, setCache } from '@/utils/db';
 import { usePushNotification } from '@/lib/usePushNotification';
-import { sumMacroTotals } from '@/lib/health/nutrients';
+import { sumMacroTotals, isNutritionallyTrivial } from '@/lib/health/nutrients';
 import { evaluateCondition, toPredictedScores, hasAnyScore, ENGINE_VERSION } from '@/lib/health/conditionEngine';
 import { getLogicalDateKey } from '@/lib/health/conditionDate';
 
@@ -278,6 +279,33 @@ export default function Home() {
     now: conditionInput.now,
   }), [conditionInput, meals, userProfile, selectedWeightEntry]);
 
+  // 日次評価に1行だけ渡す要約。エレナがダッシュボードと矛盾したことを言わないようにする。
+  const conditionSummary = useMemo(() => {
+    if (!hasAnyScore(conditionResult)) return null;
+    const a = conditionResult.axes;
+    const part = (label, data) => (data?.score != null ? `${label}${data.score}` : null);
+    const line = [
+      part('集中力', a.focus), part('睡眠', a.sleep),
+      part('エネルギー', a.energy), part('メンタル', a.mood),
+    ].filter(Boolean).join(' / ');
+    if (!line) return null;
+    const top = conditionResult.topNegative ? `（最も響いている要因: ${conditionResult.topNegative.label}）` : '';
+    return `${line}${top}`;
+  }, [conditionResult]);
+
+  // エレナの解説はモーダルを開いた時だけ取得する（食事追加ごとには呼ばない）
+  const handleRequestConditionAnalysis = useCallback(async (result) => {
+    if (!user?.uid) return null;
+    const conditionLog = await getConditionLog(user.uid, conditionInput.dateKey);
+    return analyzeCondition(result, {
+      meals: displayMeals.map(m => ({
+        foodName: m.foodName, calories: m.calories,
+        timestamp: m.timestamp, mealType: m.mealType,
+      })),
+      conditionLog,
+    });
+  }, [user?.uid, conditionInput.dateKey, displayMeals]);
+
   // 予測を日次スナップショットとして保存する。
   // ルールを後から改訂しても過去の予測が書き換わらず、Phase 4 の相関分析が壊れない。
   const lastSavedPredictionRef = useRef(null);
@@ -442,16 +470,24 @@ export default function Home() {
       const existingMealsToday = meals.filter(meal => isSameDay(new Date(meal.timestamp), currentDate));
       const allMealsForContext = [...existingMealsToday, ...newMeals];
 
+      // 水・お茶・ブラックコーヒーのようにカロリーもマクロもほぼゼロの記録は、
+      // 1日のカロリー/PFC評価を数値的に動かさないので Gemini を呼ばない。
+      // カフェインはコンディションエンジン（決定論・API不要）が拾うため精度は落ちない。
+      const scoreTrivially = (m, id) =>
+        Promise.resolve({ evalResult: { score: 5, reason: '水分補給ですね💧' }, id });
+
       // Evaluate new meals in parallel
       const newMealEvals = adjustedMeals.map((m, index) =>
-        evaluateSingleMeal({ ...m, id: addedIds[index] }, allMealsForContext)
-          .then(evalResult => ({ evalResult, id: addedIds[index] }))
-          .catch(() => null)
+        isNutritionallyTrivial(m)
+          ? scoreTrivially(m, addedIds[index])
+          : evaluateSingleMeal({ ...m, id: addedIds[index] }, allMealsForContext)
+            .then(evalResult => ({ evalResult, id: addedIds[index] }))
+            .catch(() => null)
       );
 
       // Re-evaluate existing meals only if they don't have scores yet
       const existingEvals = existingMealsToday
-        .filter(m => typeof m.score !== 'number')
+        .filter(m => typeof m.score !== 'number' && !isNutritionallyTrivial(m))
         .map(existingMeal =>
           evaluateSingleMeal(existingMeal, allMealsForContext)
             .then(evalResult => ({ evalResult, id: existingMeal.id }))
@@ -469,6 +505,12 @@ export default function Home() {
           };
           await updateMealInFirestore(user.uid, r.id, updates);
           setMeals(prev => prev.map(p => p.id === r.id ? { ...p, ...updates } : p));
+        }
+
+        // 追加したものが全て「水分だけ」なら1日の評価は変わらないので日次評価を回さない。
+        // 日次評価はこのアプリで最も高価な呼び出し（thinking込み）なので効果が大きい。
+        if (adjustedMeals.every(isNutritionallyTrivial)) {
+          return;
         }
 
         // Background: Run daily evaluation after individual evaluations complete
@@ -490,6 +532,8 @@ export default function Home() {
             currentWeight: userProfile?.currentWeight,
             targetWeight: userProfile?.targetWeight,
             targetDate: userProfile?.targetDate,
+            // コンディション予測を1行だけ渡し、エレナの発言が別画面と矛盾しないようにする
+            conditionSummary,
           });
           if (dailyResult && !dailyResult.error) {
             await saveDailyEvaluation(user.uid, dateKey, dailyResult);
@@ -1512,6 +1556,7 @@ export default function Home() {
           isOpen={showConditionModal}
           result={conditionResult}
           onClose={() => setShowConditionModal(false)}
+          onRequestAnalysis={handleRequestConditionAnalysis}
         />
       )}
 

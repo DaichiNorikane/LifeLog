@@ -5,6 +5,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
+    isNutritionallyTrivial,
+    TRIVIAL_MEAL_LIMITS,
     EXTENDED_NUTRIENTS,
     EXTENDED_NUTRIENT_KEYS,
     MEAL_SCOPED_NUTRIENT_KEYS,
@@ -210,5 +212,42 @@ describe('代表値の取り出し', () => {
         const totals = sumMacroTotals([{ calories: 100, macros: { protein: 1, fat: 1, carbs: 1 } }]);
         expect(getNutrientValue(totals, 'iron')).toBeNull();
         expect(getNutrientAverage(totals, 'ultraProcessed')).toBeNull();
+    });
+});
+
+describe('isNutritionallyTrivial（Gemini呼び出しの節約判定）', () => {
+    const drink = (calories, macros = {}) => ({ calories, macros: { protein: 0, fat: 0, carbs: 0, ...macros } });
+
+    it('水・お茶は trivial', () => {
+        expect(isNutritionallyTrivial(drink(0))).toBe(true);
+    });
+
+    it('ブラックコーヒーはカフェインがあっても trivial（カロリー評価は動かない）', () => {
+        expect(isNutritionallyTrivial(drink(5, { caffeine: 90 }))).toBe(true);
+    });
+
+    it('カフェラテは trivial ではない', () => {
+        expect(isNutritionallyTrivial(drink(100, { protein: 5, fat: 5, carbs: 8 }))).toBe(false);
+    });
+
+    it('ビールは trivial ではない', () => {
+        expect(isNutritionallyTrivial(drink(200, { carbs: 15.5, alcohol: 20 }))).toBe(false);
+    });
+
+    it('カロリーが低くてもマクロが多ければ trivial ではない', () => {
+        expect(isNutritionallyTrivial(drink(40, { protein: 9 }))).toBe(false);
+    });
+
+    it('閾値ちょうどは trivial、超えたら trivial ではない', () => {
+        expect(isNutritionallyTrivial(drink(TRIVIAL_MEAL_LIMITS.calories))).toBe(true);
+        expect(isNutritionallyTrivial(drink(TRIVIAL_MEAL_LIMITS.calories + 1))).toBe(false);
+        expect(isNutritionallyTrivial(drink(0, { fat: TRIVIAL_MEAL_LIMITS.macroGram }))).toBe(true);
+        expect(isNutritionallyTrivial(drink(0, { fat: TRIVIAL_MEAL_LIMITS.macroGram + 1 }))).toBe(false);
+    });
+
+    it('macros が無い記録でも落ちない', () => {
+        expect(isNutritionallyTrivial({ calories: 0 })).toBe(true);
+        expect(isNutritionallyTrivial({})).toBe(true);
+        expect(isNutritionallyTrivial({ calories: 800 })).toBe(false);
     });
 });

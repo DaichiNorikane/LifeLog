@@ -178,6 +178,26 @@ export const getNutrientAverage = (totals, key) => {
 };
 
 /**
+ * カロリーもマクロもほぼゼロの記録か（水・お茶・ブラックコーヒーなど）。
+ *
+ * こうした記録は1日のカロリー/PFC評価を数値的に動かさないため、
+ * エレナの採点（Gemini呼び出し）をスキップしてよい。
+ * カフェインなどのコンディション判定は決定論エンジンが担うので精度は落ちない。
+ */
+export const TRIVIAL_MEAL_LIMITS = { calories: 50, macroGram: 5 };
+
+export const isNutritionallyTrivial = (meal) => {
+    const calories = toNullableNumber(meal?.calories) ?? 0;
+    if (calories > TRIVIAL_MEAL_LIMITS.calories) return false;
+
+    for (const key of BASE_MACRO_KEYS) {
+        const value = toNullableNumber(meal?.macros?.[key]) ?? 0;
+        if (value > TRIVIAL_MEAL_LIMITS.macroGram) return false;
+    }
+    return true;
+};
+
+/**
  * 表示・判定用の代表値。aggregate 定義に従って合計 or 平均を返す。
  * 記録が1件も無ければ null（0 を返してはいけない）。
  */

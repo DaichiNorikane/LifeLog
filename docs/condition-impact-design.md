@@ -1,7 +1,7 @@
 # コンディション連動アップデート設計書 —「食事が、今日のあなたをつくる」
 
-作成日: 2026-07-29 / 改訂: 2026-07-29（Phase 1・2 実装完了）
-ステータス: **Phase 1・2 実装済み / Phase 3 未着手**
+作成日: 2026-07-29 / 改訂: 2026-07-29（Phase 1〜3 実装完了）
+ステータス: **Phase 1〜3 実装済み / Phase 4 未着手**
 対象: 体重・ダイエット中心の評価軸を、**集中力・睡眠・エネルギー・メンタル**まで広げる
 
 ---
@@ -608,13 +608,46 @@ confidence・異常入力）、`tests/components/{ConditionCard,ConditionModal}.
 スナップショット保存は「予測スコアが変わった時だけ」書き込む（`useRef` で直前の値と比較）。
 1日あたり数回の書き込みに収まる。
 
-### Phase 3 — エレナの語り
+### Phase 3 — エレナの語り ✅ 実装済み
 
-- `gemini-client.js`: `CONDITION_ANALYSIS_SCHEMA` + `HEALTH_DISCLAIMER_RULE`
-- `src/app/actions/condition-analysis.js`
-- `evaluateDailyLog` にコンディション1行を注入
-- `meal-advisor.js` のコンディション観点拡張
-- LINE / cron 統合（`evening-preview` の睡眠予告が目玉）
+| ファイル | 内容 |
+|---|---|
+| `src/app/actions/condition-analysis.js` | **新規**。エンジンの数値を解釈させる。`THINKING.OFF` |
+| `src/lib/health/conditionMessages.js` | **新規**。通知用の短文（AI を呼ばない決定論） |
+| `gemini-client.js` | `CONDITION_ANALYSIS_SCHEMA` / `HEALTH_DISCLAIMER_RULE` / `buildPrompt` 追加、`gemini-3.6-flash` を先頭に |
+| `daily-evaluation.js` | 静的プロンプトを前方に集約、コンディション1行を注入 |
+| `ConditionModal.js` | モーダルを開いた時にだけエレナの解説を取得 |
+| `api/cron/evening-preview` | 今夜の睡眠予測を通知に追加 |
+| `page.js` | 水分だけの記録では Gemini を呼ばない |
+
+テスト: `tests/server/actions/condition-analysis.test.js`（18件）、
+`tests/unit/conditionMessages.test.js`、`daily-evaluation.test.js` にプロンプト順序の回帰テスト
+→ **894 tests passing**
+
+#### コスト設計（実測にもとづく4つの判断）
+
+| 判断 | 理由 | 効果 |
+|---|---|---|
+| condition解説は **`THINKING.OFF`** | 二層構造なので判断はエンジンが済ませている。AI は言い換えるだけで、thinking 予算は無駄 | 1回あたり -57% |
+| 呼び出しは **モーダルを開いた時だけ** | コーヒー1杯で語りが書き換わるのは体験として不自然。レイテンシも増える | 呼び出し回数を 1/3 以下に |
+| **水分だけの記録では Gemini を呼ばない** | 水・お茶・ブラックコーヒーは1日のカロリー/PFC評価を数値的に動かさない。カフェインは決定論エンジンが拾うので精度は落ちない | 該当記録のコストが 0 に |
+| **静的な指示を前方に集約** | implicit caching はリクエスト先頭のプレフィックス一致でしか効かない（Flash は1,024トークン以上で75〜90%割引）。内容は変えず順番だけ揃えた | 連続呼び出し時の入力が最大75%引き |
+
+加えて `gemini-3.6-flash` を優先モデルの先頭に置いた（出力 $9.00→$7.50/M）。
+
+**結果（1日8件・うち3件が水分・モーダル3回/日の想定）: 月 1,091円 → 613〜712円（-35〜44%）。**
+コンディション機能を追加した上で、変更前より安くなっている。
+
+> キャッシュの割引は実際にヒットした時のみ。implicit cache には TTL があるため、
+> 数時間空いた呼び出しでは効きません。確実に効くのは 712円/月 の方で、
+> 613円は記録が連続した時の下限値です。
+
+#### 通知に AI を使わなかった理由
+
+当初は夜の通知でも `analyzeCondition` を呼ぶ設計だったが、実装時に見直した。
+プッシュ通知は100文字ほどしか読まれないのに、AI は466文字を生成する。切り詰めるなら最初から
+定型文でよい。しかも**ドライバー別の定型文ならカード表示と必ず一致する**（AI が別のことを言い出さない）。
+AI の出番は、腰を据えて読むモーダルの中だけに絞った。
 
 ### Phase 4 — パーソナライズ
 

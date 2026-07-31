@@ -1,13 +1,39 @@
 'use client';
 
-import { X, TrendingUp, TrendingDown } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, TrendingUp, TrendingDown, Loader2, Sparkles } from 'lucide-react';
 import { AXES, AXIS_LABELS, AXIS_DESCRIPTIONS, GRADES, CONFIDENCE_LABELS } from '@/lib/health/conditionRules';
 
 /**
  * コンディションの内訳。
  * 「なぜこの点数なのか」をドライバー単位で必ず開示する（AI の言い訳に頼らない）。
+ *
+ * エレナの解説はこのモーダルを開いた時にだけ取得する。
+ * 食事追加のたびに呼ぶとコストが嵩むうえ、コーヒー1杯で語りが書き換わるのは体験として不自然。
  */
-export default function ConditionModal({ isOpen, result, onClose }) {
+export default function ConditionModal({ isOpen, result, onClose, onRequestAnalysis }) {
+    const [analysis, setAnalysis] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const requestedForRef = useRef(null);
+
+    useEffect(() => {
+        if (!isOpen || !result || !onRequestAnalysis) return;
+
+        // 同じスコアに対して重複して問い合わせない
+        const signature = JSON.stringify(AXES.map(a => result.axes?.[a]?.score ?? null));
+        if (requestedForRef.current === signature) return;
+        requestedForRef.current = signature;
+
+        let cancelled = false;
+        setLoading(true);
+        Promise.resolve(onRequestAnalysis(result))
+            .then(res => { if (!cancelled) setAnalysis(res?.error ? null : res); })
+            .catch(() => { if (!cancelled) setAnalysis(null); })
+            .finally(() => { if (!cancelled) setLoading(false); });
+
+        return () => { cancelled = true; };
+    }, [isOpen, result, onRequestAnalysis]);
+
     if (!isOpen || !result) return null;
 
     return (
@@ -42,9 +68,39 @@ export default function ConditionModal({ isOpen, result, onClose }) {
                     </button>
                 </div>
 
+                {(loading || analysis) && (
+                    <div style={{ background: 'rgba(102, 126, 234, 0.08)', borderRadius: '12px', padding: '14px', marginBottom: '16px' }}>
+                        {loading ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                <Loader2 size={14} className="spin" /> エレナが考えています...
+                            </div>
+                        ) : (
+                            <>
+                                <p style={{ margin: '0 0 8px', fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                    {analysis.headline}
+                                </p>
+                                <p style={{ margin: '0 0 10px', fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                                    {analysis.keyInsight}
+                                </p>
+                                {analysis.tonightAction && (
+                                    <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-primary)', display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
+                                        <Sparkles size={13} style={{ marginTop: '3px', flexShrink: 0 }} />
+                                        <span>{analysis.tonightAction}</span>
+                                    </p>
+                                )}
+                            </>
+                        )}
+                    </div>
+                )}
+
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     {AXES.map(axis => (
-                        <AxisSection key={axis} axis={axis} data={result.axes[axis]} />
+                        <AxisSection
+                            key={axis}
+                            axis={axis}
+                            data={result.axes[axis]}
+                            comment={analysis?.axisComments?.[axis]}
+                        />
                     ))}
                 </div>
 
@@ -58,7 +114,7 @@ export default function ConditionModal({ isOpen, result, onClose }) {
     );
 }
 
-function AxisSection({ axis, data }) {
+function AxisSection({ axis, data, comment }) {
     const { score, grade, confidence, drivers = [] } = data || {};
     const hasScore = score !== null && score !== undefined;
     const badge = CONFIDENCE_LABELS[confidence];
@@ -84,6 +140,12 @@ function AxisSection({ axis, data }) {
             <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: '0 0 10px' }}>
                 {AXIS_DESCRIPTIONS[axis]}
             </p>
+
+            {comment && (
+                <p style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', margin: '0 0 10px', lineHeight: 1.7 }}>
+                    {comment}
+                </p>
+            )}
 
             {!hasScore ? (
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>

@@ -25,7 +25,7 @@ import { useAuth } from '@/lib/contexts/AuthContext';
 import { addMealToFirestore, getMealsFromFirestore, deleteMealFromFirestore, getWeightsFromFirestore, getUserProfile, updateMealInFirestore, addStockItem, getStockItems, deleteStockItem, saveDailyEvaluation, getDailyEvaluation, saveConditionPrediction, getConditionLog, getConditionLogs, getConditionModel } from '@/lib/firebase/firestore';
 import { getCache, setCache } from '@/utils/db';
 import { usePushNotification } from '@/lib/usePushNotification';
-import { sumMacroTotals, isNutritionallyTrivial } from '@/lib/health/nutrients';
+import { sumMacroTotals, isNutritionallyTrivial, EXTENDED_NUTRIENTS } from '@/lib/health/nutrients';
 import { evaluateCondition, toPredictedScores, toFiredDrivers, hasAnyScore, ENGINE_VERSION } from '@/lib/health/conditionEngine';
 import { toDisplayableFindings } from '@/lib/health/correlation';
 import { getLogicalDateKey } from '@/lib/health/conditionDate';
@@ -1353,10 +1353,17 @@ export default function Home() {
                 <span>P: {selectedMeal.macros?.protein || 0}g</span>
                 <span>F: {selectedMeal.macros?.fat || 0}g</span>
                 <span>C: {selectedMeal.macros?.carbs || 0}g</span>
-                {selectedMeal.macros?.fiber != null && <span>食物繊維: {selectedMeal.macros.fiber}g</span>}
-                {selectedMeal.macros?.sugar != null && <span>糖質: {selectedMeal.macros.sugar}g</span>}
-                {selectedMeal.macros?.sodium != null && <span>Na: {selectedMeal.macros.sodium}mg</span>}
-                {selectedMeal.macros?.potassium != null && <span>K: {selectedMeal.macros.potassium}mg</span>}
+              </div>
+
+              {/* 拡張栄養素（定義は nutrients.js が唯一の真実。フィールドを足せばここにも自動で出る）
+                  値が null＝AIが推定できなかった項目は表示しない */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '6px 12px', marginTop: '10px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                {EXTENDED_NUTRIENTS.map(({ key, label, unit }) => {
+                  const value = selectedMeal.macros?.[key];
+                  if (value == null) return null;
+                  const rounded = Math.round(Number(value) * 10) / 10;
+                  return <span key={key}>{label}: {rounded}{unit}</span>;
+                })}
               </div>
             </div>
 

@@ -22,6 +22,7 @@ const iconNames = [
   'Flame', 'Activity', 'LogIn', 'Gamepad2', 'Brain', 'Bell', 'BellOff',
   'ThumbsUp', 'ThumbsDown', 'CheckCircle', 'RefreshCw',
   'ReferenceArea', 'ReferenceLine',
+  'Moon', 'Settings2', 'Check', 'Coffee', 'TrendingUp',
 ];
 
 const mocks = {};

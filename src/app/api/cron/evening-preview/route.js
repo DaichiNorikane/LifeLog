@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase/admin';
 import { getJSTToday, sendPushWithLimit, getTodayMeals, getOrRunEvaluation } from '@/lib/pushHelper';
+import { evaluateCondition } from '@/lib/health/conditionEngine';
+import { buildEveningSleepNote } from '@/lib/health/conditionMessages';
 
 export async function GET(request) {
     const authHeader = request.headers.get('authorization');
@@ -68,6 +70,23 @@ export async function GET(request) {
                 } else {
                     body = `${over}kcalオーバー気味ですが、軽い夕食にすればリカバリーできますよ！諦めないでくださいね💪`;
                 }
+            }
+
+            // 今夜の睡眠予測を添える。行動を変えられる最後のタイミングなので効果が大きい。
+            // スコアは決定論エンジンが出すので Gemini の追加呼び出しは発生しない。
+            const condition = evaluateCondition({
+                dateKey: todayStr,
+                meals,
+                profile: {
+                    bedtime: userData.bedtime,
+                    targetCalories: target,
+                    currentWeight: userData.currentWeight,
+                },
+                now: new Date(),
+            });
+            const sleepNote = buildEveningSleepNote(condition);
+            if (sleepNote) {
+                body = `${body}\n${sleepNote}`;
             }
 
             const success = await sendPushWithLimit(userId, subscription, todayStr, 'evening-preview', {

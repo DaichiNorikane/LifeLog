@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase/admin';
 import { getLineClient } from '@/lib/line';
 import { sendPushToUser, getJSTToday } from '@/lib/pushHelper';
+import { getConditionLogsAdmin, saveConditionModelAdmin } from '@/lib/firebase/adminHelpers';
+import { analyzeDriverCorrelations, toDisplayableFindings, countAnalyzableDays, MIN_SAMPLE_DAYS } from '@/lib/health/correlation';
 
 const ELENA_WEEKLY_COMMENTS = {
     perfect: [
@@ -108,7 +110,30 @@ export async function GET(request) {
 
             const comment = getWeeklyComment(recordDays);
 
-            const text = `【週間レポート by エレナ 📊】\n期間: ${weekStart} 〜 ${weekEnd}\n記録日数: ${recordDays}/7日\n平均スコア: ${avgScore}点${weightText}\n\nエレナ: ${comment}`;
+            // 週1回だけ相関分析を回して個人係数を更新する。
+            // Gemini は使わない（純粋な集計なので API コストはゼロ）。
+            let insightText = '';
+            try {
+                const logs = await getConditionLogsAdmin(userId, 60);
+                const analyzable = countAnalyzableDays(logs);
+
+                if (analyzable > 0) {
+                    const model = analyzeDriverCorrelations(logs);
+                    await saveConditionModelAdmin(userId, model);
+
+                    const findings = toDisplayableFindings(model, 2);
+                    if (findings.length > 0) {
+                        insightText = `\n\n【今週わかったあなたのこと🔍】\n${findings.join('\n')}\n※これは相関の観察です。断定はできませんが、傾向として見てみてくださいね。`;
+                    } else {
+                        // 「まだ分からない」も正直に伝える（沈黙より信頼される）
+                        insightText = `\n\n【体調の分析】\n体感の記録が${analyzable}日分たまりました。あと${Math.max(0, MIN_SAMPLE_DAYS * 2 - analyzable)}日ぶんくらいで、あなただけの傾向が見えてきますよ📊`;
+                    }
+                }
+            } catch (e) {
+                console.error(`[Weekly] Condition analysis failed for ${userId}:`, e.message);
+            }
+
+            const text = `【週間レポート by エレナ 📊】\n期間: ${weekStart} 〜 ${weekEnd}\n記録日数: ${recordDays}/7日\n平均スコア: ${avgScore}点${weightText}\n\nエレナ: ${comment}${insightText}`;
 
             // Send via LINE
             if (lineUserId) {

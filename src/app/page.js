@@ -6,7 +6,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic';
 
 const FoodLogger = dynamic(() => import('@/components/FoodLogger'), { ssr: false });
-const WeightTracker = dynamic(() => import('@/components/WeightTracker'), { ssr: false });
+const BodyDetailModal = dynamic(() => import('@/components/BodyDetailModal'), { ssr: false });
 const EvaluationModal = dynamic(() => import('@/components/EvaluationModal'), { ssr: false });
 const AdvisorModal = dynamic(() => import('@/components/AdvisorModal'), { ssr: false });
 const StockManager = dynamic(() => import('@/components/StockManager'), { ssr: false });
@@ -19,7 +19,7 @@ const DrinkQuickLog = dynamic(() => import('@/components/DrinkQuickLog'), { ssr:
 const ConditionCard = dynamic(() => import('@/components/ConditionCard'), { ssr: false });
 const ConditionModal = dynamic(() => import('@/components/ConditionModal'), { ssr: false });
 const ActivityCard = dynamic(() => import('@/components/ActivityCard'), { ssr: false });
-import { Camera, XCircle, ChevronLeft, ChevronRight, Calculator, Weight, Utensils, Flame, Activity, Sparkles, Loader2, LogIn, Refrigerator, Gamepad2, Trophy, Brain, Bell, BellOff } from 'lucide-react';
+import { Camera, XCircle, ChevronLeft, ChevronRight, Calculator, Utensils, Flame, Activity, Sparkles, Loader2, LogIn, Refrigerator, Gamepad2, Trophy, Brain, Bell, BellOff } from 'lucide-react';
 import PullToRefresh from 'react-simple-pull-to-refresh';
 
 import { useAuth } from '@/lib/contexts/AuthContext';
@@ -41,7 +41,7 @@ export default function Home() {
   const [currentDate, setCurrentDate] = useState(new Date());
 
   // Modal States
-  const [showWeightTracker, setShowWeightTracker] = useState(false);
+  const [showBodyDetail, setShowBodyDetail] = useState(false);
   const [showEvaluation, setShowEvaluation] = useState(false);
   const [showAdvisor, setShowAdvisor] = useState(false); // New: Advisor State
   const [targetMealType, setTargetMealType] = useState('dinner'); // For Advisor
@@ -177,14 +177,14 @@ export default function Home() {
 
   // Lock body scroll when any modal is open
   useEffect(() => {
-    const isAnyModalOpen = showLogger || showWeightTracker || showEvaluation || showAdvisor || deleteConfirmation;
+    const isAnyModalOpen = showLogger || showBodyDetail || showEvaluation || showAdvisor || deleteConfirmation;
     if (isAnyModalOpen) {
       document.body.classList.add('modal-open');
     } else {
       document.body.classList.remove('modal-open');
     }
     return () => document.body.classList.remove('modal-open'); // Cleanup
-  }, [showLogger, showWeightTracker, showEvaluation, showAdvisor, deleteConfirmation]);
+  }, [showLogger, showBodyDetail, showEvaluation, showAdvisor, deleteConfirmation]);
 
   // 日付変更時にFirestoreから評価を読み込む
   useEffect(() => {
@@ -297,6 +297,26 @@ export default function Home() {
     const key = isToday(currentDate) ? getSleepTargetDateKey() : currentDateKey;
     return conditionLogs.find(l => l.date === key)?.sleep?.objective || null;
   }, [conditionLogs, currentDate, currentDateKey]);
+
+  // 上段の要約カードは常に体重を出したい。その日に体組成計に乗っていなければ
+  // 直近の測定値で代用する（体重は毎日測るものではないため）。
+  const latestWeightEntry = useMemo(
+    () => (weights.length > 0 ? [...weights].sort((a, b) => new Date(b.date) - new Date(a.date))[0] : null),
+    [weights]
+  );
+  const bodyForCompactCard = selectedWeightEntry || latestWeightEntry;
+
+  const weightGoal = useMemo(() => {
+    const current = bodyForCompactCard?.weight;
+    if (!userProfile?.targetWeight || !current) return null;
+    return {
+      current,
+      target: userProfile.targetWeight,
+      // startWeight は目標を立てた時点の体重。未設定の日は進捗バーを出さない
+      start: userProfile.startWeight ?? null,
+      targetDate: userProfile.targetDate,
+    };
+  }, [bodyForCompactCard, userProfile]);
   // ===== コンディション予測（決定論エンジン。API呼び出しなしで即時更新される） =====
   // 日付は「論理日」(4:00区切り)。深夜の食事を前日の夜として扱うため、
   // ダッシュボードのカレンダー日とは意図的にずらしている。
@@ -968,32 +988,14 @@ export default function Home() {
 
 
 
-            <StatCard
-              title="体重"
-              value={selectedWeightEntry ? selectedWeightEntry.weight : '--'}
-              unit="kg"
-              icon={<Weight />}
-              color="#4ECDC4"
-              onClick={() => setShowWeightTracker(true)}
-              weightProgress={
-                userProfile?.targetWeight
-                  ? (() => {
-                    const latestWeight = selectedWeightEntry
-                      ? selectedWeightEntry.weight
-                      : (weights.length > 0 ? [...weights].sort((a, b) => new Date(b.date) - new Date(a.date))[0].weight : null);
-
-                    if (!latestWeight) return null;
-
-                    return {
-                      current: latestWeight,
-                      target: userProfile.targetWeight,
-                      start: userProfile.startWeight || latestWeight,
-                      targetDate: userProfile.targetDate
-                    };
-                  })()
-                  : null
-              }
-              subtext={!selectedWeightEntry ? 'タップして管理' : undefined}
+            {/* 実測（体重・歩数）と目標をまとめた要約カード。タップで詳細 */}
+            <ActivityCard
+              compact
+              title={isToday(currentDate) ? '今日のからだ' : 'この日のからだ'}
+              activity={activityForDate}
+              body={bodyForCompactCard}
+              goal={weightGoal}
+              onOpenDetail={() => setShowBodyDetail(true)}
             />
           </div>
 
@@ -1083,16 +1085,6 @@ export default function Home() {
             onOpenDetail={() => setShowConditionModal(true)}
             needsBedtime={isToday(currentDate) && !userProfile?.bedtime}
             onRequestBedtime={() => setOpenBedtimeSetting(true)}
-          />
-
-          {/* ヘルスケアから届いた実測値（予測の真下に置いて答え合わせできるようにする） */}
-          <ActivityCard
-            title={isToday(currentDate) ? '今日のからだ' : 'この日のからだ'}
-            activity={activityForDate}
-            body={selectedWeightEntry}
-            sleep={sleepForDate}
-            sleepLabel={isToday(currentDate) ? '昨夜の睡眠' : 'この日の夜の睡眠'}
-            workouts={workoutsForDate}
           />
 
           {/* 体感チェックイン + マイドリンク（今日のみ。過去日を見ている時は聞かない） */}
@@ -1450,16 +1442,20 @@ export default function Home() {
         </div>
       )}
 
-      {/* Weight Tracker Modal */}
-      {showWeightTracker && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '600px', width: '95%', padding: '0', background: 'transparent', boxShadow: 'none' }}>
-            <WeightTracker
+      {/* からだの詳細（実測 + ダイエット目標） */}
+      {showBodyDetail && (
+        <div style={{ position: 'relative', zIndex: 1001 }}>
+            <BodyDetailModal
               user={user}
               userProfile={userProfile}
               weights={weights}
-              activeDate={currentDate} // Use currently selected date
-              onClose={() => setShowWeightTracker(false)}
+              title={isToday(currentDate) ? '今日のからだ' : 'この日のからだ'}
+              activity={activityForDate}
+              body={selectedWeightEntry}
+              sleep={sleepForDate}
+              sleepLabel={isToday(currentDate) ? '昨夜の睡眠' : 'この日の夜の睡眠'}
+              workouts={workoutsForDate}
+              onClose={() => setShowBodyDetail(false)}
               onUpdateWeights={loadData}
               recentCalories={(() => {
                 // Calculate average of last 7 days including today
@@ -1491,7 +1487,6 @@ export default function Home() {
                 return streak;
               })()}
             />
-          </div>
         </div>
       )}
 

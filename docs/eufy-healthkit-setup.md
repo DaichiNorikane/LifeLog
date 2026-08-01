@@ -68,16 +68,26 @@ https://<デプロイURL>/api/health/weight
 4. 実行するショートカットとして、手順2で作成したショートカットを選びます。
 5. 「確認後に実行」をオフにします。表示が「すぐに実行」になっていれば、自動実行されます。
 
-## uidとWIDGET_TOKENの確認方法
+## uidとWIDGET_TOKENの取得方法
 
-Scriptableウィジェットを設定済みの場合は、`scripts/lifelog-widget.js` の先頭にある設定を確認してください。
+Scriptableウィジェットを設定済みの場合は、`scripts/lifelog-widget.js` の先頭にある `USER_ID` / `WIDGET_TOKEN` と同じ値です。
+まだどこにも設定していない場合は、次のように用意します。
 
-```js
-const CONFIG = {
-    API_URL: "https://あなたのドメイン.vercel.app/api/widget/calories",
-    WIDGET_TOKEN: "ここにWIDGET_TOKENを設定",
-    USER_ID: "ここにFirebaseのUIDを設定",
-};
-```
+### uid（FirebaseのユーザーID）
 
-ショートカットでは、`USER_ID` と同じ値を `uid` に、`WIDGET_TOKEN` と同じ値を `x-widget-token` ヘッダーに入れます。
+Googleログイン時に Firebase が発行する自分専用のIDです。アプリの画面には出していないので、コンソールから取ります。
+
+1. https://console.firebase.google.com/project/lifelog-14b58/authentication/users を開く
+2. ログインに使っている Google アカウントの行の「**ユーザー UID**」列をコピーする
+
+### WIDGET_TOKEN
+
+**自分で決める合言葉です。**どこかから発行されるものではありません。
+
+1. ランダムな文字列を作る（`openssl rand -hex 24` など）
+2. Vercel →「Settings」→「Environment Variables」で Name `WIDGET_TOKEN` として保存
+3. **再デプロイする**（環境変数はデプロイ時に結びつくため、既存のデプロイには反映されない）
+
+未設定のままだと、すべてのリクエストが 401 で弾かれ、データが1件も入りません。
+
+ショートカットでは、`uid` に①の値を、`x-widget-token` ヘッダーに②の値を入れます。

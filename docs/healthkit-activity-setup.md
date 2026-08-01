@@ -6,10 +6,45 @@
 
 ## 事前に用意するもの
 
-- `uid`: FirebaseのユーザーID
-- `x-widget-token`: Lifelogの `WIDGET_TOKEN`
+次の3つを先に手元に揃えてください。Scriptable ウィジェット `scripts/lifelog-widget.js` を設定済みなら、
+`USER_ID` / `WIDGET_TOKEN` に入れたものと同じ値を使います。
 
-どちらも Scriptable ウィジェット `scripts/lifelog-widget.js` の `USER_ID` / `WIDGET_TOKEN` と同じ値です。
+### ① uid（FirebaseのユーザーID）
+
+Googleログインしたときに Firebase が発行する、自分専用の28文字前後の英数字です。
+アプリの画面には出していないので、Firebase コンソールから取ります。
+
+1. https://console.firebase.google.com/project/lifelog-14b58/authentication/users を開く
+   （プロジェクト `lifelog-14b58` →「構築」→「Authentication」→「Users」タブ）
+2. ログインに使っている Google アカウントの行を見る
+3. 「**ユーザー UID**」列の値（`kJ8xY2mNpQ...` のような文字列）をコピーする
+
+これが `uid` です。ウィジェットの `USER_ID` にも同じ値を入れます。
+
+### ② WIDGET_TOKEN
+
+**これはどこかから発行されるものではなく、自分で決める合言葉です。**
+ショートカットから API を叩くときの本人確認にだけ使われ、サーバー側は値が一致するかを見ているだけです。
+
+1. ランダムな文字列を作る（`openssl rand -hex 24` か、パスワード生成ツールで32文字程度）
+2. Vercel → 該当プロジェクト →「Settings」→「Environment Variables」を開く
+3. Name に `WIDGET_TOKEN`、Value に作った文字列を入れて保存
+   （Environments は Production。Preview でも試すなら両方チェック）
+4. **保存後に再デプロイする。** 環境変数はデプロイ時に結びつくので、既存のデプロイには反映されません
+5. 同じ文字列を、ショートカットの `x-widget-token` ヘッダーとウィジェットの `WIDGET_TOKEN` に入れる
+
+> **`WIDGET_TOKEN` が未設定だと、すべてのリクエストが 401 で弾かれます。**
+> ショートカットを正しく作ってもデータが1件も入らない場合、まずここを疑ってください。
+
+### ③ デプロイURL
+
+`https://<プロジェクト名>.vercel.app` の形です。Vercel のプロジェクト画面に表示されている本番URLを使います。
+この手順の中の `https://<デプロイURL>/api/health/sync` は、
+例えば `https://lifelog-orpin.vercel.app/api/health/sync` のようになります（末尾のスラッシュは付けません）。
+
+> **注意**: `/api/health/sync` は本番にデプロイされて初めて使えます。
+> 機能を追加したブランチをマージする前に試したい場合は、
+> Vercel がブランチごとに発行するプレビューURLを使ってください。
 
 ---
 

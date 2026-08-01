@@ -25,12 +25,42 @@ export const verifyWidgetToken = (request) => {
     return Boolean(token) && token === process.env.WIDGET_TOKEN;
 };
 
-/** 数値化。空文字・null・非数値は null（0 は 0 のまま通す） */
+/** 全角の数字・記号を半角に直す（ショートカットの表示形式に引きずられないため） */
+const toHalfWidth = (text) =>
+    text.replace(/[０-９．－，]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+
+/**
+ * 数値化。空文字・null・非数値は null（0 は 0 のまま通す）。
+ *
+ * iOSショートカットは「統計を計算」の結果を、そのまま数値ではなく
+ * 表示用の文字列として送ってくることがある（`8,421` / `8,421 歩` / `82.6 kg`）。
+ * これを弾くと「送っているのに null になる」という原因の分かりにくい失敗になるため、
+ * 先頭の数値部分を取り出して受け入れる。
+ *
+ * ただし数値で始まらない文字列は null のまま（誤った値を作らない）。
+ */
 export const toFiniteNumber = (value) => {
     if (value === undefined || value === null) return null;
-    if (typeof value === 'string' && value.trim() === '') return null;
 
-    const number = Number(value);
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+
+    if (typeof value !== 'string') {
+        const number = Number(value);
+        return Number.isFinite(number) ? number : null;
+    }
+
+    const trimmed = value.trim();
+    if (trimmed === '') return null;
+
+    const direct = Number(trimmed);
+    if (Number.isFinite(direct)) return direct;
+
+    // 桁区切りと単位を落としてから、先頭の数値だけを取り出す
+    const normalized = toHalfWidth(trimmed).replace(/[,\s ]/g, '');
+    const match = /^[+-]?\d+(?:\.\d+)?/.exec(normalized);
+    if (!match) return null;
+
+    const number = Number(match[0]);
     return Number.isFinite(number) ? number : null;
 };
 
@@ -147,12 +177,23 @@ export const writeActivity = async (uid, payload = {}) => {
     }
 
     const values = {};
+    // 値は届いたのに数値にできなかったものを記録する。
+    // ショートカットの設定ミスは「null になる」という形でしか現れず原因が分からないため、
+    // 実際に何が届いたのかを応答に返して切り分けられるようにする。
+    const rejected = {};
     let received = 0;
+
     for (const metric of ACTIVITY_METRICS) {
         const raw = payload[metric.key];
         if (raw === undefined) continue;      // 送られていない → 触らない
         received += 1;
-        values[metric.key] = toBoundedNumber(raw, metric);  // 範囲外・空は null
+
+        const parsed = toBoundedNumber(raw, metric);  // 範囲外・空は null
+        values[metric.key] = parsed;
+
+        if (parsed === null && raw !== null && String(raw).trim() !== '') {
+            rejected[metric.key] = String(raw).slice(0, 40);
+        }
     }
 
     if (received === 0) {
@@ -169,7 +210,12 @@ export const writeActivity = async (uid, payload = {}) => {
 
     await activityDoc(uid, targetDate).set(record, { merge: true });
 
-    return { ok: true, date: targetDate, metrics: values };
+    return {
+        ok: true,
+        date: targetDate,
+        metrics: values,
+        ...(Object.keys(rejected).length > 0 ? { rejected } : {}),
+    };
 };
 
 // ========== ワークアウト ==========

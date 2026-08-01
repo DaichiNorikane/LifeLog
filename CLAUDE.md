@@ -134,6 +134,18 @@ HealthKitから取得できる体組成はこの5項目で全部（筋肉量・�
 新しい指標を足すときは `healthMetrics.js` に1件追加するだけでよい（API検証とUI表示に自動反映される）。
 セットアップ手順は `docs/healthkit-activity-setup.md`。
 
+## ダイエット目標
+
+`users/{uid}` に `targetWeight` / `targetDate` / `targetCalories` / `targetBMI` / `height` / `startWeight` / `lastDiagnosis` を持つ。
+`targetCalories` は `DietGoalPanel` の目標設定フォームからいつでも変更できる（エレナの診断とは独立）。
+
+**LINE からも操作できる**（`src/lib/line/handlers/goal.js`）:
+- 「目標」… 現在の目標を表示
+- 「目標カロリー 1800」「目標体重 75」「目標日 12/31」… 変更
+- 「目標診断」… エレナが実現可能性を判定し、推奨カロリーを提案
+
+ルーティングは `classifyTextRoute` で体重記録より先に判定する（「目標体重 75」を体重の記録と取り違えないため）。
+
 ## Gemini API の設計
 
 - **定義場所**: `src/app/actions/gemini-client.js`

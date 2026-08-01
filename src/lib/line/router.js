@@ -5,6 +5,7 @@ import { showLoadingAnimation } from '@/lib/line/client';
 import { handleChatEvent } from '@/lib/line/handlers/chat';
 import { handleDailySummaryEvent, isDailySummaryText } from '@/lib/line/handlers/daily-summary';
 import { handleFollowEvent, handleLinkCodeEvent } from '@/lib/line/handlers/link';
+import { handleGoalEvent, parseGoalCommand } from '@/lib/line/handlers/goal';
 import { handleKeywordSuggestEvent, MEAL_KEYWORDS } from '@/lib/line/handlers/keyword-suggest';
 import { handleMealEditEvent } from '@/lib/line/handlers/meal-edit';
 import { handleMealCorrectionEvent, handleMealTextEvent } from '@/lib/line/handlers/meal-text';
@@ -40,6 +41,9 @@ export const markEventProcessed = async (event) => {
 export const classifyTextRoute = (text, state = null) => {
     const trimmed = String(text || '').trim();
     if (/^\d{6}$/.test(trimmed)) return { type: 'link_code', code: trimmed };
+
+    const goal = parseGoalCommand(trimmed);
+    if (goal) return { type: 'goal', goal };
 
     const weight = parseWeightText(trimmed);
     if (weight !== null) return { type: 'weight', weight };
@@ -107,6 +111,10 @@ export const handleLineEvent = async (event) => {
     if (route.type === 'summary') {
         await handleDailySummaryEvent(event, user);
         return { handled: 'summary' };
+    }
+    if (route.type === 'goal') {
+        await handleGoalEvent(event, user, route.goal);
+        return { handled: 'goal' };
     }
 
     const state = await getAwaitingCorrectionState(user.uid);

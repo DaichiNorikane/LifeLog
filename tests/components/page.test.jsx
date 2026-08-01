@@ -60,6 +60,9 @@ const mockGetDailyEvaluation = vi.fn().mockResolvedValue(null);
 const mockAddMealToFirestore = vi.fn().mockResolvedValue('new-meal-id');
 const mockUpdateMealInFirestore = vi.fn().mockResolvedValue(undefined);
 const mockSaveDailyEvaluation = vi.fn().mockResolvedValue(undefined);
+const mockGetActivityLogs = vi.fn().mockResolvedValue([]);
+const mockGetRecentWorkouts = vi.fn().mockResolvedValue([]);
+const mockGetConditionLogs = vi.fn().mockResolvedValue([]);
 
 vi.mock('@/lib/firebase/firestore', () => ({
   addMealToFirestore: (...args) => mockAddMealToFirestore(...args),
@@ -73,6 +76,13 @@ vi.mock('@/lib/firebase/firestore', () => ({
   deleteStockItem: vi.fn(),
   saveDailyEvaluation: (...args) => mockSaveDailyEvaluation(...args),
   getDailyEvaluation: (...args) => mockGetDailyEvaluation(...args),
+  // HealthKit 由来の実測データ（ActivityCard 用）
+  getActivityLogs: (...args) => mockGetActivityLogs(...args),
+  getRecentWorkouts: (...args) => mockGetRecentWorkouts(...args),
+  getConditionLogs: (...args) => mockGetConditionLogs(...args),
+  getConditionLog: vi.fn().mockResolvedValue(null),
+  getConditionModel: vi.fn().mockResolvedValue(null),
+  saveConditionPrediction: vi.fn().mockResolvedValue(undefined),
 }));
 
 // --- Cache Mock ---

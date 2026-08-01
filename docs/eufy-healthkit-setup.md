@@ -1,5 +1,9 @@
 # eufy体組成計データをLifelogへ自動送信する設定手順
 
+> **これから設定する場合は `docs/healthkit-activity-setup.md` を見てください。**
+> 体組成に加えて歩数・消費カロリー・睡眠まで、**1つのショートカット**で送れます。
+> このページは、体組成だけを送る従来の手順です（引き続き動作します）。
+
 この手順では、EufyLifeアプリでApple Health連携を有効にし、iPhoneのショートカットからLifelogへ体重・体脂肪率・BMI・除脂肪体重を送ります。
 
 ## 1. EufyLifeとApple Healthを連携する
@@ -49,7 +53,8 @@ https://<デプロイURL>/api/health/weight
   "weight": "体重の値",
   "bodyFat": "体脂肪率の値",
   "bmi": "BMIの値",
-  "leanBodyMass": "除脂肪体重の値"
+  "leanBodyMass": "除脂肪体重の値",
+  "height": "身長の値"
 }
 ```
 
@@ -63,16 +68,26 @@ https://<デプロイURL>/api/health/weight
 4. 実行するショートカットとして、手順2で作成したショートカットを選びます。
 5. 「確認後に実行」をオフにします。表示が「すぐに実行」になっていれば、自動実行されます。
 
-## uidとWIDGET_TOKENの確認方法
+## uidとWIDGET_TOKENの取得方法
 
-Scriptableウィジェットを設定済みの場合は、`scripts/lifelog-widget.js` の先頭にある設定を確認してください。
+Scriptableウィジェットを設定済みの場合は、`scripts/lifelog-widget.js` の先頭にある `USER_ID` / `WIDGET_TOKEN` と同じ値です。
+まだどこにも設定していない場合は、次のように用意します。
 
-```js
-const CONFIG = {
-    API_URL: "https://あなたのドメイン.vercel.app/api/widget/calories",
-    WIDGET_TOKEN: "ここにWIDGET_TOKENを設定",
-    USER_ID: "ここにFirebaseのUIDを設定",
-};
-```
+### uid（FirebaseのユーザーID）
 
-ショートカットでは、`USER_ID` と同じ値を `uid` に、`WIDGET_TOKEN` と同じ値を `x-widget-token` ヘッダーに入れます。
+Googleログイン時に Firebase が発行する自分専用のIDです。アプリの画面には出していないので、コンソールから取ります。
+
+1. https://console.firebase.google.com/project/lifelog-14b58/authentication/users を開く
+2. ログインに使っている Google アカウントの行の「**ユーザー UID**」列をコピーする
+
+### WIDGET_TOKEN
+
+**自分で決める合言葉です。**どこかから発行されるものではありません。
+
+1. ランダムな文字列を作る（`openssl rand -hex 24` など）
+2. Vercel →「Settings」→「Environment Variables」で Name `WIDGET_TOKEN` として保存
+3. **再デプロイする**（環境変数はデプロイ時に結びつくため、既存のデプロイには反映されない）
+
+未設定のままだと、すべてのリクエストが 401 で弾かれ、データが1件も入りません。
+
+ショートカットでは、`uid` に①の値を、`x-widget-token` ヘッダーに②の値を入れます。

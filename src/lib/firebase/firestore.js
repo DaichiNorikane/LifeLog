@@ -709,3 +709,43 @@ export const getSearchHistory = async (userId, limitCount = 20) => {
         return [];
     }
 };
+
+// ========== Activity Logs（HealthKit 由来の日次アクティビティ）==========
+// users/{uid}/activityLogs/{YYYY-MM-DD}
+// 日付キーはカレンダー日。HealthKit の日次集計（0:00 区切り）に揃えるため、
+// コンディションの論理日（4:00 区切り）とは意図的にずらしてある。
+
+export const getActivityLogs = async (userId, limitCount = 30) => {
+    if (!userId) return [];
+    try {
+        const q = query(
+            collection(db, "users", userId, "activityLogs"),
+            orderBy("date", "desc"),
+            limit(limitCount)
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+        console.error("Error fetching activity logs:", e);
+        return [];
+    }
+};
+
+// ========== Workouts（HealthKit 由来の個別ワークアウト）==========
+// users/{uid}/workouts/{workoutId}（ID は開始時刻＋種目の冪等キー）
+
+export const getRecentWorkouts = async (userId, limitCount = 30) => {
+    if (!userId) return [];
+    try {
+        const q = query(
+            collection(db, "users", userId, "workouts"),
+            orderBy("start", "desc"),
+            limit(limitCount)
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+        console.error("Error fetching workouts:", e);
+        return [];
+    }
+};

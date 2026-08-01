@@ -23,6 +23,7 @@ const iconNames = [
   'ThumbsUp', 'ThumbsDown', 'CheckCircle', 'RefreshCw',
   'ReferenceArea', 'ReferenceLine',
   'Moon', 'Settings2', 'Check', 'Coffee', 'TrendingUp',
+  'ChevronDown', 'ChevronUp', 'Dumbbell', 'Footprints', 'Scale',
 ];
 
 const mocks = {};

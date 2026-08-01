@@ -230,6 +230,53 @@ describe('POST /api/health/sync', () => {
     expect(setCalls.weights).not.toHaveBeenCalled();
   });
 
+  it('accepts sleep placed flat at the top level', async () => {
+    const res = await POST(createMockRequest({
+      body: {
+        uid: 'user1',
+        sleepStart: '2026-08-01T14:10:00Z',
+        sleepEnd: '2026-08-01T22:52:00Z',
+      },
+    }));
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.results.sleep.ok).toBe(true);
+    expect(setCalls.conditionLogs).toHaveBeenCalledTimes(1);
+
+    const [payload] = setCalls.conditionLogs.mock.calls[0];
+    // 就寝〜起床の時刻だけ送れば臥床時間が出る（ショートカットは合計を出せない）
+    expect(payload.sleep.objective.inBedMinutes).toBe(522);
+    // 実際に眠っていた時間は推測できないので補わない
+    expect(payload.sleep.objective.asleepMinutes).toBeNull();
+  });
+
+  it('prefers a measured asleep duration over the derived span', async () => {
+    await POST(createMockRequest({
+      body: {
+        uid: 'user1',
+        sleepStart: '2026-08-01T14:10:00Z',
+        sleepEnd: '2026-08-01T22:52:00Z',
+        inBedMinutes: '500',
+        asleepMinutes: '402',
+      },
+    }));
+
+    const [payload] = setCalls.conditionLogs.mock.calls[0];
+    expect(payload.sleep.objective.inBedMinutes).toBe(500);
+    expect(payload.sleep.objective.asleepMinutes).toBe(402);
+  });
+
+  it('does not treat sleep as present without an end time', async () => {
+    const res = await POST(createMockRequest({
+      body: { uid: 'user1', sleepStart: '2026-08-01T14:10:00Z', steps: 100 },
+    }));
+
+    const json = await res.json();
+    expect(json.results.sleep).toBeUndefined();
+    expect(setCalls.conditionLogs).not.toHaveBeenCalled();
+  });
+
   it('returns 400 when only unknown keys are sent', async () => {
     const res = await POST(createMockRequest({
       body: { uid: 'user1', somethingElse: 123 },

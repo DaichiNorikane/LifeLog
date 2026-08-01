@@ -317,10 +317,20 @@ export const writeSleep = async (uid, payload = {}) => {
     const date = getSleepTargetDateKey(sleepEndDate);
     const dayMinutes = { min: 0, max: 24 * 60 };
 
+    // ショートカットは睡眠セグメントの合計時間を出せない（HealthKitの睡眠は
+    // 数値ではなくカテゴリのサンプルとして入るため「統計を計算」が使えない）。
+    // 就寝〜起床の時刻さえ送れば臥床時間が出せるので、届いていなければここで補う。
+    // asleepMinutes（実際に眠っていた時間）は推測できないので補わない。
+    const spanMinutes = sleepStartDate
+        ? Math.round((sleepEndDate - sleepStartDate) / 60000)
+        : null;
+    const inBedValue = toBoundedNumber(inBedMinutes, dayMinutes)
+        ?? toBoundedNumber(spanMinutes, dayMinutes);
+
     const objective = {
         sleepStart: sleepStartDate ? sleepStartDate.toISOString() : null,
         sleepEnd: sleepEndDate.toISOString(),
-        inBedMinutes: toBoundedNumber(inBedMinutes, dayMinutes),
+        inBedMinutes: inBedValue,
         asleepMinutes: toBoundedNumber(asleepMinutes, dayMinutes),
         deepMinutes: toBoundedNumber(deepMinutes, dayMinutes),
         remMinutes: toBoundedNumber(remMinutes, dayMinutes),

@@ -35,10 +35,17 @@ const DOMAINS = [
 const isPlainObject = (value) =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
 
+/** 平らに書ける睡眠のフィールド。sleepEnd があれば睡眠の記録として扱う */
+const SLEEP_FIELDS = [
+    'sleepStart', 'sleepEnd', 'inBedMinutes', 'asleepMinutes',
+    'deepMinutes', 'remMinutes', 'awakenings',
+];
+
 /** 平らに置かれた指標を、入れ子の形に組み立て直す */
 const collectFlatPayload = (body) => {
     const activity = {};
     const weight = {};
+    const sleep = {};
 
     for (const [key, value] of Object.entries(body)) {
         // `weight` だけはドメイン名と指標名が衝突する。
@@ -47,11 +54,13 @@ const collectFlatPayload = (body) => {
 
         if (ACTIVITY_METRIC_MAP[key]) activity[key] = value;
         else if (BODY_METRIC_MAP[key]) weight[key] = value;
+        else if (SLEEP_FIELDS.includes(key)) sleep[key] = value;
     }
 
     return {
         activity: Object.keys(activity).length > 0 ? activity : undefined,
         weight: weight.weight !== undefined ? weight : undefined,
+        sleep: sleep.sleepEnd !== undefined ? sleep : undefined,
     };
 };
 
@@ -66,7 +75,7 @@ const normalizeBody = (body) => {
         weight: isPlainObject(body.weight) ? body.weight : flat.weight,
         activity: body.activity !== undefined ? body.activity : flat.activity,
         workouts: body.workouts,
-        sleep: body.sleep,
+        sleep: isPlainObject(body.sleep) ? body.sleep : flat.sleep,
     };
 };
 

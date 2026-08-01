@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => {
     handleMealPhotoEvent: vi.fn(),
     handlePostbackEvent: vi.fn(),
     handleWeightEvent: vi.fn(),
+    handleGoalEvent: vi.fn(),
     resolveUserOrReply: vi.fn().mockResolvedValue({ uid: 'uid-1', data: {} }),
     getAwaitingCorrectionState: vi.fn().mockResolvedValue(null),
     classifyLineIntent: vi.fn().mockResolvedValue({ intent: 'other', mealDescription: null }),
@@ -92,6 +93,12 @@ vi.mock('@/lib/line/handlers/weight', () => ({
   handleWeightEvent: mocks.handleWeightEvent,
 }));
 
+vi.mock('@/lib/line/handlers/goal', async () => {
+  // parseGoalCommand は本物を使い、送信だけモックする（ルーティング判定そのものを検証したいため）
+  const actual = await vi.importActual('@/lib/line/handlers/goal');
+  return { ...actual, handleGoalEvent: mocks.handleGoalEvent };
+});
+
 vi.mock('@/lib/line/resolveUser', () => ({
   resolveUserOrReply: mocks.resolveUserOrReply,
 }));
@@ -144,6 +151,31 @@ describe('LINE router dispatch', () => {
     await handleLineEvent(event);
     expect(mocks.handleWeightEvent).toHaveBeenCalledWith(event, '体重65.2kg');
     expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
+  });
+
+  it('routes goal commands to the goal handler', async () => {
+    expect(classifyTextRoute('目標')).toEqual({ type: 'goal', goal: { action: 'show' } });
+    expect(classifyTextRoute('目標カロリー 1800')).toEqual({
+      type: 'goal', goal: { action: 'set', patch: { targetCalories: 1800 } },
+    });
+
+    const event = textEvent('目標カロリー 1800');
+    await handleLineEvent(event);
+    expect(mocks.handleGoalEvent).toHaveBeenCalledWith(
+      event, { uid: 'uid-1', data: {} }, { action: 'set', patch: { targetCalories: 1800 } },
+    );
+    expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
+  });
+
+  it('does not mistake a target weight command for a weight log', async () => {
+    // 「目標体重 75」は体重の記録ではなく目標の変更
+    expect(classifyTextRoute('目標体重 75')).toEqual({
+      type: 'goal', goal: { action: 'set', patch: { targetWeight: 75 } },
+    });
+
+    await handleLineEvent(textEvent('目標体重 75'));
+    expect(mocks.handleWeightEvent).not.toHaveBeenCalled();
+    expect(mocks.handleGoalEvent).toHaveBeenCalled();
   });
 
   it('routes 6-digit link codes before user resolution', async () => {

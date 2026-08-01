@@ -146,6 +146,33 @@ export const addWeightAdmin = async (uid, weight, date = new Date()) => {
     return { id: dateId, ...payload };
 };
 
+/** プロフィール（目標）の部分更新。LINE から目標を変えるときに使う */
+export const updateUserProfileAdmin = async (uid, patch = {}) => {
+    const clean = Object.fromEntries(
+        Object.entries(patch).filter(([, value]) => value !== undefined)
+    );
+    if (Object.keys(clean).length === 0) return null;
+
+    await userRef(uid).set({ ...clean, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    return clean;
+};
+
+/** 直近 days 日の「記録がある日」の平均摂取カロリー。目標診断の材料になる */
+export const getRecentAverageCaloriesAdmin = async (uid, days = 7) => {
+    const meals = await getRecentMealsAdmin(uid, { sinceMs: days * 24 * 60 * 60 * 1000, limit: 200 });
+    if (meals.length === 0) return null;
+
+    const byDate = new Map();
+    for (const meal of meals) {
+        const dateId = getJstDateId(new Date(meal.timestamp));
+        byDate.set(dateId, (byDate.get(dateId) || 0) + (Number(meal.calories) || 0));
+    }
+    if (byDate.size === 0) return null;
+
+    const total = [...byDate.values()].reduce((sum, value) => sum + value, 0);
+    return Math.round(total / byDate.size);
+};
+
 export const getLatestWeightBefore = async (uid, dateId) => {
     const snapshot = await userRef(uid).collection('weights')
         .where('date', '<', dateId)

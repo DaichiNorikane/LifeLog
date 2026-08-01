@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useMemo } from 'react';
-import { Save, TrendingDown, Target, AlertCircle, Ruler, Loader2, Sparkles } from 'lucide-react';
+import { Save, TrendingDown, Target, AlertCircle, Ruler, Loader2, Sparkles, Flame } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea } from 'recharts';
 import { saveUserProfile } from '@/lib/firebase/firestore';
 import { analyzeGoalFeasibility } from '@/app/actions/daily-evaluation';
@@ -51,6 +51,7 @@ export default function DietGoalPanel({ user, userProfile, weights, onClose, onU
     const [targetDate, setTargetDate] = useState(userProfile?.targetDate || '');
     const [height, setHeight] = useState(userProfile?.height || '');
     const [targetBMI, setTargetBMI] = useState(userProfile?.targetBMI || '22');
+    const [targetCalories, setTargetCalories] = useState(userProfile?.targetCalories ?? '');
     const [isSaving, setIsSaving] = useState(false);
 
     // Analysis State
@@ -199,6 +200,10 @@ export default function DietGoalPanel({ user, userProfile, weights, onClose, onU
                 height: parseFloat(height),
                 targetBMI: parseFloat(targetBMI),
             };
+
+            // 空にしたときは既存値を消さない（未入力と「0にしたい」は区別する）
+            const calories = parseInt(targetCalories, 10);
+            if (Number.isFinite(calories) && calories > 0) patch.targetCalories = calories;
 
             // 進捗率は「開始体重からどれだけ減ったか」で出す。
             // startWeight は今まで誰も保存しておらず、常に現在体重にフォールバックしていたため
@@ -489,6 +494,31 @@ export default function DietGoalPanel({ user, userProfile, weights, onClose, onU
                         <h3 style={{ margin: '0 0 15px 0', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <Target size={18} /> 目標設定
                         </h3>
+
+                        {/* 目標カロリー。
+                            以前はエレナの診断直後にしか編集できず、保存すると入力欄ごと消えていた。
+                            日々調整したい値なので、診断とは独立していつでも直せる場所に置く */}
+                        <div style={{ marginBottom: '20px', padding: '15px', background: '#FFF7ED', borderRadius: '12px', border: '1px solid #FED7AA' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                                <Flame size={16} color="#EA580C" />
+                                <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>1日の目標カロリー</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                                <div style={{ flex: 1 }}>
+                                    <input
+                                        type="number"
+                                        value={targetCalories}
+                                        onChange={(e) => setTargetCalories(e.target.value)}
+                                        placeholder="2000"
+                                        style={{ ...inputStyle, textAlign: 'center' }}
+                                    />
+                                </div>
+                                <span style={{ color: 'var(--text-muted)' }}>kcal</span>
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+                                ホーム画面のゲージとエレナの評価が、この値を基準になります
+                            </div>
+                        </div>
 
                         {/* 身長入力 */}
                         <div style={{ marginBottom: '20px', padding: '15px', background: '#f8fafc', borderRadius: '12px' }}>

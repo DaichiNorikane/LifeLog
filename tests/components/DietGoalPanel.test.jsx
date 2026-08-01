@@ -176,6 +176,42 @@ describe('DietGoalPanel', () => {
     expect(screen.queryByText('BMI')).not.toBeInTheDocument();
   });
 
+  // ===== 7b. Target Calories =====
+  // 以前はエレナの診断直後にしか編集できず、保存すると入力欄ごと消えていた
+
+  it('lets the target calories be edited without running a diagnosis first', () => {
+    render(<DietGoalPanel {...defaultProps} userProfile={{ ...defaultProps.userProfile, targetCalories: 2000 }} />);
+
+    const input = screen.getByPlaceholderText('2000');
+    expect(input.value).toBe('2000');
+  });
+
+  it('saves an edited target calorie value with the goal', async () => {
+    render(<DietGoalPanel {...defaultProps} userProfile={{ ...defaultProps.userProfile, targetCalories: 2000 }} />);
+
+    fireEvent.change(screen.getByPlaceholderText('2000'), { target: { value: '1800' } });
+    fireEvent.click(screen.getByText('保存'));
+
+    await waitFor(() => {
+      expect(mockSaveUserProfile).toHaveBeenCalledWith('test-user', expect.objectContaining({
+        targetCalories: 1800,
+      }));
+    });
+  });
+
+  it('does not wipe the existing target calories when the field is cleared', async () => {
+    render(<DietGoalPanel {...defaultProps} userProfile={{ ...defaultProps.userProfile, targetCalories: 2000 }} />);
+
+    fireEvent.change(screen.getByPlaceholderText('2000'), { target: { value: '' } });
+    fireEvent.click(screen.getByText('保存'));
+
+    await waitFor(() => {
+      expect(mockSaveUserProfile).toHaveBeenCalled();
+    });
+    const [, payload] = mockSaveUserProfile.mock.calls[0];
+    expect(payload).not.toHaveProperty('targetCalories');
+  });
+
   // ===== 8. Goal Settings Save =====
 
   it('saves goal settings when save button is clicked', async () => {

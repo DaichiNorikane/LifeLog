@@ -26,7 +26,12 @@ export async function POST(request) {
         if (!result.ok) {
             return NextResponse.json({ error: result.error }, { status: result.status || 400 });
         }
-        return NextResponse.json({ success: true, date: result.date, metrics: result.metrics });
+        return NextResponse.json({
+            success: true,
+            date: result.date,
+            metrics: result.metrics,
+            ...(result.rejected ? { rejected: result.rejected } : {}),
+        });
     } catch (error) {
         console.error('[Health Activity] Error:', error);
         return NextResponse.json({ error: 'Internal error' }, { status: 500 });

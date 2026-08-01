@@ -45,6 +45,25 @@ const formatDailyEvaluation = (evaluation) => {
     ].join('\n');
 };
 
+// コンディション予測（決定論エンジンが算出済み。AIに再計算させない）
+const formatCondition = (condition) => {
+    if (!condition) return 'まだ判定できません（記録が少ないため）';
+    const labels = { focus: '集中力', sleep: '睡眠', energy: 'エネルギー', mood: 'メンタル' };
+    const scores = Object.entries(condition.scores || {})
+        .filter(([, score]) => score !== null && score !== undefined)
+        .map(([axis, score]) => `${labels[axis] || axis}${score}`)
+        .join(' / ');
+
+    const lines = [scores || '判定不可'];
+    if (condition.topNegative) {
+        lines.push(`最も響いている要因: ${condition.topNegative.label}${condition.topNegative.detail ? `（${condition.topNegative.detail}）` : ''}`);
+    }
+    if (condition.topPositive) {
+        lines.push(`効いている要因: ${condition.topPositive.label}${condition.topPositive.detail ? `（${condition.topPositive.detail}）` : ''}`);
+    }
+    return lines.join('\n');
+};
+
 const formatMessageHistory = (messages = []) => {
     if (!messages.length) return '履歴なし';
     return messages.map(message => {
@@ -83,6 +102,15 @@ ${ELENA_PERSONA}
 - 記録の話になったら「写真か『◯◯食べた』で送ってくだされば記録しますよ」と誘導してよい。
 - 今日のカロリーや栄養の数字を聞かれたら、回答に加えて「『サマリー』と送るとグラフで見られますよ📊」と案内してよい。
 
+【コンディション（体調）の扱い】
+- 下の【今日のコンディション予測】は**別システムが確定させた数値**です。**変更・再計算してはいけません。**
+- 集中力・睡眠・だるさ・気分の相談をされたら、この数値と要因を根拠に答えてください。一般論で終わらせないこと。
+- 「今夜眠れるか」「午後に集中できるか」を聞かれたら、要因（カフェインの時刻・遅い食事など）を挙げて理由を説明する。
+- スコアが低い軸を「あなたの怠慢」として責めないこと。**体の反応**として説明します。
+  ✕「またサボりましたね？」→ ○「17時のカフェインが、まだ体に残っているんです」
+- 「判定できません」の場合は、無理に体調を語らず「記録が増えると見えてきますよ」と伝える。
+- 診断・病名の断定は禁止。「〜しやすい傾向があります」と述べ、不調が続くなら受診を促す。
+
 【食事予定・気分への提案ルール】
 直近の会話でエレナが食事の予定・体調・気分・食べたいものを尋ねていて、ユーザーが体調・気分・食べたいものを答えた場合は、(1)食べたい気持ちに共感し、(2)今日の残りカロリー・PFC・食材メモを踏まえ、(3)食べたいものをなるべく活かした現実的なメニューを2〜3個、量やカロリー目安付きで提案する。我慢一辺倒の提案はしない。食べたいものを健康的に食べる工夫を優先する。最後に「食べたら写真か一言で送ってくださいね」と記録へ誘導する。
 
@@ -96,6 +124,9 @@ ${userText}
 - 残りカロリー: ${remainingCalories} kcal
 - PFC合計: P${formatNumber(totalMacros.protein)}g / F${formatNumber(totalMacros.fat)}g / C${formatNumber(totalMacros.carbs)}g
 - 拡張栄養素: 食物繊維${formatNullable(totalMacros.fiber, 'g')} / 糖質${formatNullable(totalMacros.sugar, 'g')} / ナトリウム${formatNullable(totalMacros.sodium, 'mg')} / カリウム${formatNullable(totalMacros.potassium, 'mg')}
+
+【今日のコンディション予測（別システムが算出。変更禁止）】
+${formatCondition(input.condition)}
 
 【今日の食事一覧】
 ${formatMealList(today.meals || [])}

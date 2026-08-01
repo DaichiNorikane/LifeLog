@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase/admin';
+import { getLineClient } from '@/lib/line';
 import { getJSTToday, sendPushWithLimit, getTodayMeals, getOrRunEvaluation } from '@/lib/pushHelper';
 import { evaluateCondition } from '@/lib/health/conditionEngine';
 import { buildEveningSleepNote } from '@/lib/health/conditionMessages';
@@ -17,13 +18,16 @@ export async function GET(request) {
         const usersSnapshot = await db.collection('users').get();
         if (usersSnapshot.empty) return NextResponse.json({ message: 'No users' });
 
+        const messagingApi = getLineClient();
+
         let sent = 0;
 
         for (const doc of usersSnapshot.docs) {
             const userId = doc.id;
             const userData = doc.data();
             const subscription = userData.pushSubscription;
-            if (!subscription) continue;
+            const lineUserId = userData.lineUserId;
+            if (!subscription && !lineUserId) continue;
 
             const meals = await getTodayMeals(userId, todayStr);
 
@@ -89,12 +93,27 @@ export async function GET(request) {
                 body = `${body}\n${sleepNote}`;
             }
 
-            const success = await sendPushWithLimit(userId, subscription, todayStr, 'evening-preview', {
-                title,
-                body,
-                tag: `evening-preview-${todayStr}`,
-            });
-            if (success) sent++;
+            // 今夜の眠りは行動を変えられる最後のタイミングなので LINE にも届ける
+            if (lineUserId) {
+                try {
+                    await messagingApi.pushMessage({
+                        to: lineUserId,
+                        messages: [{ type: 'text', text: `【エレナより 🌙】\n${title}\n\n${body}` }],
+                    });
+                } catch (e) {
+                    console.error(`[Evening Preview] LINE failed for ${userId}:`, e.message);
+                }
+            }
+
+            let success = false;
+            if (subscription) {
+                success = await sendPushWithLimit(userId, subscription, todayStr, 'evening-preview', {
+                    title,
+                    body,
+                    tag: `evening-preview-${todayStr}`,
+                });
+            }
+            if (success || lineUserId) sent++;
         }
 
         return NextResponse.json({ success: true, sent });

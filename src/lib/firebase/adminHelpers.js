@@ -1,6 +1,10 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '@/lib/firebase/admin';
 import { cleanData } from '@/utils/cleanData';
+import { evaluateCondition, hasAnyScore } from '@/lib/health/conditionEngine';
+import { getLogicalDateKey } from '@/lib/health/conditionDate';
+import { AXES, AXIS_LABELS } from '@/lib/health/conditionRules';
+import { buildEveningSleepNote } from '@/lib/health/conditionMessages';
 
 const VALID_MEAL_TYPES = new Set(['breakfast', 'lunch', 'dinner', 'snack']);
 
@@ -11,6 +15,44 @@ const mealsRef = (uid) => userRef(uid).collection('meals');
  * 相関分析用に体感ログをまとめて取得する（Admin SDK）。
  * 予測スナップショット（predicted / firedDrivers）と実測（主観スコア）が同じドキュメントに入っている。
  */
+/**
+ * その論理日のコンディションを算出して、LINE 用に要約する。
+ * 決定論エンジンなので Gemini の追加呼び出しは発生しない。
+ */
+export const buildConditionContextAdmin = (meals = [], userProfile = {}, now = new Date()) => {
+    const dateKey = getLogicalDateKey(now);
+    const result = evaluateCondition({
+        dateKey,
+        meals,
+        profile: {
+            bedtime: userProfile?.bedtime,
+            targetCalories: userProfile?.targetCalories,
+            currentWeight: userProfile?.currentWeight,
+        },
+        now,
+    });
+
+    if (!hasAnyScore(result)) return null;
+
+    const scores = {};
+    for (const axis of AXES) {
+        scores[axis] = result.axes?.[axis]?.score ?? null;
+    }
+
+    return {
+        dateKey,
+        scores,
+        topNegative: result.topNegative
+            ? { axis: result.topNegative.axis, label: result.topNegative.label, detail: result.topNegative.detail || null }
+            : null,
+        topPositive: result.topPositive
+            ? { axis: result.topPositive.axis, label: result.topPositive.label, detail: result.topPositive.detail || null }
+            : null,
+        sleepNote: buildEveningSleepNote(result),
+        result,
+    };
+};
+
 export const getConditionLogsAdmin = async (uid, limitCount = 60) => {
     if (!uid) return [];
     try {
@@ -230,6 +272,8 @@ export const getLineChatContextAdmin = async (uid, userData = {}, date = new Dat
         recentWeights: mapSnapshotDocs(weightsSnap),
         stockItems: mapSnapshotDocs(stockSnap).map(item => ({ name: item.name })).filter(item => item.name),
         latestDailyEvaluation: mapSnapshotDocs(dailyEvalSnap)[0] || null,
+        // コンディション予測（決定論エンジン。API呼び出しなし）
+        condition: buildConditionContextAdmin(meals, userProfile, date),
         messageHistory: mapSnapshotDocs(messagesSnap).reverse().map(message => ({
             role: message.role,
             text: message.text,

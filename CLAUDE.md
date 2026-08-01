@@ -62,8 +62,9 @@ src/
 │   │                        # ※recentMealsはpage.jsからpropsで受け取る（Firestoreクエリ不要）
 │   ├── EvaluationModal.js   # エレナの日次評価（スコア+表情変化）
 │   ├── AdvisorModal.js      # 食事アドバイザー
-│   ├── WeightTracker.js     # 体重管理（体脂肪率/BMI/除脂肪体重/体脂肪量も表示）
-│   ├── ActivityCard.js      # ヘルスケア実測値カード（歩数/消費/睡眠/体組成/ワークアウト）
+│   ├── ActivityCard.js      # ヘルスケア実測値（compact=上段の要約 / 通常=全項目）
+│   ├── BodyDetailModal.js   # 「今日のからだ」詳細（実測 + ダイエット目標）
+│   ├── DietGoalPanel.js     # ダイエット目標（いつまでに何kg）+ 推移グラフ + エレナ診断
 │   ├── StockManager.js      # 食材メモ
 │   ├── DietShooter.js       # ミニゲーム（Canvasゲーム）
 │   ├── ElenaChallengeModal.js # クイズ
@@ -115,7 +116,10 @@ macros: {
 
 体重記録 `users/{uid}/weights/{YYYY-MM-DD}` には、HealthKit連携で `bodyFat` / `bmi` / `leanBodyMass` / `height` が追加される。いずれも `number|null` で保存し、未取得は `0` ではなく `null` にする。
 HealthKitから取得できる体組成はこの5項目で全部（筋肉量・体水分率・内臓脂肪に相当する型がHealthKitに存在しないため、体組成計アプリに表示があっても取得できない）。
-体脂肪量(kg)は**保存しない**。体重を手入力で上書きすると導出値が古いまま残るため、表示時に `calcFatMass()` で毎回計算する。
+体脂肪量(kg)は**保存しない**。導出値を保存すると元の値が変わったときに古いまま残るため、表示時に `calcFatMass()` で毎回計算する。
+
+**体重の手入力は廃止済み**（体組成計 → ヘルスケア → API で自動的に入る）。体重だけ手で上書きすると体脂肪率などの導出値と食い違うため。
+`users/{uid}.startWeight` は目標を立てた時点の体重で、進捗率の分母になる。未設定なら進捗バーを出さない（0%固定の嘘表示を避ける）。
 
 ## HealthKit連携のデータ構造
 

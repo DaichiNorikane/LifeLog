@@ -44,8 +44,23 @@ export default function ActivityCard({
     sleepLabel = '昨夜の睡眠',
     workouts = [],
     title = '今日のからだ',
+    compact = false,
+    goal = null,
+    onOpenDetail = null,
 }) {
     const [expanded, setExpanded] = useState(false);
+
+    if (compact) {
+        return (
+            <CompactBodyCard
+                title={title}
+                activity={activity}
+                body={body}
+                goal={goal}
+                onOpenDetail={onOpenDetail}
+            />
+        );
+    }
 
     const primaryMetrics = ACTIVITY_METRICS
         .filter(m => m.primary && hasValue(activity?.[m.key]));
@@ -162,6 +177,125 @@ export default function ActivityCard({
                         </div>
                     )}
                 </>
+            )}
+        </div>
+    );
+}
+
+/**
+ * ダッシュボード上段（摂取カロリーの隣）に置く要約版。
+ *
+ * 幅が半分しかないので、毎日いちばん見たい3つに絞る:
+ *   体重 / 目標までの残り / 今日どれだけ動いたか。
+ * 体重と目標を同じカードに置くことで、実測と目標が別々のカードに分かれて
+ * 体重が二重に出ていた状態を解消する。詳細はタップで開く。
+ */
+function CompactBodyCard({ title, activity, body, goal, onOpenDetail }) {
+    const weight = body?.weight;
+    const steps = activity?.steps;
+    const activeEnergy = activity?.activeEnergy;
+
+    const hasAnything = hasValue(weight) || hasValue(steps) || hasValue(activeEnergy);
+
+    return (
+        <div
+            onClick={onOpenDetail}
+            className="glass-panel hover-card"
+            style={{
+                padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px',
+                cursor: onOpenDetail ? 'pointer' : 'default', position: 'relative', overflow: 'hidden',
+            }}
+        >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{title}</span>
+                <Activity size={18} color="#4ECDC4" />
+            </div>
+
+            {!hasAnything ? (
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                    ヘルスケアと同期すると出ます
+                </p>
+            ) : (
+                <>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                        <span style={{ fontSize: '1.9rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1 }}>
+                            {hasValue(weight) ? formatMetric('weight', weight) : '--'}
+                        </span>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>kg</span>
+                    </div>
+
+                    {goal && <GoalProgressLine goal={goal} />}
+
+                    <div style={{ display: 'flex', gap: '10px', fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        {hasValue(steps) && (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                <Footprints size={12} color="var(--primary)" />{formatMetric('steps', steps)}
+                            </span>
+                        )}
+                        {hasValue(activeEnergy) && (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                <Flame size={12} color="#EA580C" />{formatMetric('activeEnergy', activeEnergy)}
+                            </span>
+                        )}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
+/**
+ * 目標までの残りと期限。
+ * 「あと何kg」だけだと期限感が出ないので、残り日数と必要ペースまで一行で見せる。
+ */
+function GoalProgressLine({ goal }) {
+    const { current, target, start, targetDate } = goal || {};
+    if (!hasValue(current) || !hasValue(target)) return null;
+
+    const remaining = Math.round((current - target) * 10) / 10;
+    const achieved = remaining <= 0;
+
+    // 開始体重からの進捗。start が無い場合は進捗バーを出さない（0%固定になって嘘になる）
+    const totalToLose = hasValue(start) ? start - target : null;
+    const percent = totalToLose > 0
+        ? Math.min(100, Math.max(0, ((start - current) / totalToLose) * 100))
+        : null;
+
+    let daysLeft = null;
+    if (targetDate) {
+        const end = new Date(targetDate);
+        if (!Number.isNaN(end.getTime())) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            daysLeft = Math.max(0, Math.ceil((end.getTime() - today.getTime()) / 86400000));
+        }
+    }
+
+    const color = achieved ? '#48BB78' : '#4ECDC4';
+
+    return (
+        <div style={{
+            padding: '6px 8px', borderRadius: '8px',
+            background: achieved ? 'rgba(72, 187, 120, 0.1)' : 'rgba(78, 205, 196, 0.1)',
+        }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', fontSize: '0.72rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>{achieved ? '目標達成' : '目標まで'}</span>
+                <strong style={{ fontSize: '0.9rem', color }}>
+                    {achieved ? '🎉' : `-${remaining}`}
+                </strong>
+                {!achieved && <span style={{ color: 'var(--text-muted)' }}>kg</span>}
+            </div>
+
+            {percent !== null && (
+                <div style={{ height: '4px', borderRadius: '2px', background: 'rgba(0,0,0,0.08)', marginTop: '4px', overflow: 'hidden' }}>
+                    <div style={{ width: `${percent}%`, height: '100%', background: color, borderRadius: '2px' }} />
+                </div>
+            )}
+
+            {daysLeft !== null && (
+                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '3px' }}>
+                    残り{daysLeft}日
+                </div>
             )}
         </div>
     );

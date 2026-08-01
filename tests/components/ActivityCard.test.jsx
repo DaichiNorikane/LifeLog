@@ -90,6 +90,78 @@ describe('ActivityCard', () => {
     expect(screen.getByText('歩幅')).toBeInTheDocument();
   });
 
+  describe('compact mode (ダッシュボード上段の要約カード)', () => {
+    it('shows the weight as the headline number', () => {
+      render(<ActivityCard compact body={{ weight: 83.4 }} />);
+
+      expect(screen.getByText('83.4')).toBeInTheDocument();
+      expect(screen.getByText('kg')).toBeInTheDocument();
+    });
+
+    it('shows how far the goal still is', () => {
+      render(<ActivityCard compact body={{ weight: 83.4 }} goal={{ current: 83.4, target: 75, start: 90 }} />);
+
+      expect(screen.getByText('目標まで')).toBeInTheDocument();
+      expect(screen.getByText('-8.4')).toBeInTheDocument();
+    });
+
+    it('celebrates instead of showing a negative remainder once the goal is met', () => {
+      render(<ActivityCard compact body={{ weight: 74 }} goal={{ current: 74, target: 75, start: 90 }} />);
+
+      expect(screen.getByText('目標達成')).toBeInTheDocument();
+      expect(screen.queryByText('目標まで')).not.toBeInTheDocument();
+    });
+
+    it('shows the remaining days when the goal has a deadline', () => {
+      const future = new Date();
+      future.setDate(future.getDate() + 45);
+
+      render(<ActivityCard compact body={{ weight: 83.4 }} goal={{
+        current: 83.4, target: 75, start: 90, targetDate: future.toISOString().split('T')[0],
+      }} />);
+
+      expect(screen.getByText('残り45日')).toBeInTheDocument();
+    });
+
+    it('omits the progress bar when the starting weight was never recorded', () => {
+      // start が無いと進捗は常に0%になり、実態と食い違う嘘の表示になる
+      const { container } = render(
+        <ActivityCard compact body={{ weight: 83.4 }} goal={{ current: 83.4, target: 75, start: null }} />
+      );
+
+      expect(screen.getByText('-8.4')).toBeInTheDocument();
+      expect(container.querySelectorAll('div[style*="width: 0%"]')).toHaveLength(0);
+    });
+
+    it('shows steps and active energy alongside the weight', () => {
+      render(<ActivityCard compact activity={{ steps: 7864, activeEnergy: 304 }} body={{ weight: 83.4 }} />);
+
+      expect(screen.getByText('7,864')).toBeInTheDocument();
+      expect(screen.getByText('304')).toBeInTheDocument();
+    });
+
+    it('prompts to sync when nothing has arrived yet', () => {
+      render(<ActivityCard compact />);
+
+      expect(screen.getByText('ヘルスケアと同期すると出ます')).toBeInTheDocument();
+    });
+
+    it('calls onOpenDetail when tapped', () => {
+      const onOpenDetail = vi.fn();
+      render(<ActivityCard compact body={{ weight: 83.4 }} title="今日のからだ" onOpenDetail={onOpenDetail} />);
+
+      fireEvent.click(screen.getByText('今日のからだ'));
+
+      expect(onOpenDetail).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not render the full metric grid', () => {
+      render(<ActivityCard compact activity={{ steps: 7864, distanceKm: 6.2 }} body={{ weight: 83.4 }} />);
+
+      expect(screen.queryByText('移動距離')).not.toBeInTheDocument();
+    });
+  });
+
   it('uses the title and sleep label it is given for past days', () => {
     render(<ActivityCard
       title="この日のからだ"

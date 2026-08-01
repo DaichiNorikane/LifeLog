@@ -5,9 +5,9 @@
 //   USER_ID      … Firebaseコンソール → Authentication → Users の「ユーザーUID」
 //   WIDGET_TOKEN … 自分で決めた合言葉。Vercelの環境変数 WIDGET_TOKEN と同じ値にする
 const CONFIG = {
-    API_URL: "https://あなたのドメイン.vercel.app/api/widget/calories",
+    API_URL: "https://lifelog-orpin.vercel.app/api/widget/calories",
     WIDGET_TOKEN: "ここにWIDGET_TOKENを設定",
-    USER_ID: "ここにFirebaseのUIDを設定",
+    USER_ID: "jcexCW6JHoQxSoGJYAICopk5gWp2",
 };
 
 // カラーパレット

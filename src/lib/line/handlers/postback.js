@@ -24,6 +24,7 @@ export const parsePostbackData = (data) => {
         action: params.get('action'),
         sid: params.get('sid'),
         type: params.get('type'),
+        mid: params.get('mid'),   // 履歴から登録するときの元の食事ID
     };
 };
 
@@ -66,13 +67,27 @@ export const handlePostbackEvent = async (event) => {
     const user = await resolveUserOrReply(event);
     if (!user) return;
 
-    const { action, sid, type } = parsePostbackData(event.postback?.data);
+    const { action, sid, type, mid } = parsePostbackData(event.postback?.data);
 
     // リッチメニューの「何食べる？」。時間帯から朝/昼/夕を選んで既存の提案を出す
     if (action === 'suggest_meal') {
         // 動的 import。ここでしか使わない依存を postback の起動パスに載せない
         const { handleKeywordSuggestEvent } = await import('@/lib/line/handlers/keyword-suggest');
         await handleKeywordSuggestEvent(event, pickMealSlotByHour());
+        return;
+    }
+
+    // リッチメニューの「履歴から」。過去に記録したものを一覧で出す
+    if (action === 'recent_meals') {
+        const { handleRecentMealsEvent } = await import('@/lib/line/handlers/recent-meals');
+        await handleRecentMealsEvent(event, user);
+        return;
+    }
+
+    // 一覧の「これを記録」を押したとき
+    if (action === 'log_recent') {
+        const { handleLogRecentMeal } = await import('@/lib/line/handlers/recent-meals');
+        await handleLogRecentMeal(event, user, mid);
         return;
     }
 

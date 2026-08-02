@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => {
     handleWeightEvent: vi.fn(),
     handleGoalEvent: vi.fn(),
     handleBodyEvent: vi.fn(),
+    handleRecentMealsEvent: vi.fn(),
     resolveUserOrReply: vi.fn().mockResolvedValue({ uid: 'uid-1', data: {} }),
     getAwaitingCorrectionState: vi.fn().mockResolvedValue(null),
     classifyLineIntent: vi.fn().mockResolvedValue({ intent: 'other', mealDescription: null }),
@@ -94,6 +95,11 @@ vi.mock('@/lib/line/handlers/weight', () => ({
   handleWeightEvent: mocks.handleWeightEvent,
 }));
 
+vi.mock('@/lib/line/handlers/recent-meals', async () => {
+  const actual = await vi.importActual('@/lib/line/handlers/recent-meals');
+  return { ...actual, handleRecentMealsEvent: mocks.handleRecentMealsEvent };
+});
+
 vi.mock('@/lib/line/handlers/body', async () => {
   const actual = await vi.importActual('@/lib/line/handlers/body');
   return { ...actual, handleBodyEvent: mocks.handleBodyEvent };
@@ -156,6 +162,16 @@ describe('LINE router dispatch', () => {
     expect(classifyTextRoute('65.2')).toEqual({ type: 'weight', weight: 65.2 });
     await handleLineEvent(event);
     expect(mocks.handleWeightEvent).toHaveBeenCalledWith(event, '体重65.2kg');
+    expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
+  });
+
+  it('routes history requests to the recent meals handler', async () => {
+    expect(classifyTextRoute('履歴')).toEqual({ type: 'recent_meals' });
+    expect(classifyTextRoute('いつもの')).toEqual({ type: 'recent_meals' });
+
+    const event = textEvent('履歴');
+    await handleLineEvent(event);
+    expect(mocks.handleRecentMealsEvent).toHaveBeenCalledWith(event, { uid: 'uid-1', data: {} });
     expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
   });
 

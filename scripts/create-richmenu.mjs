@@ -9,7 +9,6 @@
  *
  * 必要な環境変数:
  *   LINE_CHANNEL_ACCESS_TOKEN … LINE Developers Console の Messaging API チャネルで発行
- *   LIFELOG_APP_URL           … 省略可。「アプリを開く」の遷移先
  *
  * 画像は 2500×1686 の PNG または JPEG（1MB以下）。
  *
@@ -56,11 +55,7 @@ const RICH_MENU = {
         },
         {
             bounds: { x: 1666, y: 843, width: 834, height: 843 },
-            action: {
-                type: 'uri',
-                label: 'アプリを開く',
-                uri: process.env.LIFELOG_APP_URL || 'https://lifelog-orpin.vercel.app',
-            },
+            action: { type: 'postback', data: 'action=recent_meals', displayText: '履歴から記録したい' },
         },
     ],
 };

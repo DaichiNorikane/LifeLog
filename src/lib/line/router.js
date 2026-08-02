@@ -7,6 +7,7 @@ import { handleDailySummaryEvent, isDailySummaryText } from '@/lib/line/handlers
 import { handleFollowEvent, handleLinkCodeEvent } from '@/lib/line/handlers/link';
 import { handleBodyEvent, isBodyText } from '@/lib/line/handlers/body';
 import { handleGoalEvent, parseGoalCommand } from '@/lib/line/handlers/goal';
+import { handleRecentMealsEvent, isRecentMealsText } from '@/lib/line/handlers/recent-meals';
 import { handleKeywordSuggestEvent, MEAL_KEYWORDS } from '@/lib/line/handlers/keyword-suggest';
 import { handleMealEditEvent } from '@/lib/line/handlers/meal-edit';
 import { handleMealCorrectionEvent, handleMealTextEvent } from '@/lib/line/handlers/meal-text';
@@ -52,6 +53,7 @@ export const classifyTextRoute = (text, state = null) => {
     if (MEAL_KEYWORDS[trimmed]) return { type: 'keyword', targetType: MEAL_KEYWORDS[trimmed] };
     if (isDailySummaryText(trimmed)) return { type: 'summary' };
     if (isBodyText(trimmed)) return { type: 'body' };
+    if (isRecentMealsText(trimmed)) return { type: 'recent_meals' };
     if (state?.mode === 'awaiting_correction') return { type: 'correction' };
     return { type: 'intent' };
 };
@@ -121,6 +123,10 @@ export const handleLineEvent = async (event) => {
     if (route.type === 'body') {
         await handleBodyEvent(event, user);
         return { handled: 'body' };
+    }
+    if (route.type === 'recent_meals') {
+        await handleRecentMealsEvent(event, user);
+        return { handled: 'recent_meals' };
     }
 
     const state = await getAwaitingCorrectionState(user.uid);

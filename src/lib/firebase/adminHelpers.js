@@ -202,6 +202,38 @@ export const getRecentMealsAdmin = async (uid, { sinceMs = 48 * 60 * 60 * 1000, 
     return mapSnapshotDocs(snapshot);
 };
 
+/**
+ * 履歴から登録するための「よく食べたもの」一覧。
+ * 同じ料理を何度も記録していることが多いので、料理名で重複を除いて新しい順に返す。
+ */
+export const getRecentUniqueMealsAdmin = async (uid, limitCount = 10) => {
+    const snapshot = await mealsRef(uid)
+        .orderBy('timestamp', 'desc')
+        .limit(80)
+        .get();
+
+    const seen = new Set();
+    const unique = [];
+
+    for (const doc of snapshot.docs) {
+        const data = doc.data() || {};
+        const name = String(data.foodName || '').trim();
+        if (!name || seen.has(name)) continue;
+
+        seen.add(name);
+        unique.push({ id: doc.id, ...data });
+        if (unique.length >= limitCount) break;
+    }
+
+    return unique;
+};
+
+/** 1件だけ取り出す（履歴から登録するときに元の栄養素をコピーするため） */
+export const getMealByIdAdmin = async (uid, mealId) => {
+    const doc = await mealsRef(uid).doc(mealId).get();
+    return doc.exists ? { id: doc.id, ...doc.data() } : null;
+};
+
 export const deleteMealsAdmin = async (uid, ids = []) => {
     const idsToDelete = uniqueIds(ids);
     await Promise.all(idsToDelete.map(id => mealsRef(uid).doc(id).delete()));

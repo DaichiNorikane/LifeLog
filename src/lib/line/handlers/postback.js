@@ -51,11 +51,30 @@ const editSuccessText = (pendingEdit) => {
     return '変更しました✨';
 };
 
+/** いまの時刻から、次に食べる食事を選ぶ（リッチメニューの「何食べる？」用） */
+export const pickMealSlotByHour = (date = new Date()) => {
+    const jstHour = Number(new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Tokyo', hour: 'numeric', hour12: false,
+    }).format(date));
+
+    if (jstHour < 10) return 'breakfast';
+    if (jstHour < 15) return 'lunch';
+    return 'dinner';
+};
+
 export const handlePostbackEvent = async (event) => {
     const user = await resolveUserOrReply(event);
     if (!user) return;
 
     const { action, sid, type } = parsePostbackData(event.postback?.data);
+
+    // リッチメニューの「何食べる？」。時間帯から朝/昼/夕を選んで既存の提案を出す
+    if (action === 'suggest_meal') {
+        // 動的 import。ここでしか使わない依存を postback の起動パスに載せない
+        const { handleKeywordSuggestEvent } = await import('@/lib/line/handlers/keyword-suggest');
+        await handleKeywordSuggestEvent(event, pickMealSlotByHour());
+        return;
+    }
 
     if (action === 'apply_edit' || action === 'cancel_edit') {
         const editState = await getValidEditStateForPostback(user.uid, sid);

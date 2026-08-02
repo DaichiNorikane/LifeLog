@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => {
     handlePostbackEvent: vi.fn(),
     handleWeightEvent: vi.fn(),
     handleGoalEvent: vi.fn(),
+    handleBodyEvent: vi.fn(),
     resolveUserOrReply: vi.fn().mockResolvedValue({ uid: 'uid-1', data: {} }),
     getAwaitingCorrectionState: vi.fn().mockResolvedValue(null),
     classifyLineIntent: vi.fn().mockResolvedValue({ intent: 'other', mealDescription: null }),
@@ -93,6 +94,11 @@ vi.mock('@/lib/line/handlers/weight', () => ({
   handleWeightEvent: mocks.handleWeightEvent,
 }));
 
+vi.mock('@/lib/line/handlers/body', async () => {
+  const actual = await vi.importActual('@/lib/line/handlers/body');
+  return { ...actual, handleBodyEvent: mocks.handleBodyEvent };
+});
+
 vi.mock('@/lib/line/handlers/goal', async () => {
   // parseGoalCommand は本物を使い、送信だけモックする（ルーティング判定そのものを検証したいため）
   const actual = await vi.importActual('@/lib/line/handlers/goal');
@@ -150,6 +156,18 @@ describe('LINE router dispatch', () => {
     expect(classifyTextRoute('65.2')).toEqual({ type: 'weight', weight: 65.2 });
     await handleLineEvent(event);
     expect(mocks.handleWeightEvent).toHaveBeenCalledWith(event, '体重65.2kg');
+    expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
+  });
+
+  it('routes body questions to the body handler', async () => {
+    expect(classifyTextRoute('からだ')).toEqual({ type: 'body' });
+    expect(classifyTextRoute('体調')).toEqual({ type: 'body' });
+    // 食事の記録には誤爆しない
+    expect(classifyTextRoute('からあげ食べた')).toEqual({ type: 'intent' });
+
+    const event = textEvent('からだ');
+    await handleLineEvent(event);
+    expect(mocks.handleBodyEvent).toHaveBeenCalledWith(event, { uid: 'uid-1', data: {} });
     expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
   });
 

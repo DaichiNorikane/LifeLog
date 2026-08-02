@@ -29,6 +29,8 @@ export const handleDailySummaryEvent = async (event, user = null) => {
         targetCalories: context.user?.targetCalories,
         totalMacros: context.today?.totalMacros || {},
         mealsCount: meals.length,
+        // 微量栄養素の目標は性別で変わる（dailyTargets.js）
+        profile: resolvedUser.data || {},
     }));
     return { mealsCount: meals.length };
 };

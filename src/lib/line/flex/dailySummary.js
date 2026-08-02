@@ -1,5 +1,8 @@
 // 今日のカロリー・栄養サマリーカード（プログレスバー付き）
 // PFC目標比率は Web ダッシュボード（page.js の PFC Balance Card）と同じ
+// 微量栄養素の目標は dailyTargets.js（食事摂取基準ベース・性別で変わる）
+
+import { evaluateAgainstTarget, getDailyNutrientTargets } from '@/lib/health/dailyTargets';
 
 const PFC_TARGETS = [
     { label: 'タンパク質 P', key: 'protein', color: '#48BB78', targetRatio: 0.2, kcalPerG: 4 },
@@ -52,23 +55,75 @@ const buildBarRow = (label, valueText, percent, color) => ({
     ],
 });
 
-const formatNullable = (value, unit) => {
-    if (value === null || value === undefined) return '―';
+const formatAmount = (value, decimals = 0) => {
     const number = Number(value);
-    return Number.isFinite(number) ? `${Math.round(number)}${unit}` : '―';
+    if (!Number.isFinite(number)) return '―';
+    const rounded = decimals > 0
+        ? Math.round(number * 10 ** decimals) / 10 ** decimals
+        : Math.round(number);
+    return rounded.toLocaleString('ja-JP', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+    });
 };
 
-const buildNutrientCell = (label, valueText) => ({
-    type: 'box',
-    layout: 'horizontal',
-    flex: 1,
-    contents: [
-        { type: 'text', text: label, size: 'xs', color: '#6B7280', flex: 5 },
-        { type: 'text', text: valueText, size: 'xs', weight: 'bold', color: '#374151', align: 'end', flex: 4 },
-    ],
-});
+// 不足は黄・超過は赤・達成は緑。
+// 方向（多いほど良い/少ないほど良い）で色の意味が反転しないようにするための対応表
+const STATUS_COLOR = { ok: '#10B981', short: '#F59E0B', over: '#EF4444' };
 
-export const buildDailySummaryFlex = ({ dateId, totalCalories, targetCalories, totalMacros = {}, mealsCount = 0 }) => {
+/** 「あと7g」「320mg超過」のような一言。判定できないときは空文字 */
+const buildStatusNote = (target, evaluation) => {
+    if (!evaluation) return '';
+    if (evaluation.status === 'ok') return '';
+
+    const amount = formatAmount(Math.abs(evaluation.remaining), target.decimals);
+    if (evaluation.status === 'over') return `+${amount}${target.unit}`;
+    return `あと${amount}${target.unit}`;
+};
+
+/**
+ * 目標つきの栄養素1行。
+ * 未取得（null）は今までどおり「―」を出し、バーは出さない。
+ * 0 として扱うと「今日は塩分ゼロ」という嘘になる。
+ */
+const buildNutrientRow = (target, actual) => {
+    const evaluation = evaluateAgainstTarget(actual, target);
+    const valueText = evaluation
+        ? `${formatAmount(actual, target.decimals)} / ${formatAmount(target.value, target.decimals)}${target.unit}`
+        : `― / ${formatAmount(target.value, target.decimals)}${target.unit}`;
+
+    const note = buildStatusNote(target, evaluation);
+    const labelText = note ? `${target.label}（${note}）` : target.label;
+
+    const contents = [
+        {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+                { type: 'text', text: labelText, size: 'xs', color: '#6B7280', flex: 6 },
+                {
+                    type: 'text',
+                    text: valueText,
+                    size: 'xs',
+                    weight: 'bold',
+                    color: evaluation ? STATUS_COLOR[evaluation.status] : '#9CA3AF',
+                    align: 'end',
+                    flex: 5,
+                },
+            ],
+        },
+    ];
+
+    if (evaluation) {
+        contents.push(buildProgressBar(evaluation.percent, STATUS_COLOR[evaluation.status]));
+    }
+
+    return { type: 'box', layout: 'vertical', margin: 'md', contents };
+};
+
+export const buildDailySummaryFlex = ({
+    dateId, totalCalories, targetCalories, totalMacros = {}, mealsCount = 0, profile = {},
+}) => {
     const target = Number(targetCalories) || 2000;
     const total = Math.round(Number(totalCalories) || 0);
     const ratio = target > 0 ? total / target : 0;
@@ -83,6 +138,23 @@ export const buildDailySummaryFlex = ({ dateId, totalCalories, targetCalories, t
         const percent = targetG > 0 ? (totalG / targetG) * 100 : 0;
         return buildBarRow(macro.label, `${totalG} / ${targetG}g`, percent, macro.color);
     });
+
+    // 目標値は性別と目標カロリーで変わる（dailyTargets.js が唯一の真実）
+    const nutrientTargets = getDailyNutrientTargets({ ...profile, targetCalories: target });
+    const nutrientRows = nutrientTargets.map(t => buildNutrientRow(t, totalMacros[t.key]));
+
+    // 不足しているものを名指しで1行にまとめる。バーだけだと何を足せばいいか伝わらない
+    const shortfalls = nutrientTargets
+        .filter(t => evaluateAgainstTarget(totalMacros[t.key], t)?.status === 'short')
+        .map(t => t.label);
+    const overs = nutrientTargets
+        .filter(t => evaluateAgainstTarget(totalMacros[t.key], t)?.status === 'over')
+        .map(t => t.label);
+
+    const notes = [];
+    if (shortfalls.length > 0) notes.push(`不足気味: ${shortfalls.join('・')}`);
+    if (overs.length > 0) notes.push(`とりすぎ: ${overs.join('・')}`);
+    const shortfallNote = notes.join(' ／ ');
 
     return {
         type: 'flex',
@@ -125,26 +197,15 @@ export const buildDailySummaryFlex = ({ dateId, totalCalories, targetCalories, t
                     { type: 'separator', margin: 'lg' },
                     ...pfcRows,
                     { type: 'separator', margin: 'lg' },
-                    {
-                        type: 'box',
-                        layout: 'horizontal',
+                    ...nutrientRows,
+                    ...(shortfallNote ? [{
+                        type: 'text',
+                        text: shortfallNote,
+                        size: 'xs',
+                        color: '#6B7280',
                         margin: 'lg',
-                        spacing: 'lg',
-                        contents: [
-                            buildNutrientCell('食物繊維', formatNullable(totalMacros.fiber, 'g')),
-                            buildNutrientCell('糖質', formatNullable(totalMacros.sugar, 'g')),
-                        ],
-                    },
-                    {
-                        type: 'box',
-                        layout: 'horizontal',
-                        margin: 'md',
-                        spacing: 'lg',
-                        contents: [
-                            buildNutrientCell('ナトリウム', formatNullable(totalMacros.sodium, 'mg')),
-                            buildNutrientCell('カリウム', formatNullable(totalMacros.potassium, 'mg')),
-                        ],
-                    },
+                        wrap: true,
+                    }] : []),
                 ],
             },
         },

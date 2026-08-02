@@ -5,6 +5,7 @@ import { showLoadingAnimation } from '@/lib/line/client';
 import { handleChatEvent } from '@/lib/line/handlers/chat';
 import { handleDailySummaryEvent, isDailySummaryText } from '@/lib/line/handlers/daily-summary';
 import { handleFollowEvent, handleLinkCodeEvent } from '@/lib/line/handlers/link';
+import { handleBodyEvent, isBodyText } from '@/lib/line/handlers/body';
 import { handleGoalEvent, parseGoalCommand } from '@/lib/line/handlers/goal';
 import { handleKeywordSuggestEvent, MEAL_KEYWORDS } from '@/lib/line/handlers/keyword-suggest';
 import { handleMealEditEvent } from '@/lib/line/handlers/meal-edit';
@@ -50,6 +51,7 @@ export const classifyTextRoute = (text, state = null) => {
 
     if (MEAL_KEYWORDS[trimmed]) return { type: 'keyword', targetType: MEAL_KEYWORDS[trimmed] };
     if (isDailySummaryText(trimmed)) return { type: 'summary' };
+    if (isBodyText(trimmed)) return { type: 'body' };
     if (state?.mode === 'awaiting_correction') return { type: 'correction' };
     return { type: 'intent' };
 };
@@ -115,6 +117,10 @@ export const handleLineEvent = async (event) => {
     if (route.type === 'goal') {
         await handleGoalEvent(event, user, route.goal);
         return { handled: 'goal' };
+    }
+    if (route.type === 'body') {
+        await handleBodyEvent(event, user);
+        return { handled: 'body' };
     }
 
     const state = await getAwaitingCorrectionState(user.uid);

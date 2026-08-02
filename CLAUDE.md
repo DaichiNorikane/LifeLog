@@ -160,10 +160,12 @@ HealthKitから取得できる体組成はこの5項目で全部（筋肉量・�
 ## LINE のリッチメニュー
 
 `scripts/create-richmenu.mjs` で登録する（画像は 2500×1686）。3列×2行:
-アルバムから / 何食べる？ / 今日のまとめ ／ からだ / 目標 / アプリを開く
+アルバムから / 何食べる？ / 今日のまとめ ／ からだ / 目標 / 履歴から
 
 「からだ」は `src/lib/line/handlers/body.js`（歩数・睡眠・体組成・目標までの残り）。
 「何食べる？」は postback `action=suggest_meal` で、時刻から朝/昼/夕を選んで既存の提案ハンドラを呼ぶ。
+「履歴から」は `src/lib/line/handlers/recent-meals.js`。料理名で重複を除いた過去の記録をカルーセルで出し、
+`action=log_recent&mid=<食事ID>` で今日の記録として複製する（評価スコアは引き継がない）。
 
 ## Gemini API の設計
 

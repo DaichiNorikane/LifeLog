@@ -2,8 +2,9 @@ import {
     addMealAdmin, getMealByIdAdmin, getRecentUniqueMealsAdmin,
 } from '@/lib/firebase/adminHelpers';
 import { replyOrPushMessage } from '@/lib/line/client';
-import { buildRecentMealsFlex } from '@/lib/line/flex/recentMeals';
+import { MAX_MEAL_BUBBLES, buildRecentMealsFlex } from '@/lib/line/flex/recentMeals';
 import { MEAL_TYPE_LABELS, getMealTypeForJst } from '@/lib/line/mealUtils';
+import { clearLineState, setLineState } from '@/lib/line/state';
 
 /**
  * 履歴からの登録。
@@ -14,21 +15,65 @@ import { MEAL_TYPE_LABELS, getMealTypeForJst } from '@/lib/line/mealUtils';
 
 export const RECENT_MEALS_TEXT_RE = /^(履歴|りれき|いつもの|履歴から|前と同じ)(から)?(記録|登録)?[？?！!]?$/;
 
+// 「履歴 唐揚げ」のように、そのままキーワードを続けて絞り込める
+export const RECENT_MEALS_SEARCH_RE = /^(?:履歴|りれき)(?:から)?(?:検索)?[\s　]+(.+)$/;
+
 export const isRecentMealsText = (text) => RECENT_MEALS_TEXT_RE.test(String(text || '').trim());
 
-export const handleRecentMealsEvent = async (event, user) => {
-    const meals = await getRecentUniqueMealsAdmin(user.uid, 10);
+/** 「履歴 唐揚げ」ならキーワードを、ただの「履歴」なら空文字を返す。該当しなければ null */
+export const parseRecentMealsQuery = (text) => {
+    const trimmed = String(text || '').trim();
+    if (RECENT_MEALS_TEXT_RE.test(trimmed)) return '';
+
+    const match = RECENT_MEALS_SEARCH_RE.exec(trimmed);
+    if (!match) return null;
+
+    const query = match[1].trim();
+    return query || '';
+};
+
+export const handleRecentMealsEvent = async (event, user, options = {}) => {
+    const offset = Number.isFinite(Number(options.offset)) ? Math.max(0, Number(options.offset)) : 0;
+    const query = String(options.query || '').trim();
+
+    const { meals, total } = await getRecentUniqueMealsAdmin(user.uid, {
+        limit: MAX_MEAL_BUBBLES,
+        offset,
+        query,
+    });
 
     if (meals.length === 0) {
         await replyOrPushMessage(event, {
             type: 'text',
-            text: 'まだ記録がありません📝\n写真を送るか「◯◯食べた」と教えてください。次からはここに並びますよ✨',
+            text: query
+                ? `「${query}」に合う記録が見つかりませんでした🔍\n別の言葉で試すか、「履歴」で全部を見てみてください。`
+                : 'まだ記録がありません📝\n写真を送るか「◯◯食べた」と教えてください。次からはここに並びますよ✨',
         });
-        return { count: 0 };
+        return { count: 0, total, query };
     }
 
-    await replyOrPushMessage(event, buildRecentMealsFlex(meals));
-    return { count: meals.length };
+    await replyOrPushMessage(event, buildRecentMealsFlex(meals, { offset, total, query }));
+    return { count: meals.length, total, query, offset };
+};
+
+/** 「キーワードで探す」を押したとき。次に送られてくる言葉を検索語として扱う */
+export const handleRecentSearchPrompt = async (event, user) => {
+    await setLineState(user.uid, {
+        sid: `recent-search-${Date.now()}`,
+        mode: 'awaiting_recent_search',
+    });
+
+    await replyOrPushMessage(event, {
+        type: 'text',
+        text: '探したい料理の名前を送ってください🔍\n例:「唐揚げ」「サラダ」\n\n「履歴 唐揚げ」のようにまとめて送ってもOKです！',
+    });
+    return { prompted: true };
+};
+
+/** 検索待ちの状態で言葉が届いたとき */
+export const handleRecentSearchInput = async (event, user, state, text) => {
+    await clearLineState(user.uid, state.sid);
+    return handleRecentMealsEvent(event, user, { query: text });
 };
 
 /**

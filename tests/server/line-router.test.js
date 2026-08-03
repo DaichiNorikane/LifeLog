@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => {
     handleRecentMealsEvent: vi.fn(),
     resolveUserOrReply: vi.fn().mockResolvedValue({ uid: 'uid-1', data: {} }),
     getAwaitingCorrectionState: vi.fn().mockResolvedValue(null),
+    getAwaitingRecentSearchState: vi.fn().mockResolvedValue(null),
     classifyLineIntent: vi.fn().mockResolvedValue({ intent: 'other', mealDescription: null }),
   };
 });
@@ -117,6 +118,7 @@ vi.mock('@/lib/line/resolveUser', () => ({
 
 vi.mock('@/lib/line/state', () => ({
   getAwaitingCorrectionState: mocks.getAwaitingCorrectionState,
+  getAwaitingRecentSearchState: mocks.getAwaitingRecentSearchState,
 }));
 
 vi.mock('@/app/actions/line-intent', () => ({
@@ -166,12 +168,16 @@ describe('LINE router dispatch', () => {
   });
 
   it('routes history requests to the recent meals handler', async () => {
-    expect(classifyTextRoute('履歴')).toEqual({ type: 'recent_meals' });
-    expect(classifyTextRoute('いつもの')).toEqual({ type: 'recent_meals' });
+    expect(classifyTextRoute('履歴')).toEqual({ type: 'recent_meals', query: '' });
+    expect(classifyTextRoute('いつもの')).toEqual({ type: 'recent_meals', query: '' });
+    // キーワードを続けて送ると、そのまま絞り込みになる
+    expect(classifyTextRoute('履歴 唐揚げ')).toEqual({ type: 'recent_meals', query: '唐揚げ' });
 
     const event = textEvent('履歴');
     await handleLineEvent(event);
-    expect(mocks.handleRecentMealsEvent).toHaveBeenCalledWith(event, { uid: 'uid-1', data: {} });
+    expect(mocks.handleRecentMealsEvent).toHaveBeenCalledWith(
+      event, { uid: 'uid-1', data: {} }, { query: '' },
+    );
     expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
   });
 

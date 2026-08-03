@@ -7,7 +7,9 @@ import { handleDailySummaryEvent, isDailySummaryText } from '@/lib/line/handlers
 import { handleFollowEvent, handleLinkCodeEvent } from '@/lib/line/handlers/link';
 import { handleBodyEvent, isBodyText } from '@/lib/line/handlers/body';
 import { handleGoalEvent, parseGoalCommand } from '@/lib/line/handlers/goal';
-import { handleRecentMealsEvent, isRecentMealsText } from '@/lib/line/handlers/recent-meals';
+import {
+    handleRecentMealsEvent, handleRecentSearchInput, parseRecentMealsQuery,
+} from '@/lib/line/handlers/recent-meals';
 import { handleKeywordSuggestEvent, MEAL_KEYWORDS } from '@/lib/line/handlers/keyword-suggest';
 import { handleMealEditEvent } from '@/lib/line/handlers/meal-edit';
 import { handleMealCorrectionEvent, handleMealTextEvent } from '@/lib/line/handlers/meal-text';
@@ -15,7 +17,7 @@ import { handleMealPhotoEvent } from '@/lib/line/handlers/meal-photo';
 import { handlePostbackEvent } from '@/lib/line/handlers/postback';
 import { handleWeightEvent, parseWeightText } from '@/lib/line/handlers/weight';
 import { resolveUserOrReply } from '@/lib/line/resolveUser';
-import { getAwaitingCorrectionState } from '@/lib/line/state';
+import { getAwaitingCorrectionState, getAwaitingRecentSearchState } from '@/lib/line/state';
 
 const isAlreadyExistsError = (error) => {
     const code = String(error?.code || error?.details || '').toLowerCase();
@@ -53,7 +55,9 @@ export const classifyTextRoute = (text, state = null) => {
     if (MEAL_KEYWORDS[trimmed]) return { type: 'keyword', targetType: MEAL_KEYWORDS[trimmed] };
     if (isDailySummaryText(trimmed)) return { type: 'summary' };
     if (isBodyText(trimmed)) return { type: 'body' };
-    if (isRecentMealsText(trimmed)) return { type: 'recent_meals' };
+    // 「履歴」だけでも「履歴 唐揚げ」でも拾う（query は空文字なら絞り込みなし）
+    const recentQuery = parseRecentMealsQuery(trimmed);
+    if (recentQuery !== null) return { type: 'recent_meals', query: recentQuery };
     if (state?.mode === 'awaiting_correction') return { type: 'correction' };
     return { type: 'intent' };
 };
@@ -125,7 +129,7 @@ export const handleLineEvent = async (event) => {
         return { handled: 'body' };
     }
     if (route.type === 'recent_meals') {
-        await handleRecentMealsEvent(event, user);
+        await handleRecentMealsEvent(event, user, { query: route.query });
         return { handled: 'recent_meals' };
     }
 
@@ -134,6 +138,14 @@ export const handleLineEvent = async (event) => {
     if (stateAwareRoute.type === 'correction') {
         await handleMealCorrectionEvent(event, user, state, text);
         return { handled: 'correction' };
+    }
+
+    // 「キーワードで探す」の直後なら、この発話は検索語として扱う。
+    // 食事の記録として解釈されてしまうのを防ぐため、intent 判定より先に見る
+    const searchState = await getAwaitingRecentSearchState(user.uid);
+    if (searchState) {
+        await handleRecentSearchInput(event, user, searchState, text);
+        return { handled: 'recent_meals_search' };
     }
 
     const intent = await classifyLineIntent(text);

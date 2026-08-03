@@ -24,7 +24,9 @@ export const parsePostbackData = (data) => {
         action: params.get('action'),
         sid: params.get('sid'),
         type: params.get('type'),
-        mid: params.get('mid'),   // 履歴から登録するときの元の食事ID
+        mid: params.get('mid'),        // 履歴から登録するときの元の食事ID
+        offset: params.get('offset'),  // 履歴の続きを見るときの開始位置
+        q: params.get('q'),            // 履歴の絞り込みキーワード
     };
 };
 
@@ -67,7 +69,7 @@ export const handlePostbackEvent = async (event) => {
     const user = await resolveUserOrReply(event);
     if (!user) return;
 
-    const { action, sid, type, mid } = parsePostbackData(event.postback?.data);
+    const { action, sid, type, mid, offset, q } = parsePostbackData(event.postback?.data);
 
     // リッチメニューの「何食べる？」。時間帯から朝/昼/夕を選んで既存の提案を出す
     if (action === 'suggest_meal') {
@@ -78,9 +80,17 @@ export const handlePostbackEvent = async (event) => {
     }
 
     // リッチメニューの「履歴から」。過去に記録したものを一覧で出す
+    // offset と q が付いていれば、続きの表示・キーワード絞り込みになる
     if (action === 'recent_meals') {
         const { handleRecentMealsEvent } = await import('@/lib/line/handlers/recent-meals');
-        await handleRecentMealsEvent(event, user);
+        await handleRecentMealsEvent(event, user, { offset, query: q });
+        return;
+    }
+
+    // 「キーワードで探す」。次の発話を検索語として受け取る
+    if (action === 'recent_search') {
+        const { handleRecentSearchPrompt } = await import('@/lib/line/handlers/recent-meals');
+        await handleRecentSearchPrompt(event, user);
         return;
     }
 

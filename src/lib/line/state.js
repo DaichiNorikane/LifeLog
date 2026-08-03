@@ -65,6 +65,12 @@ export const getAwaitingCorrectionState = async (uid, now = Date.now()) => {
     return states.find(state => state.mode === 'awaiting_correction' && state.pendingMeal) || null;
 };
 
+/** 「キーワードで探す」を押したあと、次の発話を検索語として待っている状態 */
+export const getAwaitingRecentSearchState = async (uid, now = Date.now()) => {
+    const states = await getActiveLineStates(uid, now);
+    return states.find(state => state.mode === 'awaiting_recent_search') || null;
+};
+
 export const setLineState = async (uid, state) => {
     if (!state?.sid) throw new Error('LINE state requires a sid');
     const payload = {

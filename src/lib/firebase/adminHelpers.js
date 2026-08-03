@@ -202,30 +202,45 @@ export const getRecentMealsAdmin = async (uid, { sinceMs = 48 * 60 * 60 * 1000, 
     return mapSnapshotDocs(snapshot);
 };
 
+/** 履歴として読みにいく上限。これを超えて古い記録は検索対象にしない */
+const RECENT_MEALS_SCAN_LIMIT = 300;
+
 /**
  * 履歴から登録するための「よく食べたもの」一覧。
+ *
  * 同じ料理を何度も記録していることが多いので、料理名で重複を除いて新しい順に返す。
+ * Firestore は部分一致検索ができないため、直近をまとめて読んでメモリ上で絞り込む。
+ *
+ * @returns {{meals: Array, total: number}} total は絞り込み後の全件数（続きがあるかの判定に使う）
  */
-export const getRecentUniqueMealsAdmin = async (uid, limitCount = 10) => {
+export const getRecentUniqueMealsAdmin = async (uid, { limit = 10, offset = 0, query = '' } = {}) => {
     const snapshot = await mealsRef(uid)
         .orderBy('timestamp', 'desc')
-        .limit(80)
+        .limit(RECENT_MEALS_SCAN_LIMIT)
         .get();
 
+    const keyword = String(query || '').trim().toLowerCase();
     const seen = new Set();
     const unique = [];
 
     for (const doc of snapshot.docs) {
         const data = doc.data() || {};
         const name = String(data.foodName || '').trim();
-        if (!name || seen.has(name)) continue;
+        if (!name) continue;
 
-        seen.add(name);
+        // 大文字小文字の違いで同じ料理が二重に並ばないようにする
+        const key = name.toLowerCase();
+        if (seen.has(key)) continue;
+        if (keyword && !key.includes(keyword)) continue;
+
+        seen.add(key);
         unique.push({ id: doc.id, ...data });
-        if (unique.length >= limitCount) break;
     }
 
-    return unique;
+    return {
+        meals: unique.slice(offset, offset + limit),
+        total: unique.length,
+    };
 };
 
 /** 1件だけ取り出す（履歴から登録するときに元の栄養素をコピーするため） */

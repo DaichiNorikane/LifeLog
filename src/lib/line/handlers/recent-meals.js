@@ -2,8 +2,8 @@ import {
     addMealAdmin, getMealByIdAdmin, getRecentUniqueMealsAdmin,
 } from '@/lib/firebase/adminHelpers';
 import { replyOrPushMessage } from '@/lib/line/client';
-import { MAX_MEAL_BUBBLES, buildRecentMealsFlex } from '@/lib/line/flex/recentMeals';
-import { MEAL_TYPE_LABELS, getMealTypeForJst } from '@/lib/line/mealUtils';
+import { MAX_MEAL_BUBBLES, buildRecentMealTypeFlex, buildRecentMealsFlex } from '@/lib/line/flex/recentMeals';
+import { MEAL_TYPE_LABELS, getMealTypeForJst, isMealType } from '@/lib/line/mealUtils';
 import { clearLineState, setLineState } from '@/lib/line/state';
 
 /**
@@ -78,9 +78,13 @@ export const handleRecentSearchInput = async (event, user, state, text) => {
 
 /**
  * カルーセルの「これを記録」を押したとき。
- * 元の記録から栄養素をコピーし、時刻だけ今にして新しい1件として保存する。
+ *
+ * タイプ未指定なら、まず朝食/昼食/夕食/間食を選ぶカードを返す。
+ * 履歴からの登録は元の記録とタイプが変わることが多く（夜に食べたものを翌日の昼に食べる等）、
+ * 時間帯からの推測だけで保存すると、あとで直す手間のほうが大きくなるため。
+ * タイプが指定されたら、元の記録から栄養素をコピーし、時刻だけ今にして新しい1件として保存する。
  */
-export const handleLogRecentMeal = async (event, user, mealId) => {
+export const handleLogRecentMeal = async (event, user, mealId, requestedType) => {
     if (!mealId) {
         await replyOrPushMessage(event, {
             type: 'text',
@@ -98,7 +102,15 @@ export const handleLogRecentMeal = async (event, user, mealId) => {
         return { saved: false };
     }
 
-    const mealType = getMealTypeForJst();
+    if (!isMealType(requestedType)) {
+        await replyOrPushMessage(event, buildRecentMealTypeFlex(
+            { ...source, id: mealId },
+            { suggestedType: getMealTypeForJst() },
+        ));
+        return { saved: false, askedType: true };
+    }
+
+    const mealType = requestedType;
     const meal = {
         foodName: source.foodName,
         calories: source.calories,

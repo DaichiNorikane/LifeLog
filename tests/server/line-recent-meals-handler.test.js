@@ -202,11 +202,91 @@ describe('search prompt', () => {
   });
 });
 
+describe('handleLogRecentMeal - 食事タイプの選択', () => {
+  it('asks which meal type before saving anything', async () => {
+    mocks.getMealByIdAdmin.mockResolvedValue(MEALS[0]);
+
+    const result = await handleLogRecentMeal(event, user, 'm1');
+
+    expect(result.saved).toBe(false);
+    expect(result.askedType).toBe(true);
+    // タイプを選ぶまでは保存しない
+    expect(mocks.addMealAdmin).not.toHaveBeenCalled();
+
+    const message = lastMessage();
+    expect(message.type).toBe('flex');
+    const labels = message.contents.footer.contents
+      .flatMap(row => (row.type === 'box' ? row.contents : [row]))
+      .map(button => button.action.label);
+    expect(labels).toEqual(['朝食で記録', '昼食で記録', '夕食で記録', '間食で記録', '❌ やめる']);
+  });
+
+  it('carries the meal id and the chosen type in each button', async () => {
+    mocks.getMealByIdAdmin.mockResolvedValue(MEALS[0]);
+
+    await handleLogRecentMeal(event, user, 'm1');
+
+    const buttons = lastMessage().contents.footer.contents
+      .flatMap(row => (row.type === 'box' ? row.contents : []));
+    expect(buttons.map(b => b.action.data)).toEqual([
+      'action=log_recent&mid=m1&type=breakfast',
+      'action=log_recent&mid=m1&type=lunch',
+      'action=log_recent&mid=m1&type=dinner',
+      'action=log_recent&mid=m1&type=snack',
+    ]);
+  });
+
+  it('shows what is about to be recorded', async () => {
+    mocks.getMealByIdAdmin.mockResolvedValue(MEALS[0]);
+
+    await handleLogRecentMeal(event, user, 'm1');
+
+    expect(JSON.stringify(lastMessage())).toContain('鶏胸肉のグリル');
+    expect(JSON.stringify(lastMessage())).toContain('320kcal');
+  });
+
+  it('highlights the type that matches the current time', async () => {
+    mocks.getMealByIdAdmin.mockResolvedValue(MEALS[0]);
+    // 12:00 JST = 03:00 UTC → 昼食
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-12T03:00:00Z'));
+
+    await handleLogRecentMeal(event, user, 'm1');
+
+    const buttons = lastMessage().contents.footer.contents
+      .flatMap(row => (row.type === 'box' ? row.contents : []));
+    const primary = buttons.filter(b => b.style === 'primary');
+    expect(primary).toHaveLength(1);
+    expect(primary[0].action.label).toBe('昼食で記録');
+
+    vi.useRealTimers();
+  });
+
+  it('ignores an unknown type instead of saving it', async () => {
+    mocks.getMealByIdAdmin.mockResolvedValue(MEALS[0]);
+
+    const result = await handleLogRecentMeal(event, user, 'm1', 'brunch');
+
+    expect(result.saved).toBe(false);
+    expect(mocks.addMealAdmin).not.toHaveBeenCalled();
+    expect(lastMessage().type).toBe('flex');
+  });
+
+  it('does not ask when the record is already gone', async () => {
+    mocks.getMealByIdAdmin.mockResolvedValue(null);
+
+    const result = await handleLogRecentMeal(event, user, 'missing');
+
+    expect(result.askedType).toBeUndefined();
+    expect(lastMessage().text).toContain('見つかりませんでした');
+  });
+});
+
 describe('handleLogRecentMeal', () => {
   it('copies the nutrition from the original and records it as of now', async () => {
     mocks.getMealByIdAdmin.mockResolvedValue(MEALS[0]);
 
-    const result = await handleLogRecentMeal(event, user, 'm1');
+    const result = await handleLogRecentMeal(event, user, 'm1', 'lunch');
 
     expect(result.saved).toBe(true);
     const [uid, meal] = mocks.addMealAdmin.mock.calls[0];
@@ -218,11 +298,26 @@ describe('handleLogRecentMeal', () => {
     expect(new Date(meal.timestamp).getTime()).toBeGreaterThan(Date.now() - 5000);
   });
 
+  it('saves with the type the user picked, not the one the clock suggests', async () => {
+    mocks.getMealByIdAdmin.mockResolvedValue(MEALS[0]);
+    // 12:00 JST でも「朝食」を選んだならそのまま朝食で入る
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-12T03:00:00Z'));
+
+    const result = await handleLogRecentMeal(event, user, 'm1', 'breakfast');
+
+    expect(result.mealType).toBe('breakfast');
+    expect(mocks.addMealAdmin.mock.calls[0][1].mealType).toBe('breakfast');
+    expect(lastMessage().text).toContain('朝食');
+
+    vi.useRealTimers();
+  });
+
   it('does not carry over the original score', async () => {
     // 点数はその日の文脈で付いたもの。今日の食事として改めて評価されるべき
     mocks.getMealByIdAdmin.mockResolvedValue({ ...MEALS[0], score: 9, reason: '完璧です' });
 
-    await handleLogRecentMeal(event, user, 'm1');
+    await handleLogRecentMeal(event, user, 'm1', 'dinner');
 
     const [, meal] = mocks.addMealAdmin.mock.calls[0];
     expect(meal.score).toBeUndefined();
@@ -232,16 +327,17 @@ describe('handleLogRecentMeal', () => {
   it('confirms with the meal name and calories', async () => {
     mocks.getMealByIdAdmin.mockResolvedValue(MEALS[0]);
 
-    await handleLogRecentMeal(event, user, 'm1');
+    await handleLogRecentMeal(event, user, 'm1', 'snack');
 
     expect(lastMessage().text).toContain('鶏胸肉のグリル');
     expect(lastMessage().text).toContain('320kcal');
+    expect(lastMessage().text).toContain('間食');
   });
 
   it('says so when the original record is gone', async () => {
     mocks.getMealByIdAdmin.mockResolvedValue(null);
 
-    const result = await handleLogRecentMeal(event, user, 'missing');
+    const result = await handleLogRecentMeal(event, user, 'missing', 'lunch');
 
     expect(result.saved).toBe(false);
     expect(mocks.addMealAdmin).not.toHaveBeenCalled();
@@ -249,7 +345,7 @@ describe('handleLogRecentMeal', () => {
   });
 
   it('asks again when no id came through', async () => {
-    const result = await handleLogRecentMeal(event, user, null);
+    const result = await handleLogRecentMeal(event, user, null, 'lunch');
 
     expect(result.saved).toBe(false);
     expect(mocks.getMealByIdAdmin).not.toHaveBeenCalled();
@@ -259,7 +355,7 @@ describe('handleLogRecentMeal', () => {
     mocks.getMealByIdAdmin.mockResolvedValue(MEALS[0]);
     mocks.addMealAdmin.mockRejectedValue(new Error('firestore down'));
 
-    const result = await handleLogRecentMeal(event, user, 'm1');
+    const result = await handleLogRecentMeal(event, user, 'm1', 'lunch');
 
     expect(result.saved).toBe(false);
     expect(lastMessage().text).toContain('保存に失敗');

@@ -1,6 +1,8 @@
 // 履歴から登録するカルーセル。
 // 同じ料理を繰り返し食べることが多いので、過去の記録をそのまま今日に写せるようにする。
 
+import { MEAL_TYPE_LABELS, MEAL_TYPE_ORDER } from '@/lib/line/mealUtils';
+
 // LINE のカルーセル上限は12。最後の1枚を操作用に使うので、料理は11件まで
 export const MAX_MEAL_BUBBLES = 11;
 
@@ -153,6 +155,122 @@ const buildActionBubble = ({ hasMore, nextOffset, query, shown, total }) => {
             spacing: 'xs',
             paddingAll: '10px',
             contents: buttons,
+        },
+    };
+};
+
+/**
+ * 「これを記録」を押したあとに出す、食事タイプを選ぶカード。
+ *
+ * 履歴からの登録は「昨日の夜に食べたものを今日の昼に食べる」のように
+ * 元の記録とタイプが変わることが多いので、時間帯まかせにせず必ず選んでもらう。
+ * ボタンを押した時点でそのタイプで保存する（選択→確定の2段階にはしない）。
+ */
+export const buildRecentMealTypeFlex = (meal, options = {}) => {
+    const { suggestedType } = options;
+
+    const typeButton = (mealType) => {
+        const suggested = mealType === suggestedType;
+        return {
+            type: 'button',
+            height: 'sm',
+            style: suggested ? 'primary' : 'secondary',
+            ...(suggested ? { color: '#10B981' } : {}),
+            action: {
+                type: 'postback',
+                label: `${MEAL_TYPE_LABELS[mealType]}で記録`,
+                data: buildPostbackData({ action: 'log_recent', mid: meal.id, type: mealType }),
+                displayText: `${MEAL_TYPE_LABELS[mealType]}で記録`,
+            },
+        };
+    };
+
+    return {
+        type: 'flex',
+        altText: `${meal.foodName}をどれで記録しますか？`,
+        contents: {
+            type: 'bubble',
+            size: 'mega',
+            header: {
+                type: 'box',
+                layout: 'vertical',
+                backgroundColor: '#111827',
+                paddingAll: '16px',
+                contents: [
+                    {
+                        type: 'text',
+                        text: 'どれで記録する？',
+                        color: '#FFFFFF',
+                        weight: 'bold',
+                        size: 'lg',
+                    },
+                    {
+                        type: 'text',
+                        text: '押したタイプで、いまの時刻の記録として保存します✨',
+                        color: '#D1D5DB',
+                        size: 'sm',
+                        margin: 'sm',
+                        wrap: true,
+                    },
+                ],
+            },
+            body: {
+                type: 'box',
+                layout: 'vertical',
+                spacing: 'sm',
+                contents: [
+                    {
+                        type: 'text',
+                        text: meal.foodName,
+                        weight: 'bold',
+                        size: 'xl',
+                        wrap: true,
+                    },
+                    {
+                        type: 'text',
+                        text: `${roundOrDash(meal.calories)}kcal`,
+                        weight: 'bold',
+                        size: 'lg',
+                        color: '#F97316',
+                    },
+                    {
+                        type: 'text',
+                        text: `P${roundOrDash(meal.macros?.protein)} F${roundOrDash(meal.macros?.fat)} C${roundOrDash(meal.macros?.carbs)}`,
+                        size: 'sm',
+                        color: '#9CA3AF',
+                    },
+                ],
+            },
+            footer: {
+                type: 'box',
+                layout: 'vertical',
+                spacing: 'sm',
+                contents: [
+                    {
+                        type: 'box',
+                        layout: 'horizontal',
+                        spacing: 'xs',
+                        contents: MEAL_TYPE_ORDER.slice(0, 2).map(typeButton),
+                    },
+                    {
+                        type: 'box',
+                        layout: 'horizontal',
+                        spacing: 'xs',
+                        contents: MEAL_TYPE_ORDER.slice(2).map(typeButton),
+                    },
+                    {
+                        type: 'button',
+                        style: 'link',
+                        height: 'sm',
+                        action: {
+                            type: 'postback',
+                            label: '❌ やめる',
+                            data: buildPostbackData({ action: 'cancel_recent' }),
+                            displayText: 'やめる',
+                        },
+                    },
+                ],
+            },
         },
     };
 };

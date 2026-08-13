@@ -94,10 +94,20 @@ export const handlePostbackEvent = async (event) => {
         return;
     }
 
-    // 一覧の「これを記録」を押したとき
+    // 一覧の「これを記録」を押したとき。
+    // type が付いていなければ、朝食/昼食/夕食/間食を選ぶカードが返る
     if (action === 'log_recent') {
         const { handleLogRecentMeal } = await import('@/lib/line/handlers/recent-meals');
-        await handleLogRecentMeal(event, user, mid);
+        await handleLogRecentMeal(event, user, mid, type);
+        return;
+    }
+
+    // タイプ選択カードの「やめる」。まだ何も保存していないので消すものはない
+    if (action === 'cancel_recent') {
+        await replyOrPushMessage(event, {
+            type: 'text',
+            text: '記録はやめておきました👌 また「履歴」から呼んでくださいね！',
+        });
         return;
     }
 

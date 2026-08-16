@@ -32,6 +32,19 @@ export const getJstHour = (date = new Date()) => {
     return Number(hour);
 };
 
+/**
+ * 「これを昼に食べた」のような補足テキストから食事タイプを読み取る。
+ * 見つからなければ null（呼び出し側が時間帯からの推定にフォールバックする）
+ */
+export const parseMealTypeHint = (text) => {
+    const value = String(text || '');
+    if (/朝|モーニング/.test(value)) return 'breakfast';
+    if (/昼|ランチ/.test(value)) return 'lunch';
+    if (/夕|夜|晩|ディナー/.test(value)) return 'dinner';
+    if (/間食|おやつ|デザート/.test(value)) return 'snack';
+    return null;
+};
+
 export const getMealTypeForJst = (date = new Date()) => {
     const hour = getJstHour(date);
     if (hour >= 4 && hour < 10) return 'breakfast';

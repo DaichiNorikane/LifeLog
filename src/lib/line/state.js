@@ -2,6 +2,10 @@ import { db } from '@/lib/firebase/admin';
 
 export const LINE_STATE_TTL_MS = 10 * 60 * 1000;
 
+// 写真の補足テキスト（「これを昼に食べた」等）を写真の到着まで覚えておく時間。
+// 長すぎると全く別の写真に古い補足が付いてしまうので、通常の状態より短くする
+export const PHOTO_CONTEXT_TTL_MS = 3 * 60 * 1000;
+
 // sid（カードID）ごとに独立したドキュメントで保持する。
 // 複数の写真・テキストを連続で送っても、それぞれの確認カードが並行して有効になる。
 const statesRef = (uid) => db.collection('users').doc(uid).collection('lineStates');
@@ -71,12 +75,27 @@ export const getAwaitingRecentSearchState = async (uid, now = Date.now()) => {
     return states.find(state => state.mode === 'awaiting_recent_search') || null;
 };
 
+/** 写真より先に補足テキストが届いていて、写真を待っている状態 */
+export const getAwaitingPhotoContextState = async (uid, now = Date.now()) => {
+    const states = await getActiveLineStates(uid, now);
+    return states.find(state => state.mode === 'awaiting_photo_context'
+        && state.contextText
+        && now - toMillis(state.updatedAt) <= PHOTO_CONTEXT_TTL_MS) || null;
+};
+
+/** 一番新しい確認カード。写真直後のテキストをボタンなしで修正として扱うために使う */
+export const getLatestPendingMealState = async (uid, now = Date.now()) => {
+    const states = await getActiveLineStates(uid, now);
+    return states.find(state => state.pendingMeal) || null;
+};
+
 export const setLineState = async (uid, state) => {
     if (!state?.sid) throw new Error('LINE state requires a sid');
     const payload = {
         pendingMeal: state.pendingMeal || null,
         pendingEdit: state.pendingEdit || null,
         mode: state.mode || null,
+        contextText: state.contextText || null,
         sid: state.sid,
         updatedAt: new Date().toISOString(),
     };

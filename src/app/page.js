@@ -1,11 +1,12 @@
 "use client";
 import { evaluateDailyLog, evaluateSingleMeal } from './actions/daily-evaluation';
+import { analyzeCondition } from './actions/condition-analysis';
 import { calculateRecipeWithGemini } from './actions/recipe';
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 
 const FoodLogger = dynamic(() => import('@/components/FoodLogger'), { ssr: false });
-const WeightTracker = dynamic(() => import('@/components/WeightTracker'), { ssr: false });
+const BodyDetailModal = dynamic(() => import('@/components/BodyDetailModal'), { ssr: false });
 const EvaluationModal = dynamic(() => import('@/components/EvaluationModal'), { ssr: false });
 const AdvisorModal = dynamic(() => import('@/components/AdvisorModal'), { ssr: false });
 const StockManager = dynamic(() => import('@/components/StockManager'), { ssr: false });
@@ -13,13 +14,22 @@ const DietShooter = dynamic(() => import('@/components/DietShooter'), { ssr: fal
 const MealRankingModal = dynamic(() => import('@/components/MealRankingModal'), { ssr: false });
 const CategoryEvaluationModal = dynamic(() => import('@/components/CategoryEvaluationModal'), { ssr: false });
 const ElenaChallengeModal = dynamic(() => import('@/components/ElenaChallengeModal'), { ssr: false });
-import { Camera, XCircle, ChevronLeft, ChevronRight, Calculator, Weight, Utensils, Flame, Activity, Sparkles, Loader2, LogIn, Refrigerator, Gamepad2, Trophy, Brain, Bell, BellOff } from 'lucide-react';
+const ConditionCheckIn = dynamic(() => import('@/components/ConditionCheckIn'), { ssr: false });
+const DrinkQuickLog = dynamic(() => import('@/components/DrinkQuickLog'), { ssr: false });
+const ConditionCard = dynamic(() => import('@/components/ConditionCard'), { ssr: false });
+const ConditionModal = dynamic(() => import('@/components/ConditionModal'), { ssr: false });
+const ActivityCard = dynamic(() => import('@/components/ActivityCard'), { ssr: false });
+import { Camera, XCircle, ChevronLeft, ChevronRight, Calculator, Utensils, Flame, Activity, Sparkles, Loader2, LogIn, Refrigerator, Gamepad2, Trophy, Brain, Bell, BellOff } from 'lucide-react';
 import PullToRefresh from 'react-simple-pull-to-refresh';
 
 import { useAuth } from '@/lib/contexts/AuthContext';
-import { addMealToFirestore, getMealsFromFirestore, deleteMealFromFirestore, getWeightsFromFirestore, getUserProfile, updateMealInFirestore, addStockItem, getStockItems, deleteStockItem, saveDailyEvaluation, getDailyEvaluation } from '@/lib/firebase/firestore';
+import { addMealToFirestore, getMealsFromFirestore, deleteMealFromFirestore, getWeightsFromFirestore, getUserProfile, updateMealInFirestore, addStockItem, getStockItems, deleteStockItem, saveDailyEvaluation, getDailyEvaluation, saveConditionPrediction, getConditionLog, getConditionLogs, getConditionModel, getActivityLogs, getRecentWorkouts } from '@/lib/firebase/firestore';
 import { getCache, setCache } from '@/utils/db';
 import { usePushNotification } from '@/lib/usePushNotification';
+import { sumMacroTotals, isNutritionallyTrivial, EXTENDED_NUTRIENTS } from '@/lib/health/nutrients';
+import { evaluateCondition, toPredictedScores, toFiredDrivers, hasAnyScore, ENGINE_VERSION } from '@/lib/health/conditionEngine';
+import { toDisplayableFindings } from '@/lib/health/correlation';
+import { getLogicalDateKey, getSleepTargetDateKey } from '@/lib/health/conditionDate';
 
 export default function Home() {
   const { user, logOut, googleSignIn, loading } = useAuth();
@@ -31,12 +41,18 @@ export default function Home() {
   const [currentDate, setCurrentDate] = useState(new Date());
 
   // Modal States
-  const [showWeightTracker, setShowWeightTracker] = useState(false);
+  const [showBodyDetail, setShowBodyDetail] = useState(false);
   const [showEvaluation, setShowEvaluation] = useState(false);
   const [showAdvisor, setShowAdvisor] = useState(false); // New: Advisor State
   const [targetMealType, setTargetMealType] = useState('dinner'); // For Advisor
   const [showStockManager, setShowStockManager] = useState(false); // Stock Manager
   const [showGame, setShowGame] = useState(false); // Mini Game
+  const [showConditionModal, setShowConditionModal] = useState(false); // コンディション内訳
+  const [openBedtimeSetting, setOpenBedtimeSetting] = useState(false); // 就寝時刻の設定を開く要求
+  const [conditionModel, setConditionModel] = useState(null); // 学習した個人係数（Phase 4）
+  const [conditionLogs, setConditionLogs] = useState([]); // 推移グラフ＋実測睡眠の表示に使う
+  const [activityLogs, setActivityLogs] = useState([]);   // HealthKit 由来の日次アクティビティ
+  const [workouts, setWorkouts] = useState([]);           // HealthKit 由来のワークアウト
   const [showQuiz, setShowQuiz] = useState(false); // Elena's Challenge
   const [showRanking, setShowRanking] = useState(false); // Meal Ranking
   const [selectedCategory, setSelectedCategory] = useState(null); // 'breakfast', 'lunch', 'dinner', 'snack'
@@ -61,16 +77,22 @@ export default function Home() {
     // Step 1: Show cached data instantly
     if (!forceRefresh) {
       try {
-        const [cachedMeals, cachedWeights, cachedProfile, cachedStock] = await Promise.all([
+        const [cachedMeals, cachedWeights, cachedProfile, cachedStock, cachedActivity, cachedWorkouts, cachedConditionLogs] = await Promise.all([
           getCache(`meals_${uid}`),
           getCache(`weights_${uid}`),
           getCache(`profile_${uid}`),
           getCache(`stock_${uid}`),
+          getCache(`activityLogs_${uid}`),
+          getCache(`workouts_${uid}`),
+          getCache(`conditionLogs_${uid}`),
         ]);
         if (cachedMeals?.data) setMeals(cachedMeals.data);
         if (cachedWeights?.data) setWeights(cachedWeights.data);
         if (cachedProfile?.data) setUserProfile(cachedProfile.data);
         if (cachedStock?.data) setStockItems(cachedStock.data);
+        if (cachedActivity?.data) setActivityLogs(cachedActivity.data);
+        if (cachedWorkouts?.data) setWorkouts(cachedWorkouts.data);
+        if (cachedConditionLogs?.data) setConditionLogs(cachedConditionLogs.data);
 
         // If all caches are fresh, skip Firestore
         if (cachedMeals && !cachedMeals.stale && cachedWeights && !cachedWeights.stale) {
@@ -82,16 +104,28 @@ export default function Home() {
 
     // Step 2: Fetch from Firestore and update cache
     try {
-      const [firestoreMeals, firestoreWeights, profile, firestoreStock] = await Promise.all([
+      const [firestoreMeals, firestoreWeights, profile, firestoreStock, firestoreActivity, firestoreWorkouts, firestoreConditionLogs] = await Promise.all([
         getMealsFromFirestore(uid),
         getWeightsFromFirestore(uid),
         getUserProfile(uid),
-        getStockItems(uid)
+        getStockItems(uid),
+        // HealthKit 連携の実測データ。取れなくても本体は動く（空配列で返る）
+        getActivityLogs(uid, 30),
+        getRecentWorkouts(uid, 30),
+        getConditionLogs(uid, 30),
       ]);
       setMeals(firestoreMeals);
       setWeights(firestoreWeights);
       setStockItems(firestoreStock || []);
       setUserProfile(profile || { targetCalories: 2200 });
+      setActivityLogs(firestoreActivity || []);
+      setWorkouts(firestoreWorkouts || []);
+      setConditionLogs(firestoreConditionLogs || []);
+
+      // 学習済みの個人係数（無ければ一般論のまま動く）。失敗しても本体は止めない。
+      getConditionModel(uid)
+        .then(model => { if (model) setConditionModel(model); })
+        .catch(() => {});
 
       // Update IndexedDB cache in background
       Promise.all([
@@ -99,6 +133,9 @@ export default function Home() {
         setCache(`weights_${uid}`, firestoreWeights),
         setCache(`profile_${uid}`, profile || { targetCalories: 2200 }),
         setCache(`stock_${uid}`, firestoreStock || []),
+        setCache(`activityLogs_${uid}`, firestoreActivity || []),
+        setCache(`workouts_${uid}`, firestoreWorkouts || []),
+        setCache(`conditionLogs_${uid}`, firestoreConditionLogs || []),
       ]).catch(() => {});
 
       // Auto-evaluate in background (don't block startup)
@@ -140,14 +177,14 @@ export default function Home() {
 
   // Lock body scroll when any modal is open
   useEffect(() => {
-    const isAnyModalOpen = showLogger || showWeightTracker || showEvaluation || showAdvisor || deleteConfirmation;
+    const isAnyModalOpen = showLogger || showBodyDetail || showEvaluation || showAdvisor || deleteConfirmation;
     if (isAnyModalOpen) {
       document.body.classList.add('modal-open');
     } else {
       document.body.classList.remove('modal-open');
     }
     return () => document.body.classList.remove('modal-open'); // Cleanup
-  }, [showLogger, showWeightTracker, showEvaluation, showAdvisor, deleteConfirmation]);
+  }, [showLogger, showBodyDetail, showEvaluation, showAdvisor, deleteConfirmation]);
 
   // 日付変更時にFirestoreから評価を読み込む
   useEffect(() => {
@@ -216,31 +253,11 @@ export default function Home() {
   const currentDateKey = getLocalDateKey(currentDate);
 
   // Calculate Totals for Today
+  // 拡張栄養素は null をスキップして合算し、`{key}Recorded` に何件分かを持つ
+  // （定義は src/lib/health/nutrients.js が唯一の真実）
   const getDailyTotals = (date) => {
     const dailyMeals = meals.filter(m => isSameDay(new Date(m.timestamp), date));
-    return dailyMeals.reduce((acc, meal) => {
-      const c = Number(meal.calories);
-      const p = Number(meal.macros?.protein);
-      const f = Number(meal.macros?.fat);
-      const cb = Number(meal.macros?.carbs);
-      const fiber = meal.macros?.fiber;
-      const sugar = meal.macros?.sugar;
-      const sodium = meal.macros?.sodium;
-      const potassium = meal.macros?.potassium;
-      return {
-        calories: acc.calories + (isNaN(c) ? 0 : c),
-        protein: acc.protein + (isNaN(p) ? 0 : p),
-        fat: acc.fat + (isNaN(f) ? 0 : f),
-        carbs: acc.carbs + (isNaN(cb) ? 0 : cb),
-        fiber: fiber != null ? acc.fiber + Number(fiber) : acc.fiber,
-        sugar: sugar != null ? acc.sugar + Number(sugar) : acc.sugar,
-        sodium: sodium != null ? acc.sodium + Number(sodium) : acc.sodium,
-        potassium: potassium != null ? acc.potassium + Number(potassium) : acc.potassium,
-        // 記録件数（null除外のため合計が何件分の合算かを把握）
-        fiberRecorded: fiber != null ? acc.fiberRecorded + 1 : acc.fiberRecorded,
-        sodiumRecorded: sodium != null ? acc.sodiumRecorded + 1 : acc.sodiumRecorded,
-      };
-    }, { calories: 0, protein: 0, fat: 0, carbs: 0, fiber: 0, sugar: 0, sodium: 0, potassium: 0, fiberRecorded: 0, sodiumRecorded: 0 });
+    return sumMacroTotals(dailyMeals);
   };
 
   // FoodLoggerに渡すrecentMeals（meals stateから重複除去）
@@ -259,9 +276,127 @@ export default function Home() {
 
   const dayTotals = useMemo(() => getDailyTotals(currentDate), [meals, currentDate]);
 
+
+
   // Derived Values (memoized)
   const displayMeals = useMemo(() => meals.filter(meal => isSameDay(new Date(meal.timestamp), currentDate)), [meals, currentDate]);
   const selectedWeightEntry = useMemo(() => weights.find(w => w.date === currentDateKey), [weights, currentDateKey]);
+
+  // --- HealthKit の実測データ（表示中の日付のぶんだけ取り出す）---
+  const activityForDate = useMemo(
+    () => activityLogs.find(a => a.date === currentDateKey) || null,
+    [activityLogs, currentDateKey]
+  );
+  const workoutsForDate = useMemo(
+    () => workouts.filter(w => w.date === currentDateKey),
+    [workouts, currentDateKey]
+  );
+  // 睡眠は「その夜を引き起こした食事の日」に紐づいている（conditionDate.js 参照）。
+  // 今日を見ている時はまだ今夜が来ていないので、直近で完了した夜＝前日キーを出す。
+  const sleepForDate = useMemo(() => {
+    const key = isToday(currentDate) ? getSleepTargetDateKey() : currentDateKey;
+    return conditionLogs.find(l => l.date === key)?.sleep?.objective || null;
+  }, [conditionLogs, currentDate, currentDateKey]);
+
+  // 上段の要約カードは常に体重を出したい。その日に体組成計に乗っていなければ
+  // 直近の測定値で代用する（体重は毎日測るものではないため）。
+  const latestWeightEntry = useMemo(
+    () => (weights.length > 0 ? [...weights].sort((a, b) => new Date(b.date) - new Date(a.date))[0] : null),
+    [weights]
+  );
+  const bodyForCompactCard = selectedWeightEntry || latestWeightEntry;
+
+  const weightGoal = useMemo(() => {
+    const current = bodyForCompactCard?.weight;
+    if (!userProfile?.targetWeight || !current) return null;
+    return {
+      current,
+      target: userProfile.targetWeight,
+      // startWeight は目標を立てた時点の体重。未設定の日は進捗バーを出さない
+      start: userProfile.startWeight ?? null,
+      targetDate: userProfile.targetDate,
+    };
+  }, [bodyForCompactCard, userProfile]);
+  // ===== コンディション予測（決定論エンジン。API呼び出しなしで即時更新される） =====
+  // 日付は「論理日」(4:00区切り)。深夜の食事を前日の夜として扱うため、
+  // ダッシュボードのカレンダー日とは意図的にずらしている。
+  const conditionInput = useMemo(() => {
+    if (isToday(currentDate)) {
+      return { dateKey: getLogicalDateKey(new Date()), now: new Date() };
+    }
+    // 過去日は「その日が終わった時点」で評価する
+    const dateKey = getLocalDateKey(currentDate);
+    const endOfLogicalDay = new Date(currentDate);
+    endOfLogicalDay.setHours(23, 59, 0, 0);
+    return { dateKey, now: endOfLogicalDay };
+  }, [currentDate]);
+
+  const conditionResult = useMemo(() => evaluateCondition({
+    dateKey: conditionInput.dateKey,
+    meals,
+    profile: {
+      bedtime: userProfile?.bedtime,
+      targetCalories: userProfile?.targetCalories,
+      currentWeight: selectedWeightEntry?.weight ?? userProfile?.currentWeight,
+    },
+    now: conditionInput.now,
+    // 学習済みなら個人係数を適用（未学習なら一般論のまま）
+    driverWeights: conditionModel?.driverWeights || null,
+  }), [conditionInput, meals, userProfile, selectedWeightEntry, conditionModel]);
+
+  // 日次評価に1行だけ渡す要約。エレナがダッシュボードと矛盾したことを言わないようにする。
+  const conditionSummary = useMemo(() => {
+    if (!hasAnyScore(conditionResult)) return null;
+    const a = conditionResult.axes;
+    const part = (label, data) => (data?.score != null ? `${label}${data.score}` : null);
+    const line = [
+      part('集中力', a.focus), part('睡眠', a.sleep),
+      part('エネルギー', a.energy), part('メンタル', a.mood),
+    ].filter(Boolean).join(' / ');
+    if (!line) return null;
+    const top = conditionResult.topNegative ? `（最も響いている要因: ${conditionResult.topNegative.label}）` : '';
+    return `${line}${top}`;
+  }, [conditionResult]);
+
+  // エレナの解説はモーダルを開いた時だけ取得する（食事追加ごとには呼ばない）
+  const handleRequestConditionAnalysis = useCallback(async (result) => {
+    if (!user?.uid) return null;
+    const conditionLog = await getConditionLog(user.uid, conditionInput.dateKey);
+    return analyzeCondition(result, {
+      meals: displayMeals.map(m => ({
+        foodName: m.foodName, calories: m.calories,
+        timestamp: m.timestamp, mealType: m.mealType,
+      })),
+      conditionLog,
+      findings: toDisplayableFindings(conditionModel),
+    });
+  }, [user?.uid, conditionInput.dateKey, displayMeals, conditionModel]);
+
+  // 推移グラフ用の履歴。モーダルを開くまで読み込まない（普段は無駄なので）
+  useEffect(() => {
+    if (!showConditionModal || !user?.uid) return;
+    getConditionLogs(user.uid, 30)
+      .then(setConditionLogs)
+      .catch(() => {});
+  }, [showConditionModal, user?.uid]);
+
+  // 予測を日次スナップショットとして保存する。
+  // ルールを後から改訂しても過去の予測が書き換わらず、Phase 4 の相関分析が壊れない。
+  const lastSavedPredictionRef = useRef(null);
+  useEffect(() => {
+    if (!user?.uid || !isToday(currentDate)) return;
+    if (!hasAnyScore(conditionResult)) return;
+
+    const predicted = toPredictedScores(conditionResult);
+    const firedDrivers = toFiredDrivers(conditionResult);
+    const signature = `${conditionInput.dateKey}:${JSON.stringify(predicted)}:${JSON.stringify(firedDrivers)}`;
+    if (lastSavedPredictionRef.current === signature) return;
+    lastSavedPredictionRef.current = signature;
+
+    saveConditionPrediction(user.uid, conditionInput.dateKey, predicted, ENGINE_VERSION, firedDrivers)
+      .catch(e => console.warn('[Condition] prediction save failed:', e));
+  }, [user?.uid, currentDate, conditionResult, conditionInput.dateKey]);
+
 
   // --- Dynamic Calorie Target Logic ---
   const baseTarget = userProfile?.targetCalories || 2200;
@@ -410,16 +545,24 @@ export default function Home() {
       const existingMealsToday = meals.filter(meal => isSameDay(new Date(meal.timestamp), currentDate));
       const allMealsForContext = [...existingMealsToday, ...newMeals];
 
+      // 水・お茶・ブラックコーヒーのようにカロリーもマクロもほぼゼロの記録は、
+      // 1日のカロリー/PFC評価を数値的に動かさないので Gemini を呼ばない。
+      // カフェインはコンディションエンジン（決定論・API不要）が拾うため精度は落ちない。
+      const scoreTrivially = (m, id) =>
+        Promise.resolve({ evalResult: { score: 5, reason: '水分補給ですね💧' }, id });
+
       // Evaluate new meals in parallel
       const newMealEvals = adjustedMeals.map((m, index) =>
-        evaluateSingleMeal({ ...m, id: addedIds[index] }, allMealsForContext)
-          .then(evalResult => ({ evalResult, id: addedIds[index] }))
-          .catch(() => null)
+        isNutritionallyTrivial(m)
+          ? scoreTrivially(m, addedIds[index])
+          : evaluateSingleMeal({ ...m, id: addedIds[index] }, allMealsForContext)
+            .then(evalResult => ({ evalResult, id: addedIds[index] }))
+            .catch(() => null)
       );
 
       // Re-evaluate existing meals only if they don't have scores yet
       const existingEvals = existingMealsToday
-        .filter(m => typeof m.score !== 'number')
+        .filter(m => typeof m.score !== 'number' && !isNutritionallyTrivial(m))
         .map(existingMeal =>
           evaluateSingleMeal(existingMeal, allMealsForContext)
             .then(evalResult => ({ evalResult, id: existingMeal.id }))
@@ -437,6 +580,12 @@ export default function Home() {
           };
           await updateMealInFirestore(user.uid, r.id, updates);
           setMeals(prev => prev.map(p => p.id === r.id ? { ...p, ...updates } : p));
+        }
+
+        // 追加したものが全て「水分だけ」なら1日の評価は変わらないので日次評価を回さない。
+        // 日次評価はこのアプリで最も高価な呼び出し（thinking込み）なので効果が大きい。
+        if (adjustedMeals.every(isNutritionallyTrivial)) {
+          return;
         }
 
         // Background: Run daily evaluation after individual evaluations complete
@@ -458,6 +607,8 @@ export default function Home() {
             currentWeight: userProfile?.currentWeight,
             targetWeight: userProfile?.targetWeight,
             targetDate: userProfile?.targetDate,
+            // コンディション予測を1行だけ渡し、エレナの発言が別画面と矛盾しないようにする
+            conditionSummary,
           });
           if (dailyResult && !dailyResult.error) {
             await saveDailyEvaluation(user.uid, dateKey, dailyResult);
@@ -837,32 +988,14 @@ export default function Home() {
 
 
 
-            <StatCard
-              title="体重"
-              value={selectedWeightEntry ? selectedWeightEntry.weight : '--'}
-              unit="kg"
-              icon={<Weight />}
-              color="#4ECDC4"
-              onClick={() => setShowWeightTracker(true)}
-              weightProgress={
-                userProfile?.targetWeight
-                  ? (() => {
-                    const latestWeight = selectedWeightEntry
-                      ? selectedWeightEntry.weight
-                      : (weights.length > 0 ? [...weights].sort((a, b) => new Date(b.date) - new Date(a.date))[0].weight : null);
-
-                    if (!latestWeight) return null;
-
-                    return {
-                      current: latestWeight,
-                      target: userProfile.targetWeight,
-                      start: userProfile.startWeight || latestWeight,
-                      targetDate: userProfile.targetDate
-                    };
-                  })()
-                  : null
-              }
-              subtext={!selectedWeightEntry ? 'タップして管理' : undefined}
+            {/* 実測（体重・歩数）と目標をまとめた要約カード。タップで詳細 */}
+            <ActivityCard
+              compact
+              title={isToday(currentDate) ? '今日のからだ' : 'この日のからだ'}
+              activity={activityForDate}
+              body={bodyForCompactCard}
+              goal={weightGoal}
+              onOpenDetail={() => setShowBodyDetail(true)}
             />
           </div>
 
@@ -944,6 +1077,28 @@ export default function Home() {
                 <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '8px 0 0', textAlign: 'right' }}>― は未取得（AI解析時に自動記録されます）</p>
               )}
             </div>
+          )}
+
+          {/* コンディション予測（4軸ミニゲージ） */}
+          <ConditionCard
+            result={conditionResult}
+            onOpenDetail={() => setShowConditionModal(true)}
+            needsBedtime={isToday(currentDate) && !userProfile?.bedtime}
+            onRequestBedtime={() => setOpenBedtimeSetting(true)}
+          />
+
+          {/* 体感チェックイン + マイドリンク（今日のみ。過去日を見ている時は聞かない） */}
+          {isToday(currentDate) && (
+            <>
+              <ConditionCheckIn
+                user={user}
+                userProfile={userProfile}
+                openSettings={openBedtimeSetting}
+                onSettingsHandled={() => setOpenBedtimeSetting(false)}
+                onProfileUpdate={(patch) => setUserProfile(prev => ({ ...(prev || {}), ...patch }))}
+              />
+              <DrinkQuickLog user={user} onLogDrink={handleLogMeal} />
+            </>
           )}
 
           {/* Meal Timeline - Grouped by Meal Type */}
@@ -1235,10 +1390,17 @@ export default function Home() {
                 <span>P: {selectedMeal.macros?.protein || 0}g</span>
                 <span>F: {selectedMeal.macros?.fat || 0}g</span>
                 <span>C: {selectedMeal.macros?.carbs || 0}g</span>
-                {selectedMeal.macros?.fiber != null && <span>食物繊維: {selectedMeal.macros.fiber}g</span>}
-                {selectedMeal.macros?.sugar != null && <span>糖質: {selectedMeal.macros.sugar}g</span>}
-                {selectedMeal.macros?.sodium != null && <span>Na: {selectedMeal.macros.sodium}mg</span>}
-                {selectedMeal.macros?.potassium != null && <span>K: {selectedMeal.macros.potassium}mg</span>}
+              </div>
+
+              {/* 拡張栄養素（定義は nutrients.js が唯一の真実。フィールドを足せばここにも自動で出る）
+                  値が null＝AIが推定できなかった項目は表示しない */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '6px 12px', marginTop: '10px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                {EXTENDED_NUTRIENTS.map(({ key, label, unit }) => {
+                  const value = selectedMeal.macros?.[key];
+                  if (value == null) return null;
+                  const rounded = Math.round(Number(value) * 10) / 10;
+                  return <span key={key}>{label}: {rounded}{unit}</span>;
+                })}
               </div>
             </div>
 
@@ -1280,16 +1442,20 @@ export default function Home() {
         </div>
       )}
 
-      {/* Weight Tracker Modal */}
-      {showWeightTracker && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '600px', width: '95%', padding: '0', background: 'transparent', boxShadow: 'none' }}>
-            <WeightTracker
+      {/* からだの詳細（実測 + ダイエット目標） */}
+      {showBodyDetail && (
+        <div style={{ position: 'relative', zIndex: 1001 }}>
+            <BodyDetailModal
               user={user}
               userProfile={userProfile}
               weights={weights}
-              activeDate={currentDate} // Use currently selected date
-              onClose={() => setShowWeightTracker(false)}
+              title={isToday(currentDate) ? '今日のからだ' : 'この日のからだ'}
+              activity={activityForDate}
+              body={selectedWeightEntry}
+              sleep={sleepForDate}
+              sleepLabel={isToday(currentDate) ? '昨夜の睡眠' : 'この日の夜の睡眠'}
+              workouts={workoutsForDate}
+              onClose={() => setShowBodyDetail(false)}
               onUpdateWeights={loadData}
               recentCalories={(() => {
                 // Calculate average of last 7 days including today
@@ -1321,7 +1487,6 @@ export default function Home() {
                 return streak;
               })()}
             />
-          </div>
         </div>
       )}
 
@@ -1453,6 +1618,16 @@ export default function Home() {
       `}</style>
 
       {/* Diet Shooter Game Overlay */}
+      {showConditionModal && (
+        <ConditionModal
+          isOpen={showConditionModal}
+          result={conditionResult}
+          onClose={() => setShowConditionModal(false)}
+          onRequestAnalysis={handleRequestConditionAnalysis}
+          historyLogs={conditionLogs}
+        />
+      )}
+
       {showGame && (
         <DietShooter meals={meals} user={user} userProfile={userProfile} onClose={() => setShowGame(false)} />
       )}

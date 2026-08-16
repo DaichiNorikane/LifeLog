@@ -11,6 +11,7 @@ import { buildMealConfirmFlex } from '@/lib/line/flex/mealConfirm';
 import { buildMealSavedFlex } from '@/lib/line/flex/mealSaved';
 import { MEAL_TYPE_LABELS } from '@/lib/line/mealUtils';
 import { resolveUserOrReply } from '@/lib/line/resolveUser';
+import { formatElenaText } from '@/lib/line/textFormat';
 import { clearLineState, getLineStateBySid, setLineState } from '@/lib/line/state';
 
 export const EXPIRED_CARD_MESSAGE = {
@@ -24,6 +25,11 @@ export const parsePostbackData = (data) => {
         action: params.get('action'),
         sid: params.get('sid'),
         type: params.get('type'),
+        mid: params.get('mid'),        // 履歴から登録するときの元の食事ID
+        offset: params.get('offset'),  // 履歴・レシピの続きを見るときの開始位置
+        q: params.get('q'),            // 履歴の絞り込みキーワード
+        rid: params.get('rid'),        // レシピから登録するときのレシピID
+        cat: params.get('cat'),        // レシピのカテゴリ絞り込み（'none'=未分類）
     };
 };
 
@@ -51,11 +57,93 @@ const editSuccessText = (pendingEdit) => {
     return '変更しました✨';
 };
 
+/** いまの時刻から、次に食べる食事を選ぶ（リッチメニューの「何食べる？」用） */
+export const pickMealSlotByHour = (date = new Date()) => {
+    const jstHour = Number(new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Tokyo', hour: 'numeric', hour12: false,
+    }).format(date));
+
+    if (jstHour < 10) return 'breakfast';
+    if (jstHour < 15) return 'lunch';
+    return 'dinner';
+};
+
 export const handlePostbackEvent = async (event) => {
     const user = await resolveUserOrReply(event);
     if (!user) return;
 
-    const { action, sid, type } = parsePostbackData(event.postback?.data);
+    const { action, sid, type, mid, offset, q, rid, cat } = parsePostbackData(event.postback?.data);
+
+    // リッチメニューの「何食べる？」。時間帯から朝/昼/夕を選んで既存の提案を出す
+    if (action === 'suggest_meal') {
+        // 動的 import。ここでしか使わない依存を postback の起動パスに載せない
+        const { handleKeywordSuggestEvent } = await import('@/lib/line/handlers/keyword-suggest');
+        await handleKeywordSuggestEvent(event, pickMealSlotByHour());
+        return;
+    }
+
+    // リッチメニューの「履歴から」。過去に記録したものを一覧で出す
+    // offset と q が付いていれば、続きの表示・キーワード絞り込みになる
+    if (action === 'recent_meals') {
+        const { handleRecentMealsEvent } = await import('@/lib/line/handlers/recent-meals');
+        await handleRecentMealsEvent(event, user, { offset, query: q });
+        return;
+    }
+
+    // リッチメニューの「レシピ登録」。保存済みレシピを一覧で出す
+    // offset と cat が付いていれば、続きの表示・カテゴリ絞り込みになる
+    if (action === 'recipes') {
+        const { handleRecipesEvent } = await import('@/lib/line/handlers/recipes');
+        await handleRecipesEvent(event, user, { offset, category: cat });
+        return;
+    }
+
+    // 「カテゴリで絞る」。レシピがあるカテゴリの一覧を出す
+    if (action === 'recipe_cats') {
+        const { handleRecipeCategoriesEvent } = await import('@/lib/line/handlers/recipes');
+        await handleRecipeCategoriesEvent(event, user);
+        return;
+    }
+
+    // レシピ一覧の「これを記録」。type が無ければ食事タイプを選ぶカードが返る
+    if (action === 'log_recipe') {
+        const { handleLogRecipe } = await import('@/lib/line/handlers/recipes');
+        await handleLogRecipe(event, user, rid, type);
+        return;
+    }
+
+    // レシピのタイプ選択カードの「やめる」
+    if (action === 'cancel_recipe') {
+        await replyOrPushMessage(event, {
+            type: 'text',
+            text: '記録はやめておきました👌 また「レシピ」から呼んでくださいね！',
+        });
+        return;
+    }
+
+    // 「キーワードで探す」。次の発話を検索語として受け取る
+    if (action === 'recent_search') {
+        const { handleRecentSearchPrompt } = await import('@/lib/line/handlers/recent-meals');
+        await handleRecentSearchPrompt(event, user);
+        return;
+    }
+
+    // 一覧の「これを記録」を押したとき。
+    // type が付いていなければ、朝食/昼食/夕食/間食を選ぶカードが返る
+    if (action === 'log_recent') {
+        const { handleLogRecentMeal } = await import('@/lib/line/handlers/recent-meals');
+        await handleLogRecentMeal(event, user, mid, type);
+        return;
+    }
+
+    // タイプ選択カードの「やめる」。まだ何も保存していないので消すものはない
+    if (action === 'cancel_recent') {
+        await replyOrPushMessage(event, {
+            type: 'text',
+            text: '記録はやめておきました👌 また「履歴」から呼んでくださいね！',
+        });
+        return;
+    }
 
     if (action === 'apply_edit' || action === 'cancel_edit') {
         const editState = await getValidEditStateForPostback(user.uid, sid);
@@ -170,7 +258,7 @@ export const handlePostbackEvent = async (event) => {
 
     await replyOrPushMessage(event, {
         type: 'text',
-        text: replyText,
+        text: formatElenaText(replyText),
     });
     await saveMealExchangeToHistory(user.uid, meal, mealTypeLabel, replyText);
 };

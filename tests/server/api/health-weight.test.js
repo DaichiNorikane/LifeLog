@@ -104,6 +104,7 @@ describe('POST /api/health/weight', () => {
         bodyFat: 23.4,
         bmi: 22.6,
         leanBodyMass: 50.1,
+        height: 177,
         measuredAt,
       },
     }));
@@ -116,6 +117,7 @@ describe('POST /api/health/weight', () => {
       bodyFat: 23.4,
       bmi: 22.6,
       leanBodyMass: 50.1,
+      height: 177,
     });
 
     expect(firebaseMocks.mockCollection).toHaveBeenCalledWith('users');
@@ -127,6 +129,7 @@ describe('POST /api/health/weight', () => {
       bodyFat: 23.4,
       bmi: 22.6,
       leanBodyMass: 50.1,
+      height: 177,
       date: '2026-07-14',
       timestamp: measuredAt,
       updatedAt: expect.anything(),

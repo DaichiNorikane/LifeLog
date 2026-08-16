@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase/admin';
+import { getLineClient } from '@/lib/line';
 import { getJSTToday, sendPushWithLimit, getTodayMeals, getOrRunEvaluation } from '@/lib/pushHelper';
+import { evaluateCondition } from '@/lib/health/conditionEngine';
+import { buildEveningSleepNote } from '@/lib/health/conditionMessages';
 
 export async function GET(request) {
     const authHeader = request.headers.get('authorization');
@@ -15,13 +18,16 @@ export async function GET(request) {
         const usersSnapshot = await db.collection('users').get();
         if (usersSnapshot.empty) return NextResponse.json({ message: 'No users' });
 
+        const messagingApi = getLineClient();
+
         let sent = 0;
 
         for (const doc of usersSnapshot.docs) {
             const userId = doc.id;
             const userData = doc.data();
             const subscription = userData.pushSubscription;
-            if (!subscription) continue;
+            const lineUserId = userData.lineUserId;
+            if (!subscription && !lineUserId) continue;
 
             const meals = await getTodayMeals(userId, todayStr);
 
@@ -70,12 +76,44 @@ export async function GET(request) {
                 }
             }
 
-            const success = await sendPushWithLimit(userId, subscription, todayStr, 'evening-preview', {
-                title,
-                body,
-                tag: `evening-preview-${todayStr}`,
+            // 今夜の睡眠予測を添える。行動を変えられる最後のタイミングなので効果が大きい。
+            // スコアは決定論エンジンが出すので Gemini の追加呼び出しは発生しない。
+            const condition = evaluateCondition({
+                dateKey: todayStr,
+                meals,
+                profile: {
+                    bedtime: userData.bedtime,
+                    targetCalories: target,
+                    currentWeight: userData.currentWeight,
+                },
+                now: new Date(),
             });
-            if (success) sent++;
+            const sleepNote = buildEveningSleepNote(condition);
+            if (sleepNote) {
+                body = `${body}\n${sleepNote}`;
+            }
+
+            // 今夜の眠りは行動を変えられる最後のタイミングなので LINE にも届ける
+            if (lineUserId) {
+                try {
+                    await messagingApi.pushMessage({
+                        to: lineUserId,
+                        messages: [{ type: 'text', text: `【エレナより 🌙】\n${title}\n\n${body}` }],
+                    });
+                } catch (e) {
+                    console.error(`[Evening Preview] LINE failed for ${userId}:`, e.message);
+                }
+            }
+
+            let success = false;
+            if (subscription) {
+                success = await sendPushWithLimit(userId, subscription, todayStr, 'evening-preview', {
+                    title,
+                    body,
+                    tag: `evening-preview-${todayStr}`,
+                });
+            }
+            if (success || lineUserId) sent++;
         }
 
         return NextResponse.json({ success: true, sent });

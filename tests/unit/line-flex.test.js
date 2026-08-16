@@ -50,6 +50,18 @@ describe('LINE meal Flex templates', () => {
     }));
   });
 
+  it('echoes every tap as displayText so the user sees a reaction', () => {
+    const flex = buildMealConfirmFlex(meal, 'sid-test');
+    const footer = flex.contents.footer.contents;
+    const allButtons = [...footer[0].contents, ...footer[1].contents, footer[2], footer[3]];
+
+    for (const button of allButtons) {
+      expect(button.action.displayText).toBeTruthy();
+    }
+    expect(footer[0].contents.map(b => b.action.displayText)).toEqual(['朝食で記録', '昼食で記録']);
+    expect(footer[1].contents.map(b => b.action.displayText)).toEqual(['夕食で記録', '間食で記録']);
+  });
+
   it('builds the edit confirmation card', () => {
     expect(buildEditConfirmFlex({
       operation: 'delete',

@@ -17,8 +17,15 @@ const mocks = vi.hoisted(() => {
     handleMealPhotoEvent: vi.fn(),
     handlePostbackEvent: vi.fn(),
     handleWeightEvent: vi.fn(),
+    handleGoalEvent: vi.fn(),
+    handleBodyEvent: vi.fn(),
+    handleRecentMealsEvent: vi.fn(),
+    handleRecipesEvent: vi.fn(),
+    handleDailyReviewEvent: vi.fn(),
+    handleWeeklyReportEvent: vi.fn(),
     resolveUserOrReply: vi.fn().mockResolvedValue({ uid: 'uid-1', data: {} }),
     getAwaitingCorrectionState: vi.fn().mockResolvedValue(null),
+    getAwaitingRecentSearchState: vi.fn().mockResolvedValue(null),
     classifyLineIntent: vi.fn().mockResolvedValue({ intent: 'other', mealDescription: null }),
   };
 });
@@ -92,12 +99,44 @@ vi.mock('@/lib/line/handlers/weight', () => ({
   handleWeightEvent: mocks.handleWeightEvent,
 }));
 
+vi.mock('@/lib/line/handlers/recent-meals', async () => {
+  const actual = await vi.importActual('@/lib/line/handlers/recent-meals');
+  return { ...actual, handleRecentMealsEvent: mocks.handleRecentMealsEvent };
+});
+
+vi.mock('@/lib/line/handlers/body', async () => {
+  const actual = await vi.importActual('@/lib/line/handlers/body');
+  return { ...actual, handleBodyEvent: mocks.handleBodyEvent };
+});
+
+vi.mock('@/lib/line/handlers/recipes', async () => {
+  const actual = await vi.importActual('@/lib/line/handlers/recipes');
+  return { ...actual, handleRecipesEvent: mocks.handleRecipesEvent };
+});
+
+vi.mock('@/lib/line/handlers/daily-review', async () => {
+  const actual = await vi.importActual('@/lib/line/handlers/daily-review');
+  return { ...actual, handleDailyReviewEvent: mocks.handleDailyReviewEvent };
+});
+
+vi.mock('@/lib/line/handlers/weekly-report', async () => {
+  const actual = await vi.importActual('@/lib/line/handlers/weekly-report');
+  return { ...actual, handleWeeklyReportEvent: mocks.handleWeeklyReportEvent };
+});
+
+vi.mock('@/lib/line/handlers/goal', async () => {
+  // parseGoalCommand は本物を使い、送信だけモックする（ルーティング判定そのものを検証したいため）
+  const actual = await vi.importActual('@/lib/line/handlers/goal');
+  return { ...actual, handleGoalEvent: mocks.handleGoalEvent };
+});
+
 vi.mock('@/lib/line/resolveUser', () => ({
   resolveUserOrReply: mocks.resolveUserOrReply,
 }));
 
 vi.mock('@/lib/line/state', () => ({
   getAwaitingCorrectionState: mocks.getAwaitingCorrectionState,
+  getAwaitingRecentSearchState: mocks.getAwaitingRecentSearchState,
 }));
 
 vi.mock('@/app/actions/line-intent', () => ({
@@ -144,6 +183,94 @@ describe('LINE router dispatch', () => {
     await handleLineEvent(event);
     expect(mocks.handleWeightEvent).toHaveBeenCalledWith(event, '体重65.2kg');
     expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
+  });
+
+  it('routes history requests to the recent meals handler', async () => {
+    expect(classifyTextRoute('履歴')).toEqual({ type: 'recent_meals', query: '' });
+    expect(classifyTextRoute('いつもの')).toEqual({ type: 'recent_meals', query: '' });
+    // キーワードを続けて送ると、そのまま絞り込みになる
+    expect(classifyTextRoute('履歴 唐揚げ')).toEqual({ type: 'recent_meals', query: '唐揚げ' });
+
+    const event = textEvent('履歴');
+    await handleLineEvent(event);
+    expect(mocks.handleRecentMealsEvent).toHaveBeenCalledWith(
+      event, { uid: 'uid-1', data: {} }, { query: '' },
+    );
+    expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
+  });
+
+  it('routes body questions to the body handler', async () => {
+    expect(classifyTextRoute('からだ')).toEqual({ type: 'body' });
+    expect(classifyTextRoute('体調')).toEqual({ type: 'body' });
+    // 食事の記録には誤爆しない
+    expect(classifyTextRoute('からあげ食べた')).toEqual({ type: 'intent' });
+
+    const event = textEvent('からだ');
+    await handleLineEvent(event);
+    expect(mocks.handleBodyEvent).toHaveBeenCalledWith(event, { uid: 'uid-1', data: {} });
+    expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
+  });
+
+  it('routes recipe requests to the recipes handler', async () => {
+    expect(classifyTextRoute('レシピ')).toEqual({ type: 'recipes' });
+    expect(classifyTextRoute('レシピ登録')).toEqual({ type: 'recipes' });
+    // 「〜のレシピ」のような文章には誤爆しない
+    expect(classifyTextRoute('唐揚げのレシピ')).toEqual({ type: 'intent' });
+
+    const event = textEvent('レシピ');
+    await handleLineEvent(event);
+    expect(mocks.handleRecipesEvent).toHaveBeenCalledWith(event, { uid: 'uid-1', data: {} });
+    expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
+  });
+
+  it('routes daily review requests to the daily review handler', async () => {
+    expect(classifyTextRoute('今日の総評')).toEqual({ type: 'daily_review' });
+    expect(classifyTextRoute('総評')).toEqual({ type: 'daily_review' });
+    expect(classifyTextRoute('評価')).toEqual({ type: 'daily_review' });
+    // 日次サマリー（今日のまとめ）とは別ルート
+    expect(classifyTextRoute('サマリー')).toEqual({ type: 'summary' });
+
+    const event = textEvent('今日の総評');
+    await handleLineEvent(event);
+    expect(mocks.handleDailyReviewEvent).toHaveBeenCalledWith(event, { uid: 'uid-1', data: {} });
+    expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
+  });
+
+  it('routes weekly report requests to the weekly report handler', async () => {
+    expect(classifyTextRoute('週間レポート')).toEqual({ type: 'weekly_report' });
+    expect(classifyTextRoute('今週のふりかえり')).toEqual({ type: 'weekly_report' });
+    // 週の言葉がなければ週間扱いしない
+    expect(classifyTextRoute('レポート')).toEqual({ type: 'intent' });
+
+    const event = textEvent('週間レポート');
+    await handleLineEvent(event);
+    expect(mocks.handleWeeklyReportEvent).toHaveBeenCalledWith(event, { uid: 'uid-1', data: {} });
+    expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
+  });
+
+  it('routes goal commands to the goal handler', async () => {
+    expect(classifyTextRoute('目標')).toEqual({ type: 'goal', goal: { action: 'show' } });
+    expect(classifyTextRoute('目標カロリー 1800')).toEqual({
+      type: 'goal', goal: { action: 'set', patch: { targetCalories: 1800 } },
+    });
+
+    const event = textEvent('目標カロリー 1800');
+    await handleLineEvent(event);
+    expect(mocks.handleGoalEvent).toHaveBeenCalledWith(
+      event, { uid: 'uid-1', data: {} }, { action: 'set', patch: { targetCalories: 1800 } },
+    );
+    expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
+  });
+
+  it('does not mistake a target weight command for a weight log', async () => {
+    // 「目標体重 75」は体重の記録ではなく目標の変更
+    expect(classifyTextRoute('目標体重 75')).toEqual({
+      type: 'goal', goal: { action: 'set', patch: { targetWeight: 75 } },
+    });
+
+    await handleLineEvent(textEvent('目標体重 75'));
+    expect(mocks.handleWeightEvent).not.toHaveBeenCalled();
+    expect(mocks.handleGoalEvent).toHaveBeenCalled();
   });
 
   it('routes 6-digit link codes before user resolution', async () => {

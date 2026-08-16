@@ -3,6 +3,9 @@ import { db } from '@/lib/firebase/admin';
 import { getLineClient } from '@/lib/line';
 import { evaluateDailyLog } from '@/app/actions/daily-evaluation';
 import { sendPushToUser, getJSTToday } from '@/lib/pushHelper';
+import { buildConditionContextAdmin } from '@/lib/firebase/adminHelpers';
+import { AXIS_LABELS } from '@/lib/health/conditionRules';
+import { formatElenaText } from '@/lib/line/textFormat';
 
 // Elena's random one-liners
 const ELENA_HITOKOTO = [
@@ -73,7 +76,24 @@ export async function GET(request) {
                         createdAt: new Date().toISOString()
                     });
 
-                    const text = `【${todayStr}の評価レポート by エレナ 🌙】\nスコア: ${evaluation.score}点\n判定: ${evaluation.title}\n\n${evaluation.reason || evaluation.advice}\n\n(自動配信: 明日も一緒に頑張りましょうね♪)`;
+                    // コンディション予測を添える（決定論エンジン。Gemini の追加呼び出しなし）
+                    const condition = buildConditionContextAdmin(meals, userData);
+                    let conditionText = '';
+                    if (condition) {
+                        const scoreLine = Object.entries(condition.scores)
+                            .filter(([, score]) => score !== null && score !== undefined)
+                            .map(([axis, score]) => `${AXIS_LABELS[axis]} ${score}`)
+                            .join(' / ');
+                        conditionText = `\n\n【今日のコンディション】\n${scoreLine}`;
+                        if (condition.topNegative) {
+                            conditionText += `\n最も響いたのは「${condition.topNegative.label}」でした`;
+                        }
+                        if (condition.sleepNote) {
+                            conditionText += `\n${condition.sleepNote}`;
+                        }
+                    }
+
+                    const text = `【${todayStr}の評価レポート by エレナ 🌙】\nスコア: ${evaluation.score}点\n判定: ${evaluation.title}\n\n${formatElenaText(evaluation.reason || evaluation.advice)}${conditionText}\n\n(自動配信: 明日も一緒に頑張りましょうね♪)`;
 
                     if (lineUserId) {
                         try {

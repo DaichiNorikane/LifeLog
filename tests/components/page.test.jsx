@@ -60,6 +60,9 @@ const mockGetDailyEvaluation = vi.fn().mockResolvedValue(null);
 const mockAddMealToFirestore = vi.fn().mockResolvedValue('new-meal-id');
 const mockUpdateMealInFirestore = vi.fn().mockResolvedValue(undefined);
 const mockSaveDailyEvaluation = vi.fn().mockResolvedValue(undefined);
+const mockGetActivityLogs = vi.fn().mockResolvedValue([]);
+const mockGetRecentWorkouts = vi.fn().mockResolvedValue([]);
+const mockGetConditionLogs = vi.fn().mockResolvedValue([]);
 
 vi.mock('@/lib/firebase/firestore', () => ({
   addMealToFirestore: (...args) => mockAddMealToFirestore(...args),
@@ -73,6 +76,13 @@ vi.mock('@/lib/firebase/firestore', () => ({
   deleteStockItem: vi.fn(),
   saveDailyEvaluation: (...args) => mockSaveDailyEvaluation(...args),
   getDailyEvaluation: (...args) => mockGetDailyEvaluation(...args),
+  // HealthKit 由来の実測データ（ActivityCard 用）
+  getActivityLogs: (...args) => mockGetActivityLogs(...args),
+  getRecentWorkouts: (...args) => mockGetRecentWorkouts(...args),
+  getConditionLogs: (...args) => mockGetConditionLogs(...args),
+  getConditionLog: vi.fn().mockResolvedValue(null),
+  getConditionModel: vi.fn().mockResolvedValue(null),
+  saveConditionPrediction: vi.fn().mockResolvedValue(undefined),
 }));
 
 // --- Cache Mock ---
@@ -162,6 +172,13 @@ const mockUserProfile = {
   startWeight: 75,
   targetDate: '2026-07-01',
 };
+
+/**
+ * 上段グリッドの「今日のからだ」要約カードに渡っている props を取り出す。
+ * next/dynamic はテストではスタブに差し替わるため、描画結果ではなく props を見る。
+ */
+const getBodySummaryProps = () =>
+  Object.values(_dynamicPropsStore.current).find((p) => p && p.compact === true);
 
 // --- Helpers ---
 function setAuthUser(user = { uid: 'test-user', displayName: 'Test User' }, opts = {}) {
@@ -340,10 +357,10 @@ describe('Home (page.js)', () => {
       });
     });
 
-    it('displays weight card with current weight', async () => {
+    it('passes the current weight to the body summary card', async () => {
       await renderLoggedIn();
       await waitFor(() => {
-        expect(screen.getByText('72.5')).toBeInTheDocument();
+        expect(getBodySummaryProps()?.body?.weight).toBe(72.5);
       });
     });
 
@@ -560,15 +577,12 @@ describe('Home (page.js)', () => {
       expect(dynamicsAfter).toBeGreaterThan(dynamicsBefore);
     });
 
-    it('opens WeightTracker when weight card is clicked', async () => {
+    it('opens the body detail modal from the summary card', async () => {
       await renderLoggedIn();
       const dynamicsBefore = screen.getAllByTestId('dynamic-component').length;
-      const weightTitle = screen.getByText('体重');
-      const weightCard = weightTitle.closest('.glass-panel');
       await act(async () => {
-        fireEvent.click(weightCard);
+        getBodySummaryProps().onOpenDetail();
       });
-      // WeightTracker is shown in a modal-overlay wrapper
       const dynamicsAfter = screen.getAllByTestId('dynamic-component').length;
       expect(dynamicsAfter).toBeGreaterThan(dynamicsBefore);
     });
@@ -708,11 +722,15 @@ describe('Home (page.js)', () => {
   // 11. Weight display
   // =====================
   describe('Weight Display', () => {
-    it('shows weight target progress info', async () => {
+    it('passes the diet goal to the body summary card', async () => {
       await renderLoggedIn();
       await waitFor(() => {
-        // Target weight should appear
-        expect(screen.getByText(/68/)).toBeInTheDocument();
+        expect(getBodySummaryProps()?.goal).toEqual({
+          current: 72.5,
+          target: 68,
+          start: 75,
+          targetDate: '2026-07-01',
+        });
       });
     });
 
@@ -730,7 +748,8 @@ describe('Home (page.js)', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText('--')).toBeInTheDocument();
+        // 体重が1件も無ければ体組成は渡らない（カード側が「--」を出す）
+        expect(getBodySummaryProps()?.body).toBeFalsy();
       });
     });
   });
@@ -997,7 +1016,7 @@ describe('Home (page.js)', () => {
   // 19. Weight with no target
   // =====================
   describe('Weight Card Variants', () => {
-    it('shows "タップして管理" when no weight entry and no target weight', async () => {
+    it('passes no goal when the target weight is not set', async () => {
       setAuthUser();
       mockGetCache.mockResolvedValue(null);
       mockGetMeals.mockResolvedValue([]);
@@ -1011,7 +1030,7 @@ describe('Home (page.js)', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText('タップして管理')).toBeInTheDocument();
+        expect(getBodySummaryProps()?.goal).toBeNull();
       });
     });
 
@@ -1039,8 +1058,12 @@ describe('Home (page.js)', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText('73')).toBeInTheDocument();
-        expect(screen.getByText(/あと.*日/)).toBeInTheDocument();
+        expect(getBodySummaryProps()?.goal).toEqual({
+          current: 73,
+          target: 65,
+          start: 80,
+          targetDate: '2027-01-01',
+        });
       });
     });
   });
@@ -1357,9 +1380,10 @@ describe('Home (page.js)', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText('64')).toBeInTheDocument();
-        // Should show achievement indicator
-        expect(screen.getByText('✓')).toBeInTheDocument();
+        const goal = getBodySummaryProps()?.goal;
+        expect(goal?.current).toBe(64);
+        // 目標を下回っている＝達成状態はカード側が判定する
+        expect(goal.current).toBeLessThanOrEqual(goal.target);
       });
     });
   });
@@ -1683,23 +1707,26 @@ describe('Home (page.js)', () => {
   });
 
   // =====================
-  // 38. WeightTracker callback
+  // 38. BodyDetailModal callback
   // =====================
-  describe('WeightTracker Callback', () => {
-    it('passes correct props to WeightTracker', async () => {
+  describe('BodyDetailModal Callback', () => {
+    it('passes correct props to BodyDetailModal', async () => {
       await renderLoggedIn();
 
-      const weightTitle = screen.getByText('体重');
       await act(async () => {
-        fireEvent.click(weightTitle.closest('.glass-panel'));
+        getBodySummaryProps().onOpenDetail();
       });
 
-      // WeightTracker is index 1
-      const wtProps = _dynamicPropsStore.current[1];
-      expect(wtProps).toBeDefined();
-      expect(wtProps.onClose).toBeDefined();
-      expect(wtProps.onUpdateWeights).toBeDefined();
-      expect(wtProps.weights).toBeDefined();
+      // BodyDetailModal is index 1
+      const modalProps = _dynamicPropsStore.current[1];
+      expect(modalProps).toBeDefined();
+      expect(modalProps.onClose).toBeDefined();
+      expect(modalProps.onUpdateWeights).toBeDefined();
+      expect(modalProps.weights).toBeDefined();
+      // 実測も一緒に渡す（実測と目標を1画面にまとめるため）
+      expect(modalProps).toHaveProperty('activity');
+      expect(modalProps).toHaveProperty('sleep');
+      expect(modalProps).toHaveProperty('workouts');
     });
   });
 

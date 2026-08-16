@@ -1,8 +1,8 @@
 "use client";
-import React, { useState, useMemo, useEffect } from 'react';
-import { X, Save, TrendingDown, Calendar, Target, AlertCircle, Ruler, Loader2, Sparkles } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Save, TrendingDown, Target, AlertCircle, Ruler, Loader2, Sparkles, Flame } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea } from 'recharts';
-import { saveUserProfile, addWeightToFirestore } from '@/lib/firebase/firestore';
+import { saveUserProfile } from '@/lib/firebase/firestore';
 import { analyzeGoalFeasibility } from '@/app/actions/daily-evaluation';
 
 
@@ -38,16 +38,21 @@ const normalizeNullableNumber = (value) => {
     return Number.isFinite(number) ? number : null;
 };
 
-export default function WeightTracker({ user, userProfile, weights, activeDate, onClose, onUpdateWeights, ...props }) {
+/**
+ * ダイエット目標のパネル（いつまでに何kg痩せるか）。
+ *
+ * 体重の実測値は eufy 体組成計 → ヘルスケア → API で自動的に入るため、
+ * 手入力と日々の記録一覧は持たない。ここが引き受けるのは「目標」だけ。
+ * 実測の表示は ActivityCard、この2つを BodyDetailModal が並べて見せる。
+ */
+export default function DietGoalPanel({ user, userProfile, weights, onClose, onUpdateWeights, ...props }) {
     // Current Goals from User Profile
     const [targetWeight, setTargetWeight] = useState(userProfile?.targetWeight || '');
     const [targetDate, setTargetDate] = useState(userProfile?.targetDate || '');
     const [height, setHeight] = useState(userProfile?.height || '');
     const [targetBMI, setTargetBMI] = useState(userProfile?.targetBMI || '22');
+    const [targetCalories, setTargetCalories] = useState(userProfile?.targetCalories ?? '');
     const [isSaving, setIsSaving] = useState(false);
-
-    // Daily Log State
-    const [dailyWeight, setDailyWeight] = useState('');
 
     // Analysis State
     const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -131,27 +136,6 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
     };
 
 
-    const [targetDateForEntry, setTargetDateForEntry] = useState(activeDate ? new Date(activeDate) : new Date());
-
-    // ホーム画面で選択中の日付に追従させる
-    useEffect(() => {
-        if (activeDate) setTargetDateForEntry(new Date(activeDate));
-    }, [activeDate]);
-
-    // Set initial daily weight if exists for targetDateForEntry
-    useEffect(() => {
-        if (!targetDateForEntry) return;
-
-        const d = new Date(targetDateForEntry);
-        const offset = d.getTimezoneOffset() * 60000;
-        const localDate = new Date(d.getTime() - offset);
-        const dateKey = localDate.toISOString().split('T')[0];
-
-        const initial = weights.find(w => w.date === dateKey)?.weight;
-        // If a weight exists, set it. If not, clear it (so we don't carry over weight from other days)
-        setDailyWeight(initial || '');
-    }, [targetDateForEntry, weights]);
-
     // Prepare Graph Data
     const chartData = useMemo(() => {
         // Sort weights by date ascending
@@ -184,11 +168,6 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
 
     const hasBodyFatData = chartData.some(d => !d.isTarget && d.bodyFat !== null);
 
-    const recentWeights = useMemo(() => weights.slice(0, 10).map(w => ({
-        ...w,
-        bodyFat: normalizeNullableNumber(w.bodyFat),
-    })), [weights]);
-
     // Calculate Insights
     const currentWeight = weights.length > 0 ? weights[0].weight : null;
     // In firestore.js `getWeights` sorts by date desc. So weights[0] is latest.
@@ -215,12 +194,25 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
         if (!user) return;
         setIsSaving(true);
         try {
-            await saveUserProfile(user.uid, {
+            const patch = {
                 targetWeight: parseFloat(targetWeight),
                 targetDate: targetDate,
                 height: parseFloat(height),
-                targetBMI: parseFloat(targetBMI)
-            });
+                targetBMI: parseFloat(targetBMI),
+            };
+
+            // 空にしたときは既存値を消さない（未入力と「0にしたい」は区別する）
+            const calories = parseInt(targetCalories, 10);
+            if (Number.isFinite(calories) && calories > 0) patch.targetCalories = calories;
+
+            // 進捗率は「開始体重からどれだけ減ったか」で出す。
+            // startWeight は今まで誰も保存しておらず、常に現在体重にフォールバックしていたため
+            // 進捗が 0% のまま動かなかった。目標を立てた時点の体重をここで記録する。
+            if (userProfile?.startWeight == null && currentWeight) {
+                patch.startWeight = currentWeight;
+            }
+
+            await saveUserProfile(user.uid, patch);
             onUpdateWeights(); // Refresh goals
             alert('目標を保存しました');
         } catch (e) {
@@ -231,33 +223,14 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
         }
     };
 
-    const handleLogWeight = async () => {
-        if (!dailyWeight || !user || !targetDateForEntry) return;
-        try {
-            await addWeightToFirestore(user.uid, dailyWeight, targetDateForEntry);
-            onUpdateWeights(); // Refresh weights
-            alert(`${targetDateForEntry.getMonth() + 1}/${targetDateForEntry.getDate()}の体重を記録しました`);
-        } catch (e) {
-            console.error(e);
-            alert('記録に失敗しました');
-        }
-    }
-
     return (
-        <div className="fixed-overlay">
-            <div className="glass-panel zoom-in" style={{ width: '100%', maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto', padding: '0', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+        <>
+            <div>
+                <h2 style={{ margin: '0 0 16px', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <TrendingDown size={18} color="var(--primary)" /> ダイエット目標
+                </h2>
 
-                {/* Header */}
-                <div style={{ padding: '20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(10px)', zIndex: 10 }}>
-                    <h2 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <TrendingDown color="var(--primary)" /> 体重管理 & 目標
-                    </h2>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-                        <X size={24} />
-                    </button>
-                </div>
-
-                <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '30px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
 
                     {/* --- Metrics Grid (Horizontal Layout) --- */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
@@ -449,34 +422,7 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
                         )}
                     </div>
 
-                    {/* Daily Input */}
-                    <div className="glass-panel" style={{ padding: '20px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '15px' }}>
-                        <div>
-                            <div style={{ fontSize: '0.95rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ color: 'var(--text-primary)' }}>
-                                    {targetDateForEntry.getFullYear()}/{targetDateForEntry.getMonth() + 1}/{targetDateForEntry.getDate()}
-                                </span>
-                                <span>の体重</span>
-                            </div>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>ホーム画面で選択中の日付の体重を記録</div>
-                        </div>
-                        <div style={{ display: 'flex', gap: '10px' }}>
-                            <div style={{ position: 'relative' }}>
-                                <input
-                                    type="number"
-                                    step="0.1"
-                                    value={dailyWeight}
-                                    onChange={(e) => setDailyWeight(e.target.value)}
-                                    placeholder="0.0"
-                                    style={{ ...inputStyle, width: '100px', textAlign: 'center', paddingRight: '25px' }}
-                                />
-                                <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontSize: '0.9rem' }}>kg</span>
-                            </div>
-                            <button className="btn-primary" onClick={handleLogWeight} style={{ padding: '0 15px' }}>記録</button>
-                        </div>
-                    </div>
-
-                    {/* Chart */}
+                    {/* Chart — 体重・体脂肪率の推移。単日の実測は ActivityCard 側が担当する */}
                     <div style={{ height: '300px', width: '100%', background: '#fff', borderRadius: '16px', padding: '10px' }}>
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={chartData} margin={{ top: 20, right: hasBodyFatData ? 42 : 30, left: 0, bottom: 0 }}>
@@ -543,35 +489,36 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
                         </ResponsiveContainer>
                     </div>
 
-                    {/* Weight History */}
-                    <div className="glass-panel" style={{ padding: '20px', borderRadius: '16px' }}>
-                        <h3 style={{ margin: '0 0 15px 0', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Calendar size={18} /> 最近の記録
-                        </h3>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            {recentWeights.length === 0 ? (
-                                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>まだ体重記録がありません</div>
-                            ) : recentWeights.map(w => (
-                                <div key={w.id || w.date} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '10px 0', borderBottom: '1px solid var(--border-subtle)' }}>
-                                    <div style={{ minWidth: 0 }}>
-                                        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{w.date}</div>
-                                        {w.bodyFat !== null && (
-                                            <div style={{ fontSize: '0.75rem', color: '#B45309', marginTop: '2px' }}>体脂肪 {w.bodyFat}%</div>
-                                        )}
-                                    </div>
-                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                                        <span>{`${w.weight} kg`}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
                     {/* Goal Settings Form */}
                     <div className="glass-panel" style={{ padding: '20px', borderRadius: '16px' }}>
                         <h3 style={{ margin: '0 0 15px 0', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <Target size={18} /> 目標設定
                         </h3>
+
+                        {/* 目標カロリー。
+                            以前はエレナの診断直後にしか編集できず、保存すると入力欄ごと消えていた。
+                            日々調整したい値なので、診断とは独立していつでも直せる場所に置く */}
+                        <div style={{ marginBottom: '20px', padding: '15px', background: '#FFF7ED', borderRadius: '12px', border: '1px solid #FED7AA' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                                <Flame size={16} color="#EA580C" />
+                                <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>1日の目標カロリー</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                                <div style={{ flex: 1 }}>
+                                    <input
+                                        type="number"
+                                        value={targetCalories}
+                                        onChange={(e) => setTargetCalories(e.target.value)}
+                                        placeholder="2000"
+                                        style={{ ...inputStyle, textAlign: 'center' }}
+                                    />
+                                </div>
+                                <span style={{ color: 'var(--text-muted)' }}>kcal</span>
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+                                ホーム画面のゲージとエレナの評価が、この値を基準になります
+                            </div>
+                        </div>
 
                         {/* 身長入力 */}
                         <div style={{ marginBottom: '20px', padding: '15px', background: '#f8fafc', borderRadius: '12px' }}>
@@ -669,7 +616,7 @@ export default function WeightTracker({ user, userProfile, weights, activeDate, 
                 .value { font-size: 1.4rem; font-weight: bold; color: var(--text-primary); }
                 .unit { font-size: 0.8rem; font-weight: normal; color: var(--text-muted); }
             `}</style>
-        </div>
+        </>
     );
 }
 

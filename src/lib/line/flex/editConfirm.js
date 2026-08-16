@@ -85,6 +85,7 @@ export const buildEditConfirmFlex = (plan, sid) => {
                             type: 'postback',
                             label: '✅ 実行する',
                             data: postbackData('apply_edit', sid),
+                            displayText: '実行する',
                         },
                     },
                     {
@@ -94,6 +95,7 @@ export const buildEditConfirmFlex = (plan, sid) => {
                             type: 'postback',
                             label: '❌ やめる',
                             data: postbackData('cancel_edit', sid),
+                            displayText: 'やめる',
                         },
                     },
                 ],

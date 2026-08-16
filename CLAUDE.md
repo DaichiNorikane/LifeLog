@@ -4,7 +4,10 @@
 食事記録・ダイエット支援Webアプリ。AIキャラクター「エレナ」が専属トレーナーとしてユーザーを指導する。
 エレナのIP育成が最優先目標。ダイエットトレーナー → 習慣トレーナーへの進化を計画中。
 
-**将来計画**: iOSネイティブアプリ化を予定（`docs/ios-migration-plan.md` 参照）
+**将来計画**:
+- iOSネイティブアプリ化を予定（`docs/ios-migration-plan.md` 参照）
+- 食事が集中力・睡眠・体調に与える影響の可視化（`docs/condition-impact-design.md` 参照）
+- 運動・スクリーンタイム連携と行動ログの可視化（`docs/activity-screentime-design.md` 参照）
 
 ## 技術スタック
 - **Framework**: Next.js 16 (App Router) + React 19
@@ -39,6 +42,10 @@ src/
 │       ├── line/webhook/    # LINE Webhook
 │       ├── line/push/       # LINE Push通知
 │       ├── widget/calories/ # iOSウィジェット用データAPI
+│       ├── health/sync/     # HealthKitまとめて受信API（ショートカットはこれ1本でよい）
+│       ├── health/activity/ # HealthKit日次アクティビティ受信API
+│       ├── health/workout/  # HealthKitワークアウト受信API（冪等）
+│       ├── health/sleep/    # HealthKit睡眠データ受信API
 │       ├── health/weight/   # HealthKit体組成データ受信API
 │       ├── push/send/       # Web Push通知送信
 │       ├── push/subscribe/  # Web Push購読管理
@@ -55,7 +62,9 @@ src/
 │   │                        # ※recentMealsはpage.jsからpropsで受け取る（Firestoreクエリ不要）
 │   ├── EvaluationModal.js   # エレナの日次評価（スコア+表情変化）
 │   ├── AdvisorModal.js      # 食事アドバイザー
-│   ├── WeightTracker.js     # 体重管理
+│   ├── ActivityCard.js      # ヘルスケア実測値（compact=上段の要約 / 通常=全項目）
+│   ├── BodyDetailModal.js   # 「今日のからだ」詳細（実測 + ダイエット目標）
+│   ├── DietGoalPanel.js     # ダイエット目標（いつまでに何kg）+ 推移グラフ + エレナ診断
 │   ├── StockManager.js      # 食材メモ
 │   ├── DietShooter.js       # ミニゲーム（Canvasゲーム）
 │   ├── ElenaChallengeModal.js # クイズ
@@ -71,6 +80,10 @@ src/
 │   ├── line.js              # LINE SDK
 │   ├── usePushNotification.js # Web Push購読フック
 │   ├── pushHelper.js        # Push通知ヘルパー（サーバー側）
+│   ├── health/healthMetrics.js # HealthKit指標の定義（唯一の真実）
+│   ├── health/ingest.js     # HealthKit受信の共通処理（認証・検証・書き込み）
+│   ├── recipeCategories.js  # レシピカテゴリの定義（唯一の真実。WebとLINEで共通）
+│   ├── reports/weeklyReport.js # 週間レポートの集計（cronとLINEオンデマンドで共通）
 │   └── game/                # SoundManager
 ├── data/
 │   └── elena-character.js   # エレナのキャラクター定義
@@ -103,7 +116,74 @@ macros: {
 **重要**: `fiber/sugar/sodium/potassium` は `null` と `0` を区別して保存する。
 `null` = AI が推定できなかった（表示は `―`）、`0` = 実際にゼロ。
 
-体重記録 `users/{uid}/weights/{YYYY-MM-DD}` には、HealthKit連携で `bodyFat` / `bmi` / `leanBodyMass` が追加される。いずれも `number|null` で保存し、未取得は `0` ではなく `null` にする。
+体重記録 `users/{uid}/weights/{YYYY-MM-DD}` には、HealthKit連携で `bodyFat` / `bmi` / `leanBodyMass` / `height` が追加される。いずれも `number|null` で保存し、未取得は `0` ではなく `null` にする。
+HealthKitから取得できる体組成はこの5項目で全部（筋肉量・体水分率・内臓脂肪に相当する型がHealthKitに存在しないため、体組成計アプリに表示があっても取得できない）。
+体脂肪量(kg)は**保存しない**。導出値を保存すると元の値が変わったときに古いまま残るため、表示時に `calcFatMass()` で毎回計算する。
+
+**体重の手入力は廃止済み**（体組成計 → ヘルスケア → API で自動的に入る）。体重だけ手で上書きすると体脂肪率などの導出値と食い違うため。
+`users/{uid}.startWeight` は目標を立てた時点の体重で、進捗率の分母になる。未設定なら進捗バーを出さない（0%固定の嘘表示を避ける）。
+
+## HealthKit連携のデータ構造
+
+| コレクション | 日付キー | 内容 |
+|---|---|---|
+| `users/{uid}/weights/{YYYY-MM-DD}` | カレンダー日 | 体組成5項目 |
+| `users/{uid}/activityLogs/{YYYY-MM-DD}` | カレンダー日 | 歩数・消費カロリー・歩行指標など（定義は `healthMetrics.js`） |
+| `users/{uid}/workouts/{workoutId}` | ID=開始時刻+種目（冪等キー） | 個別ワークアウト |
+| `users/{uid}/conditionLogs/{YYYY-MM-DD}.sleep.objective` | **論理日 -1**（その睡眠を引き起こした食事の日） | 実測睡眠 |
+
+**注意**: アクティビティ・体重はカレンダー日、睡眠だけ帰属日がずれる（意図的な非対称）。理由は `conditionDate.js` 参照。
+新しい指標を足すときは `healthMetrics.js` に1件追加するだけでよい（API検証とUI表示に自動反映される）。
+セットアップ手順は `docs/healthkit-activity-setup.md`。
+
+## ダイエット目標
+
+`users/{uid}` に `targetWeight` / `targetDate` / `targetCalories` / `targetBMI` / `height` / `startWeight` / `lastDiagnosis` を持つ。
+`targetCalories` は `DietGoalPanel` の目標設定フォームからいつでも変更できる（エレナの診断とは独立）。
+
+**LINE からも操作できる**（`src/lib/line/handlers/goal.js`）:
+- 「目標」… 現在の目標を表示
+- 「目標カロリー 1800」「目標体重 75」「目標日 12/31」… 変更
+- 「目標診断」… エレナが実現可能性を判定し、推奨カロリーを提案
+
+ルーティングは `classifyTextRoute` で体重記録より先に判定する（「目標体重 75」を体重の記録と取り違えないため）。
+
+## 栄養素の1日目標
+
+`src/lib/health/dailyTargets.js` が唯一の真実。厚労省「日本人の食事摂取基準(2020年版)」18〜64歳がベース。
+
+**最重要**: 栄養素によって「良い方向」が逆になる。
+- `atLeast`（多いほど良い）… 食物繊維・カリウム・鉄・マグネシウム・オメガ3
+- `atMost`（少ないほど良い）… ナトリウム・糖質
+
+同じ見た目のバーで両方を表すと 100% が良いのか悪いのか分からなくなるため、`direction` を型として持ち、色（緑=達成 / 黄=不足 / 赤=超過）で区別する。
+値は**性別で変わる**（`userProfile.gender`。未設定なら男性）。糖質だけは公的基準がないため目標カロリーから導出する。
+
+## LINE のリッチメニュー
+
+`scripts/create-richmenu.mjs` で登録する（画像は 2500×1686）。3列×3行:
+アルバムから / 履歴から / レシピ登録 ／ 何食べる？ / 今日のまとめ / 今日の総評 ／ からだ / 目標 / 週間レポート
+
+画像は `scripts/generate-richmenu-image.mjs` で生成する（`--dark` で黒背景版）。
+セルの並びを変えたら create-richmenu.mjs の areas と両方直すこと。
+
+「からだ」は `src/lib/line/handlers/body.js`（歩数・睡眠・体組成・目標までの残り）。
+「何食べる？」は postback `action=suggest_meal` で、時刻から朝/昼/夕を選んで既存の提案ハンドラを呼ぶ。
+「レシピ登録」は `src/lib/line/handlers/recipes.js`。Webで登録したレシピをカルーセルで出し、
+`action=log_recipe&rid=<レシピID>` で今日の記録として保存する（履歴と同じく食事タイプを選んでから保存）。
+カテゴリは Web と共通の `src/lib/recipeCategories.js` を使い、末尾の操作カードから絞り込める（`cat=none` は未分類）。
+「今日の総評」は `src/lib/line/handlers/daily-review.js`。`evaluateDailyLog` をその場で実行し、
+cron の日次レポートと同じ `daily_evaluations/{YYYYMMDD}` に保存する（週間レポートの集計対象になる）。
+「週間レポート」は `src/lib/line/handlers/weekly-report.js`。集計は cron/weekly-summary と共通の
+`src/lib/reports/weeklyReport.js`（相関分析の更新だけは週1回の cron のみ）。
+「履歴から」は `src/lib/line/handlers/recent-meals.js`。料理名で重複を除いた過去の記録をカルーセルで出し、
+`action=log_recent&mid=<食事ID>` で今日の記録として複製する（評価スコアは引き継がない）。
+「これを記録」を押すと、まず朝食/昼食/夕食/間食を選ぶカードを返す（`buildRecentMealTypeFlex`）。
+時間帯に合うタイプを緑で強調するが、保存されるのは押したタイプ（`action=log_recent&mid=<ID>&type=<タイプ>`）。
+夜に食べたものを翌日の昼に食べる、のようにタイプが変わることが多いので時間帯まかせにはしない。
+カルーセルは12枚が上限なので、料理11件＋末尾に操作カード（もっと見る/キーワードで探す/すべて表示）を置く。
+検索は「履歴 唐揚げ」と送るか、「キーワードで探す」を押して次の発話を待つ（`awaiting_recent_search`）。
+Firestore は部分一致検索ができないため、直近300件を読んでメモリ上で絞り込む。
 
 ## Gemini API の設計
 

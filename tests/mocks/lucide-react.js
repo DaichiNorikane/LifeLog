@@ -22,9 +22,11 @@ const iconNames = [
   'Flame', 'Activity', 'LogIn', 'Gamepad2', 'Brain', 'Bell', 'BellOff',
   'ThumbsUp', 'ThumbsDown', 'CheckCircle', 'RefreshCw',
   'ReferenceArea', 'ReferenceLine',
+  'Moon', 'Settings2', 'Check', 'Coffee', 'TrendingUp',
+  'ChevronDown', 'ChevronUp', 'Dumbbell', 'Footprints', 'Scale',
   // ProjectorSimulator
-  'Projector', 'MoveVertical', 'Sun', 'Eye', 'Settings2', 'Monitor',
-  'ArrowLeftRight', 'ChevronDown', 'ChevronUp', 'Lightbulb', 'Maximize2',
+  'Projector', 'MoveVertical', 'Sun', 'Eye', 'Monitor',
+  'ArrowLeftRight', 'Lightbulb', 'Maximize2',
 ];
 
 const mocks = {};

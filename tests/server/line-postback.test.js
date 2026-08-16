@@ -15,6 +15,9 @@ const mocks = vi.hoisted(() => ({
   clearLineState: vi.fn().mockResolvedValue(undefined),
   getLineStateBySid: vi.fn(),
   setLineState: vi.fn().mockResolvedValue(undefined),
+  handleRecipesEvent: vi.fn().mockResolvedValue({}),
+  handleRecipeCategoriesEvent: vi.fn().mockResolvedValue({}),
+  handleLogRecipe: vi.fn().mockResolvedValue({}),
 }));
 
 vi.mock('@/app/actions/daily-evaluation', () => ({
@@ -41,6 +44,13 @@ vi.mock('@/lib/line/state', () => ({
   clearLineState: mocks.clearLineState,
   getLineStateBySid: mocks.getLineStateBySid,
   setLineState: mocks.setLineState,
+}));
+
+// postback.js から動的 import されるレシピハンドラ
+vi.mock('@/lib/line/handlers/recipes', () => ({
+  handleRecipesEvent: mocks.handleRecipesEvent,
+  handleRecipeCategoriesEvent: mocks.handleRecipeCategoriesEvent,
+  handleLogRecipe: mocks.handleLogRecipe,
 }));
 
 import { EXPIRED_CARD_MESSAGE, handlePostbackEvent } from '@/lib/line/handlers/postback';
@@ -230,5 +240,52 @@ describe('LINE postback meal confirmation', () => {
 
     expect(mocks.deleteMealsAdmin).not.toHaveBeenCalled();
     expect(mocks.replyOrPushMessage).toHaveBeenCalledWith(expect.any(Object), EXPIRED_CARD_MESSAGE);
+  });
+});
+
+describe('LINE postback recipe actions', () => {
+  it('dispatches action=recipes with offset and category', async () => {
+    await handlePostbackEvent({
+      ...event,
+      postback: { data: 'action=recipes&offset=11&cat=main' },
+    });
+
+    expect(mocks.handleRecipesEvent).toHaveBeenCalledWith(
+      expect.any(Object), { uid: 'uid-1', data: {} }, { offset: '11', category: 'main' },
+    );
+  });
+
+  it('dispatches action=recipe_cats to the category picker', async () => {
+    await handlePostbackEvent({
+      ...event,
+      postback: { data: 'action=recipe_cats' },
+    });
+
+    expect(mocks.handleRecipeCategoriesEvent).toHaveBeenCalledWith(
+      expect.any(Object), { uid: 'uid-1', data: {} },
+    );
+  });
+
+  it('dispatches action=log_recipe with the recipe id and type', async () => {
+    await handlePostbackEvent({
+      ...event,
+      postback: { data: 'action=log_recipe&rid=r1&type=lunch' },
+    });
+
+    expect(mocks.handleLogRecipe).toHaveBeenCalledWith(
+      expect.any(Object), { uid: 'uid-1', data: {} }, 'r1', 'lunch',
+    );
+  });
+
+  it('replies casually on cancel_recipe without touching state', async () => {
+    await handlePostbackEvent({
+      ...event,
+      postback: { data: 'action=cancel_recipe' },
+    });
+
+    expect(mocks.clearLineState).not.toHaveBeenCalled();
+    expect(mocks.replyOrPushMessage).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+      text: expect.stringContaining('レシピ'),
+    }));
   });
 });

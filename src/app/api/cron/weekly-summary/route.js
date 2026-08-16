@@ -2,36 +2,9 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase/admin';
 import { getLineClient } from '@/lib/line';
 import { sendPushToUser, getJSTToday } from '@/lib/pushHelper';
-
-const ELENA_WEEKLY_COMMENTS = {
-    perfect: [
-        '7日全部記録！完璧すぎませんか！？もう習慣マスターですよ✨',
-        'パーフェクト記録！エレナ、感動しています…来週も一緒に頑張りましょうね😭✨',
-    ],
-    great: [
-        'すごい！ほぼ毎日記録できていますね！あと少しでパーフェクト🔥',
-        'いい感じです！この調子なら来週はもっといけますよ💪',
-    ],
-    good: [
-        '半分以上記録できましたね！少しずつ増やしていきましょう🍀',
-        'まずまずです！来週はあと1日多く記録してみませんか？😊',
-    ],
-    low: [
-        '今週はちょっと少なかったですね。でも大丈夫、来週リセットですよ！',
-        '忙しかったですか？来週は1日でも多く記録できるといいですね♪',
-    ],
-};
-
-function pickRandom(arr) {
-    return arr[Math.floor(Math.random() * arr.length)];
-}
-
-function getWeeklyComment(recordDays) {
-    if (recordDays === 7) return pickRandom(ELENA_WEEKLY_COMMENTS.perfect);
-    if (recordDays >= 5) return pickRandom(ELENA_WEEKLY_COMMENTS.great);
-    if (recordDays >= 3) return pickRandom(ELENA_WEEKLY_COMMENTS.good);
-    return pickRandom(ELENA_WEEKLY_COMMENTS.low);
-}
+import { getConditionLogsAdmin, saveConditionModelAdmin } from '@/lib/firebase/adminHelpers';
+import { analyzeDriverCorrelations, toDisplayableFindings, countAnalyzableDays, MIN_SAMPLE_DAYS } from '@/lib/health/correlation';
+import { buildWeeklyReportText, collectWeeklyStats, getWeekDates, getWeeklyComment } from '@/lib/reports/weeklyReport';
 
 export async function GET(request) {
     const authHeader = request.headers.get('authorization');
@@ -44,15 +17,7 @@ export async function GET(request) {
         const { todayStr } = getJSTToday();
 
         // Calculate week range (last 7 days: Mon-Sun)
-        const today = new Date(todayStr + 'T12:00:00+09:00');
-        const weekDates = [];
-        for (let i = 7; i >= 1; i--) {
-            const d = new Date(today);
-            d.setDate(d.getDate() - i);
-            weekDates.push(d.toISOString().split('T')[0]);
-        }
-        const weekStart = weekDates[0];
-        const weekEnd = weekDates[weekDates.length - 1];
+        const weekDates = getWeekDates(todayStr);
 
         const usersSnapshot = await db.collection('users').get();
         if (usersSnapshot.empty) return NextResponse.json({ message: 'No users' });
@@ -68,47 +33,39 @@ export async function GET(request) {
 
             if (!lineUserId && !pushSubscription) continue;
 
-            // Collect daily evaluations for the week
-            let recordDays = 0;
-            let totalScore = 0;
-            let scoreCount = 0;
-
-            for (const dateStr of weekDates) {
-                const dateKey = dateStr.replace(/-/g, '');
-                const evalDoc = await db.collection('users').doc(userId)
-                    .collection('daily_evaluations').doc(dateKey).get();
-                if (evalDoc.exists) {
-                    recordDays++;
-                    const score = evalDoc.data().score;
-                    if (score != null) {
-                        totalScore += score;
-                        scoreCount++;
-                    }
-                }
-            }
+            // Collect daily evaluations & weight change for the week
+            const stats = await collectWeeklyStats(userId, weekDates);
+            const { weekStart, recordDays, avgScore } = stats;
 
             // Skip if no records this week
             if (recordDays === 0) continue;
 
-            const avgScore = scoreCount > 0 ? Math.round(totalScore / scoreCount) : '-';
-
-            // Weight change
-            let weightText = '';
-            const startWeightDoc = await db.collection('users').doc(userId)
-                .collection('weights').doc(weekStart).get();
-            const endWeightDoc = await db.collection('users').doc(userId)
-                .collection('weights').doc(weekEnd).get();
-            if (startWeightDoc.exists && endWeightDoc.exists) {
-                const startW = startWeightDoc.data().weight;
-                const endW = endWeightDoc.data().weight;
-                const diff = (endW - startW).toFixed(1);
-                const sign = diff > 0 ? '+' : '';
-                weightText = `\n体重: ${startW}kg → ${endW}kg (${sign}${diff}kg)`;
-            }
-
             const comment = getWeeklyComment(recordDays);
 
-            const text = `【週間レポート by エレナ 📊】\n期間: ${weekStart} 〜 ${weekEnd}\n記録日数: ${recordDays}/7日\n平均スコア: ${avgScore}点${weightText}\n\nエレナ: ${comment}`;
+            // 週1回だけ相関分析を回して個人係数を更新する。
+            // Gemini は使わない（純粋な集計なので API コストはゼロ）。
+            let insightText = '';
+            try {
+                const logs = await getConditionLogsAdmin(userId, 60);
+                const analyzable = countAnalyzableDays(logs);
+
+                if (analyzable > 0) {
+                    const model = analyzeDriverCorrelations(logs);
+                    await saveConditionModelAdmin(userId, model);
+
+                    const findings = toDisplayableFindings(model, 2);
+                    if (findings.length > 0) {
+                        insightText = `\n\n【今週わかったあなたのこと🔍】\n${findings.join('\n')}\n※これは相関の観察です。断定はできませんが、傾向として見てみてくださいね。`;
+                    } else {
+                        // 「まだ分からない」も正直に伝える（沈黙より信頼される）
+                        insightText = `\n\n【体調の分析】\n体感の記録が${analyzable}日分たまりました。あと${Math.max(0, MIN_SAMPLE_DAYS * 2 - analyzable)}日ぶんくらいで、あなただけの傾向が見えてきますよ📊`;
+                    }
+                }
+            } catch (e) {
+                console.error(`[Weekly] Condition analysis failed for ${userId}:`, e.message);
+            }
+
+            const text = buildWeeklyReportText({ ...stats, comment, insightText });
 
             // Send via LINE
             if (lineUserId) {

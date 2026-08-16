@@ -29,6 +29,7 @@ vi.mock('@/app/actions/gemini-client', () => ({
   GOAL_ANALYSIS_SCHEMA: {},
   MEAL_RANKING_SCHEMA: {},
   CATEGORY_EVAL_SCHEMA: {},
+  buildPrompt: (staticPart, dynamicPart) => `${String(staticPart).trim()}\n\n${String(dynamicPart).trim()}`,
 }));
 
 const mockSuggestNextMeal = vi.fn(() =>
@@ -311,5 +312,68 @@ describe('evaluateMealCategory', () => {
     mockGenerateContent.mockRejectedValue(new Error('Fail'));
     const result = await evaluateMealCategory('lunch', baseMeals);
     expect(result.error).toBeDefined();
+  });
+});
+
+// implicit caching はリクエスト先頭のプレフィックス一致でしか効かない。
+// 指示と実データが混ざる並びに戻ると割引が丸ごと消えるため、順序を回帰テストで固定する。
+describe('プロンプトのキャッシュ最適化', () => {
+  const promptOf = () => mockGenerateContent.mock.calls[0][0];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGenerateContent.mockResolvedValue({
+      response: { text: () => JSON.stringify({ score: 5, reason: 'ok', characterStatus: '[STATUS: NORMAL]', title: 't', advice: 'a', foodAssessments: [], reasoning: 'r' }) },
+    });
+  });
+
+  it('evaluateDailyLog は静的な指示を実データより前に置く', async () => {
+    await evaluateDailyLog({ targetCalories: 2000, consumedCalories: 1000, meals: [] });
+    const prompt = promptOf();
+
+    const spec = prompt.indexOf('【出力フィールドの仕様】');
+    const data = prompt.indexOf('# Context（ここから下が今回の実データ）');
+    expect(spec).toBeGreaterThan(-1);
+    expect(data).toBeGreaterThan(spec);
+  });
+
+  it('evaluateDailyLog の静的プレフィックスは入力が変わっても同一', async () => {
+    await evaluateDailyLog({ targetCalories: 2000, consumedCalories: 1000, meals: [] });
+    const first = promptOf();
+
+    mockGenerateContent.mockClear();
+    await evaluateDailyLog({
+      targetCalories: 2500, consumedCalories: 2400, currentWeight: 70,
+      meals: [{ foodName: 'ラーメン', calories: 900, mealType: 'lunch' }],
+      historySummary: '昨日 2100kcal',
+    });
+    const second = promptOf();
+
+    const cut = (p) => p.slice(0, p.indexOf('# Context（ここから下が今回の実データ）'));
+    expect(cut(first)).toBe(cut(second));
+    expect(cut(first).length).toBeGreaterThan(1024); // キャッシュ最小トークン相当
+  });
+
+  it('evaluateSingleMeal も静的な指示を先に置く', async () => {
+    await evaluateSingleMeal({ foodName: '寿司', calories: 500, mealType: 'dinner', macros: {} });
+    const prompt = promptOf();
+
+    const criteria = prompt.indexOf('【採点基準 (0-10点)】');
+    const target = prompt.indexOf('【評価対象の料理】');
+    expect(criteria).toBeGreaterThan(-1);
+    expect(target).toBeGreaterThan(criteria);
+  });
+
+  it('コンディション予測が渡されれば日次評価にも反映される', async () => {
+    await evaluateDailyLog({
+      targetCalories: 2000, consumedCalories: 1000, meals: [],
+      conditionSummary: '集中力72 / 睡眠38',
+    });
+    expect(promptOf()).toContain('集中力72 / 睡眠38');
+  });
+
+  it('コンディション予測が無ければ何も足さない', async () => {
+    await evaluateDailyLog({ targetCalories: 2000, consumedCalories: 1000, meals: [] });
+    expect(promptOf()).not.toContain('今日のコンディション予測');
   });
 });

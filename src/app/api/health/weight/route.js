@@ -1,41 +1,12 @@
 import { NextResponse } from 'next/server';
-import { FieldValue } from 'firebase-admin/firestore';
-import { db } from '@/lib/firebase/admin';
+import { verifyWidgetToken, writeWeight } from '@/lib/health/ingest';
 
-const toFiniteNumber = (value) => {
-    if (value === undefined || value === null) return null;
-    if (typeof value === 'string' && value.trim() === '') return null;
-
-    const number = Number(value);
-    return Number.isFinite(number) ? number : null;
-};
-
-const getJSTDateId = (date) => {
-    const formatter = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Tokyo',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-    });
-
-    const parts = formatter.formatToParts(date).reduce((acc, part) => {
-        acc[part.type] = part.value;
-        return acc;
-    }, {});
-
-    return `${parts.year}-${parts.month}-${parts.day}`;
-};
-
-const parseMeasuredAt = (value) => {
-    if (!value) return new Date();
-
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? null : date;
-};
+// HealthKit（iOSショートカット経由）からの体組成データ受信API。
+// eufy 体組成計 → EufyLife → Apple ヘルスケア → ショートカット、という経路で届く。
+// 手順は docs/eufy-healthkit-setup.md を参照。
 
 export async function POST(request) {
-    const token = request.headers.get('x-widget-token');
-    if (!token || token !== process.env.WIDGET_TOKEN) {
+    if (!verifyWidgetToken(request)) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -46,58 +17,20 @@ export async function POST(request) {
         return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
     }
 
-    const { uid, weight, bodyFat, bmi, leanBodyMass, measuredAt } = body || {};
+    const { uid, ...payload } = body || {};
 
     if (!uid) {
         return NextResponse.json({ error: 'Missing uid' }, { status: 400 });
     }
 
-    if (weight === undefined || weight === null) {
-        return NextResponse.json({ error: 'Missing weight' }, { status: 400 });
-    }
-
-    const weightValue = toFiniteNumber(weight);
-    if (weightValue === null || weightValue <= 0 || weightValue >= 500) {
-        return NextResponse.json({ error: 'Invalid weight' }, { status: 400 });
-    }
-
-    const measuredAtDate = parseMeasuredAt(measuredAt);
-    if (!measuredAtDate) {
-        return NextResponse.json({ error: 'Invalid measuredAt' }, { status: 400 });
-    }
-
-    const date = getJSTDateId(measuredAtDate);
-    const bodyFatValue = toFiniteNumber(bodyFat);
-    const bmiValue = toFiniteNumber(bmi);
-    const leanBodyMassValue = toFiniteNumber(leanBodyMass);
-
-    const payload = {
-        weight: weightValue,
-        bodyFat: bodyFatValue,
-        bmi: bmiValue,
-        leanBodyMass: leanBodyMassValue,
-        date,
-        timestamp: measuredAtDate.toISOString(),
-        updatedAt: FieldValue.serverTimestamp(),
-        source: 'healthkit',
-    };
-
     try {
-        await db
-            .collection('users')
-            .doc(uid)
-            .collection('weights')
-            .doc(date)
-            .set(payload, { merge: true });
+        const result = await writeWeight(uid, payload);
+        if (!result.ok) {
+            return NextResponse.json({ error: result.error }, { status: result.status || 400 });
+        }
 
-        return NextResponse.json({
-            success: true,
-            date,
-            weight: weightValue,
-            bodyFat: bodyFatValue,
-            bmi: bmiValue,
-            leanBodyMass: leanBodyMassValue,
-        });
+        const { ok, ...values } = result;
+        return NextResponse.json({ success: true, ...values });
     } catch (error) {
         console.error('[Health Weight] Error:', error);
         return NextResponse.json({ error: 'Internal error' }, { status: 500 });

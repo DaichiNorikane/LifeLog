@@ -1,11 +1,84 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '@/lib/firebase/admin';
 import { cleanData } from '@/utils/cleanData';
+import { evaluateCondition, hasAnyScore } from '@/lib/health/conditionEngine';
+import { getLogicalDateKey } from '@/lib/health/conditionDate';
+import { AXES, AXIS_LABELS } from '@/lib/health/conditionRules';
+import { buildEveningSleepNote } from '@/lib/health/conditionMessages';
 
 const VALID_MEAL_TYPES = new Set(['breakfast', 'lunch', 'dinner', 'snack']);
 
 const userRef = (uid) => db.collection('users').doc(uid);
 const mealsRef = (uid) => userRef(uid).collection('meals');
+
+/**
+ * 相関分析用に体感ログをまとめて取得する（Admin SDK）。
+ * 予測スナップショット（predicted / firedDrivers）と実測（主観スコア）が同じドキュメントに入っている。
+ */
+/**
+ * その論理日のコンディションを算出して、LINE 用に要約する。
+ * 決定論エンジンなので Gemini の追加呼び出しは発生しない。
+ */
+export const buildConditionContextAdmin = (meals = [], userProfile = {}, now = new Date()) => {
+    const dateKey = getLogicalDateKey(now);
+    const result = evaluateCondition({
+        dateKey,
+        meals,
+        profile: {
+            bedtime: userProfile?.bedtime,
+            targetCalories: userProfile?.targetCalories,
+            currentWeight: userProfile?.currentWeight,
+        },
+        now,
+    });
+
+    if (!hasAnyScore(result)) return null;
+
+    const scores = {};
+    for (const axis of AXES) {
+        scores[axis] = result.axes?.[axis]?.score ?? null;
+    }
+
+    return {
+        dateKey,
+        scores,
+        topNegative: result.topNegative
+            ? { axis: result.topNegative.axis, label: result.topNegative.label, detail: result.topNegative.detail || null }
+            : null,
+        topPositive: result.topPositive
+            ? { axis: result.topPositive.axis, label: result.topPositive.label, detail: result.topPositive.detail || null }
+            : null,
+        sleepNote: buildEveningSleepNote(result),
+        result,
+    };
+};
+
+export const getConditionLogsAdmin = async (uid, limitCount = 60) => {
+    if (!uid) return [];
+    try {
+        const snapshot = await db.collection('users').doc(uid)
+            .collection('conditionLogs')
+            .orderBy('date', 'desc')
+            .limit(limitCount)
+            .get();
+        return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+        console.error('[adminHelpers] getConditionLogsAdmin failed:', e.message);
+        return [];
+    }
+};
+
+/** 学習した個人係数を保存する（Admin SDK） */
+export const saveConditionModelAdmin = async (uid, model) => {
+    if (!uid || !model) return;
+    try {
+        await db.collection('users').doc(uid)
+            .collection('insights').doc('conditionModel')
+            .set({ ...model, updatedAt: new Date().toISOString() });
+    } catch (e) {
+        console.error('[adminHelpers] saveConditionModelAdmin failed:', e.message);
+    }
+};
 
 export const findUserByLineId = async (lineUserId) => {
     if (!lineUserId) return null;
@@ -73,6 +146,33 @@ export const addWeightAdmin = async (uid, weight, date = new Date()) => {
     return { id: dateId, ...payload };
 };
 
+/** プロフィール（目標）の部分更新。LINE から目標を変えるときに使う */
+export const updateUserProfileAdmin = async (uid, patch = {}) => {
+    const clean = Object.fromEntries(
+        Object.entries(patch).filter(([, value]) => value !== undefined)
+    );
+    if (Object.keys(clean).length === 0) return null;
+
+    await userRef(uid).set({ ...clean, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    return clean;
+};
+
+/** 直近 days 日の「記録がある日」の平均摂取カロリー。目標診断の材料になる */
+export const getRecentAverageCaloriesAdmin = async (uid, days = 7) => {
+    const meals = await getRecentMealsAdmin(uid, { sinceMs: days * 24 * 60 * 60 * 1000, limit: 200 });
+    if (meals.length === 0) return null;
+
+    const byDate = new Map();
+    for (const meal of meals) {
+        const dateId = getJstDateId(new Date(meal.timestamp));
+        byDate.set(dateId, (byDate.get(dateId) || 0) + (Number(meal.calories) || 0));
+    }
+    if (byDate.size === 0) return null;
+
+    const total = [...byDate.values()].reduce((sum, value) => sum + value, 0);
+    return Math.round(total / byDate.size);
+};
+
 export const getLatestWeightBefore = async (uid, dateId) => {
     const snapshot = await userRef(uid).collection('weights')
         .where('date', '<', dateId)
@@ -100,6 +200,75 @@ export const getRecentMealsAdmin = async (uid, { sinceMs = 48 * 60 * 60 * 1000, 
         .limit(limit)
         .get();
     return mapSnapshotDocs(snapshot);
+};
+
+/** 履歴として読みにいく上限。これを超えて古い記録は検索対象にしない */
+const RECENT_MEALS_SCAN_LIMIT = 300;
+
+/**
+ * 履歴から登録するための「よく食べたもの」一覧。
+ *
+ * 同じ料理を何度も記録していることが多いので、料理名で重複を除いて新しい順に返す。
+ * Firestore は部分一致検索ができないため、直近をまとめて読んでメモリ上で絞り込む。
+ *
+ * @returns {{meals: Array, total: number}} total は絞り込み後の全件数（続きがあるかの判定に使う）
+ */
+export const getRecentUniqueMealsAdmin = async (uid, { limit = 10, offset = 0, query = '' } = {}) => {
+    const snapshot = await mealsRef(uid)
+        .orderBy('timestamp', 'desc')
+        .limit(RECENT_MEALS_SCAN_LIMIT)
+        .get();
+
+    const keyword = String(query || '').trim().toLowerCase();
+    const seen = new Set();
+    const unique = [];
+
+    for (const doc of snapshot.docs) {
+        const data = doc.data() || {};
+        const name = String(data.foodName || '').trim();
+        if (!name) continue;
+
+        // 大文字小文字の違いで同じ料理が二重に並ばないようにする
+        const key = name.toLowerCase();
+        if (seen.has(key)) continue;
+        if (keyword && !key.includes(keyword)) continue;
+
+        seen.add(key);
+        unique.push({ id: doc.id, ...data });
+    }
+
+    return {
+        meals: unique.slice(offset, offset + limit),
+        total: unique.length,
+    };
+};
+
+// LINE のレシピカルーセルで一度に読む上限。Web 側の取得上限（200件）と合わせる
+const RECIPES_SCAN_LIMIT = 200;
+
+/**
+ * 保存済みレシピの一覧（LINE の「レシピから記録」用）。
+ * カテゴリ絞り込みはメモリ上で行う（Firestore の複合インデックスを増やさないため）。
+ * 全件返して呼び出し側でページングする。
+ */
+export const getRecipesAdmin = async (uid) => {
+    const snapshot = await userRef(uid).collection('recipes')
+        .orderBy('createdAt', 'desc')
+        .limit(RECIPES_SCAN_LIMIT)
+        .get();
+    return mapSnapshotDocs(snapshot);
+};
+
+/** レシピ1件（「これを記録」で栄養素をコピーするため） */
+export const getRecipeByIdAdmin = async (uid, recipeId) => {
+    const doc = await userRef(uid).collection('recipes').doc(recipeId).get();
+    return doc.exists ? { id: doc.id, ...doc.data() } : null;
+};
+
+/** 1件だけ取り出す（履歴から登録するときに元の栄養素をコピーするため） */
+export const getMealByIdAdmin = async (uid, mealId) => {
+    const doc = await mealsRef(uid).doc(mealId).get();
+    return doc.exists ? { id: doc.id, ...doc.data() } : null;
 };
 
 export const deleteMealsAdmin = async (uid, ids = []) => {
@@ -199,6 +368,8 @@ export const getLineChatContextAdmin = async (uid, userData = {}, date = new Dat
         recentWeights: mapSnapshotDocs(weightsSnap),
         stockItems: mapSnapshotDocs(stockSnap).map(item => ({ name: item.name })).filter(item => item.name),
         latestDailyEvaluation: mapSnapshotDocs(dailyEvalSnap)[0] || null,
+        // コンディション予測（決定論エンジン。API呼び出しなし）
+        condition: buildConditionContextAdmin(meals, userProfile, date),
         messageHistory: mapSnapshotDocs(messagesSnap).reverse().map(message => ({
             role: message.role,
             text: message.text,

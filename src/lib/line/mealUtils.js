@@ -7,6 +7,11 @@ export const MEAL_TYPE_LABELS = {
     snack: '間食',
 };
 
+// ボタンを並べる順番。1日の流れと同じにしておく
+export const MEAL_TYPE_ORDER = ['breakfast', 'lunch', 'dinner', 'snack'];
+
+export const isMealType = (value) => Object.hasOwn(MEAL_TYPE_LABELS, String(value || ''));
+
 const nullableNumber = (value) => {
     if (value === null || value === undefined || value === '') return null;
     const number = Number(value);

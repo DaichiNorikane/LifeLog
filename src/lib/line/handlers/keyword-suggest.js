@@ -2,6 +2,7 @@ import { db } from '@/lib/firebase/admin';
 import { suggestNextMeal } from '@/app/actions/meal-advisor';
 import { replyOrPushMessage } from '@/lib/line/client';
 import { resolveUserOrReply } from '@/lib/line/resolveUser';
+import { formatElenaText } from '@/lib/line/textFormat';
 
 export const MEAL_KEYWORDS = {
     '朝食': 'breakfast',
@@ -49,7 +50,7 @@ export const handleKeywordSuggestEvent = async (event, targetType = MEAL_KEYWORD
 
         await replyOrPushMessage(event, {
             type: 'text',
-            text: `${result.advice}\n\n【おすすめメニュー】\n${suggestionText}`,
+            text: `${formatElenaText(result.advice)}\n\n【おすすめメニュー】\n${suggestionText}`,
         });
     } catch (e) {
         console.error("Suggestion Error:", e);

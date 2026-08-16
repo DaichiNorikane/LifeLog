@@ -111,3 +111,63 @@ describe('line chat prompt guardrails', () => {
     expect(prompt).toContain('食べたら写真か一言で送ってくださいね');
   });
 });
+
+describe('コンディション（体調）の文脈', () => {
+  const promptOf = () => mocks.generateContent.mock.calls[0][0];
+
+  const withCondition = (condition) => ({ ...chatContext, condition });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.createModel.mockReturnValue({ generateContent: mocks.generateContent });
+    mocks.generateContent.mockResolvedValue(makeTextResponse('了解です！'));
+  });
+
+  it('4軸のスコアをプロンプトに載せる', async () => {
+    await generateElenaChatReply(withCondition({
+      scores: { focus: 72, sleep: 38, energy: 61, mood: 65 },
+      topNegative: { axis: 'sleep', label: '午後以降のカフェイン', detail: '14時以降に2回' },
+      topPositive: { axis: 'focus', label: '朝食のタンパク質', detail: '朝食で25g' },
+    }));
+
+    const prompt = promptOf();
+    expect(prompt).toContain('集中力72');
+    expect(prompt).toContain('睡眠38');
+    expect(prompt).toContain('最も響いている要因: 午後以降のカフェイン（14時以降に2回）');
+  });
+
+  it('スコアが出ていない軸は載せない', async () => {
+    await generateElenaChatReply(withCondition({
+      scores: { focus: 72, sleep: null, energy: null, mood: null },
+      topNegative: null, topPositive: null,
+    }));
+
+    const prompt = promptOf();
+    expect(prompt).toContain('集中力72');
+    expect(prompt).not.toContain('睡眠null');
+  });
+
+  it('コンディションが無ければ「まだ判定できません」と伝える', async () => {
+    await generateElenaChatReply({ ...chatContext, condition: null });
+    expect(promptOf()).toContain('まだ判定できません');
+  });
+
+  it('数値の再計算を禁止する指示が入っている', async () => {
+    await generateElenaChatReply(withCondition({ scores: { sleep: 38 } }));
+    const prompt = promptOf();
+    expect(prompt).toContain('変更・再計算してはいけません');
+    expect(prompt).toContain('別システムが算出。変更禁止');
+  });
+
+  it('責めずに体の反応として説明するよう指示している', async () => {
+    await generateElenaChatReply(withCondition({ scores: { sleep: 38 } }));
+    const prompt = promptOf();
+    expect(prompt).toContain('体の反応');
+    expect(prompt).toContain('責めない');
+  });
+
+  it('診断を避ける指示が入っている', async () => {
+    await generateElenaChatReply(withCondition({ scores: { sleep: 38 } }));
+    expect(promptOf()).toContain('診断・病名の断定は禁止');
+  });
+});

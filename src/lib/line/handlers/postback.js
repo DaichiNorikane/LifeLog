@@ -11,6 +11,7 @@ import { buildMealConfirmFlex } from '@/lib/line/flex/mealConfirm';
 import { buildMealSavedFlex } from '@/lib/line/flex/mealSaved';
 import { MEAL_TYPE_LABELS } from '@/lib/line/mealUtils';
 import { resolveUserOrReply } from '@/lib/line/resolveUser';
+import { formatElenaText } from '@/lib/line/textFormat';
 import { clearLineState, getLineStateBySid, setLineState } from '@/lib/line/state';
 
 export const EXPIRED_CARD_MESSAGE = {
@@ -25,8 +26,10 @@ export const parsePostbackData = (data) => {
         sid: params.get('sid'),
         type: params.get('type'),
         mid: params.get('mid'),        // 履歴から登録するときの元の食事ID
-        offset: params.get('offset'),  // 履歴の続きを見るときの開始位置
+        offset: params.get('offset'),  // 履歴・レシピの続きを見るときの開始位置
         q: params.get('q'),            // 履歴の絞り込みキーワード
+        rid: params.get('rid'),        // レシピから登録するときのレシピID
+        cat: params.get('cat'),        // レシピのカテゴリ絞り込み（'none'=未分類）
     };
 };
 
@@ -69,7 +72,7 @@ export const handlePostbackEvent = async (event) => {
     const user = await resolveUserOrReply(event);
     if (!user) return;
 
-    const { action, sid, type, mid, offset, q } = parsePostbackData(event.postback?.data);
+    const { action, sid, type, mid, offset, q, rid, cat } = parsePostbackData(event.postback?.data);
 
     // リッチメニューの「何食べる？」。時間帯から朝/昼/夕を選んで既存の提案を出す
     if (action === 'suggest_meal') {
@@ -84,6 +87,37 @@ export const handlePostbackEvent = async (event) => {
     if (action === 'recent_meals') {
         const { handleRecentMealsEvent } = await import('@/lib/line/handlers/recent-meals');
         await handleRecentMealsEvent(event, user, { offset, query: q });
+        return;
+    }
+
+    // リッチメニューの「レシピ登録」。保存済みレシピを一覧で出す
+    // offset と cat が付いていれば、続きの表示・カテゴリ絞り込みになる
+    if (action === 'recipes') {
+        const { handleRecipesEvent } = await import('@/lib/line/handlers/recipes');
+        await handleRecipesEvent(event, user, { offset, category: cat });
+        return;
+    }
+
+    // 「カテゴリで絞る」。レシピがあるカテゴリの一覧を出す
+    if (action === 'recipe_cats') {
+        const { handleRecipeCategoriesEvent } = await import('@/lib/line/handlers/recipes');
+        await handleRecipeCategoriesEvent(event, user);
+        return;
+    }
+
+    // レシピ一覧の「これを記録」。type が無ければ食事タイプを選ぶカードが返る
+    if (action === 'log_recipe') {
+        const { handleLogRecipe } = await import('@/lib/line/handlers/recipes');
+        await handleLogRecipe(event, user, rid, type);
+        return;
+    }
+
+    // レシピのタイプ選択カードの「やめる」
+    if (action === 'cancel_recipe') {
+        await replyOrPushMessage(event, {
+            type: 'text',
+            text: '記録はやめておきました👌 また「レシピ」から呼んでくださいね！',
+        });
         return;
     }
 
@@ -224,7 +258,7 @@ export const handlePostbackEvent = async (event) => {
 
     await replyOrPushMessage(event, {
         type: 'text',
-        text: replyText,
+        text: formatElenaText(replyText),
     });
     await saveMealExchangeToHistory(user.uid, meal, mealTypeLabel, replyText);
 };

@@ -1,4 +1,5 @@
 import { MEAL_TYPE_LABELS } from '@/lib/line/mealUtils';
+import { formatElenaText } from '@/lib/line/textFormat';
 
 export const buildMealSavedFlex = (meal, evaluation) => ({
     type: 'flex',
@@ -55,7 +56,7 @@ export const buildMealSavedFlex = (meal, evaluation) => ({
                 },
                 {
                     type: 'text',
-                    text: evaluation.reason,
+                    text: formatElenaText(evaluation.reason),
                     wrap: true,
                     size: 'sm',
                     color: '#374151',

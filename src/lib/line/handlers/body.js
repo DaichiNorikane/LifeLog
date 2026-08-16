@@ -82,20 +82,22 @@ export const handleBodyEvent = async (event, user) => {
 
     for (const workout of workouts) {
         const parts = [`${workout.typeLabel || workout.type} ${workout.durationMinutes}分`];
-        if (workout.distanceKm != null) parts.push(`${workout.distanceKm}km`);
+        if (workout.distanceKm != null) parts.push(`${formatMetric('distanceKm', workout.distanceKm)}km`);
         if (workout.activeEnergy != null) parts.push(`${Math.round(workout.activeEnergy)}kcal`);
         lines.push(`🏃 ${parts.join(' / ')}`);
     }
 
+    // HealthKit 由来の値は 74.30000000001 のような浮動小数点誤差を含むことがあるので、
+    // 生の値をそのまま出さず、必ず formatMetric（指標ごとの桁数定義）を通す
     if (latestWeight?.weight != null) {
-        const body = [`体重 ${latestWeight.weight}kg`];
+        const body = [`体重 ${formatMetric('weight', latestWeight.weight)}kg`];
         if (latestWeight.bodyFat != null) {
-            body.push(`体脂肪 ${latestWeight.bodyFat}%`);
+            body.push(`体脂肪 ${formatMetric('bodyFat', latestWeight.bodyFat)}%`);
             const fatMass = calcFatMass(latestWeight.weight, latestWeight.bodyFat);
-            if (fatMass != null) body.push(`脂肪 ${fatMass}kg`);
+            if (fatMass != null) body.push(`脂肪 ${fatMass.toFixed(1)}kg`);
         }
-        if (latestWeight.leanBodyMass != null) body.push(`除脂肪 ${latestWeight.leanBodyMass}kg`);
-        if (latestWeight.bmi != null) body.push(`BMI ${latestWeight.bmi}`);
+        if (latestWeight.leanBodyMass != null) body.push(`除脂肪 ${formatMetric('leanBodyMass', latestWeight.leanBodyMass)}kg`);
+        if (latestWeight.bmi != null) body.push(`BMI ${formatMetric('bmi', latestWeight.bmi)}`);
         lines.push(`⚖️ ${body.join(' / ')}`);
 
         const target = user.data?.targetWeight;

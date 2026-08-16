@@ -16,6 +16,8 @@ const TYPE_BUTTONS = [
 
 // タイプボタンはタップした時点でそのタイプとして即保存する
 // （LINEは送信済みメッセージを書き換えられないため、選択→確定の2段階にするとカードが増殖する）
+// displayText で「昼食で記録」が自分の発言として即座にトークに出る。
+// カード自体は書き換えられないので、これがタップへの唯一の即時フィードバックになる
 const buildTypeButton = (mealType, sid, option) => {
     const selected = mealType === option.type;
     return {
@@ -27,6 +29,7 @@ const buildTypeButton = (mealType, sid, option) => {
             type: 'postback',
             label: option.label,
             data: postbackData('save_meal', sid, { type: option.type }),
+            displayText: `${MEAL_TYPE_LABELS[option.type]}で記録`,
         },
     };
 };
@@ -134,6 +137,7 @@ export const buildMealConfirmFlex = (meal, sid) => ({
                         type: 'postback',
                         label: '✏️ 修正する',
                         data: postbackData('edit_meal', sid),
+                        displayText: '修正する',
                     },
                 },
                 {
@@ -143,6 +147,7 @@ export const buildMealConfirmFlex = (meal, sid) => ({
                         type: 'postback',
                         label: '❌ やめる',
                         data: postbackData('cancel_meal', sid),
+                        displayText: 'やめる',
                     },
                 },
             ],

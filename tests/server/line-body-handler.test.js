@@ -94,8 +94,23 @@ describe('handleBodyEvent', () => {
   it('derives the fat mass rather than expecting it to be stored', async () => {
     await handleBodyEvent(event, user);
 
-    // 83.4kg × 25.8% = 21.52kg
-    expect(replyText()).toContain('21.52kg');
+    // 83.4kg × 25.8% = 21.52kg → 表示は1桁に丸める
+    expect(replyText()).toContain('21.5kg');
+  });
+
+  it('rounds floating point noise from HealthKit before displaying', async () => {
+    mocks.getLatestWeightBefore.mockResolvedValue({
+      weight: 74.30000000000001, bodyFat: 21.000000000000004, leanBodyMass: 58.700000000000003, bmi: 24.700000000000003,
+    });
+
+    await handleBodyEvent(event, user);
+
+    const text = replyText();
+    expect(text).toContain('体重 74.3kg');
+    expect(text).toContain('体脂肪 21.0%');
+    expect(text).toContain('除脂肪 58.7kg');
+    expect(text).toContain('BMI 24.7');
+    expect(text).not.toContain('0000');
   });
 
   it('shows how far the goal still is', async () => {

@@ -167,7 +167,13 @@ const buildActionBubble = ({ hasMore, nextOffset, query, shown, total }) => {
  * ボタンを押した時点でそのタイプで保存する（選択→確定の2段階にはしない）。
  */
 export const buildRecentMealTypeFlex = (meal, options = {}) => {
-    const { suggestedType } = options;
+    // レシピからの登録もこのカードを使い回す。押したときの postback だけ差し替える
+    const {
+        suggestedType,
+        logAction = 'log_recent',
+        idKey = 'mid',
+        cancelAction = 'cancel_recent',
+    } = options;
 
     const typeButton = (mealType) => {
         const suggested = mealType === suggestedType;
@@ -179,7 +185,7 @@ export const buildRecentMealTypeFlex = (meal, options = {}) => {
             action: {
                 type: 'postback',
                 label: `${MEAL_TYPE_LABELS[mealType]}で記録`,
-                data: buildPostbackData({ action: 'log_recent', mid: meal.id, type: mealType }),
+                data: buildPostbackData({ action: logAction, [idKey]: meal.id, type: mealType }),
                 displayText: `${MEAL_TYPE_LABELS[mealType]}で記録`,
             },
         };
@@ -265,7 +271,7 @@ export const buildRecentMealTypeFlex = (meal, options = {}) => {
                         action: {
                             type: 'postback',
                             label: '❌ やめる',
-                            data: buildPostbackData({ action: 'cancel_recent' }),
+                            data: buildPostbackData({ action: cancelAction }),
                             displayText: 'やめる',
                         },
                     },

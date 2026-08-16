@@ -243,6 +243,28 @@ export const getRecentUniqueMealsAdmin = async (uid, { limit = 10, offset = 0, q
     };
 };
 
+// LINE のレシピカルーセルで一度に読む上限。Web 側の取得上限（200件）と合わせる
+const RECIPES_SCAN_LIMIT = 200;
+
+/**
+ * 保存済みレシピの一覧（LINE の「レシピから記録」用）。
+ * カテゴリ絞り込みはメモリ上で行う（Firestore の複合インデックスを増やさないため）。
+ * 全件返して呼び出し側でページングする。
+ */
+export const getRecipesAdmin = async (uid) => {
+    const snapshot = await userRef(uid).collection('recipes')
+        .orderBy('createdAt', 'desc')
+        .limit(RECIPES_SCAN_LIMIT)
+        .get();
+    return mapSnapshotDocs(snapshot);
+};
+
+/** レシピ1件（「これを記録」で栄養素をコピーするため） */
+export const getRecipeByIdAdmin = async (uid, recipeId) => {
+    const doc = await userRef(uid).collection('recipes').doc(recipeId).get();
+    return doc.exists ? { id: doc.id, ...doc.data() } : null;
+};
+
 /** 1件だけ取り出す（履歴から登録するときに元の栄養素をコピーするため） */
 export const getMealByIdAdmin = async (uid, mealId) => {
     const doc = await mealsRef(uid).doc(mealId).get();

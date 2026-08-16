@@ -26,36 +26,52 @@ const TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
 const API = 'https://api.line.me/v2/bot';
 const DATA_API = 'https://api-data.line.me/v2/bot';
 
-// タップ領域。3列 × 2行（2500 × 1686）
+// タップ領域。3列 × 3行（2500 × 1686）
+// 上段=記録する（アルバム/履歴/レシピ）、中段=今日を知る、下段=ふりかえり
 const RICH_MENU = {
     size: { width: 2500, height: 1686 },
     selected: true,
     name: 'Lifelog main',
     chatBarText: 'エレナに相談する',
     areas: [
+        // --- 上段: 記録する ---
         {
-            bounds: { x: 0, y: 0, width: 833, height: 843 },
+            bounds: { x: 0, y: 0, width: 833, height: 562 },
             action: { type: 'cameraRoll', label: 'アルバムから' },
         },
         {
-            bounds: { x: 833, y: 0, width: 833, height: 843 },
+            bounds: { x: 833, y: 0, width: 833, height: 562 },
+            action: { type: 'postback', data: 'action=recent_meals', displayText: '履歴から記録したい' },
+        },
+        {
+            bounds: { x: 1666, y: 0, width: 834, height: 562 },
+            action: { type: 'postback', data: 'action=recipes', displayText: 'レシピから記録したい' },
+        },
+        // --- 中段: 今日を知る ---
+        {
+            bounds: { x: 0, y: 562, width: 833, height: 562 },
             action: { type: 'postback', data: 'action=suggest_meal', displayText: '何食べよう？' },
         },
         {
-            bounds: { x: 1666, y: 0, width: 834, height: 843 },
+            bounds: { x: 833, y: 562, width: 833, height: 562 },
             action: { type: 'message', label: '今日のまとめ', text: 'サマリー' },
         },
         {
-            bounds: { x: 0, y: 843, width: 833, height: 843 },
+            bounds: { x: 1666, y: 562, width: 834, height: 562 },
+            action: { type: 'message', label: '今日の総評', text: '今日の総評' },
+        },
+        // --- 下段: ふりかえり ---
+        {
+            bounds: { x: 0, y: 1124, width: 833, height: 562 },
             action: { type: 'message', label: 'からだ', text: 'からだ' },
         },
         {
-            bounds: { x: 833, y: 843, width: 833, height: 843 },
+            bounds: { x: 833, y: 1124, width: 833, height: 562 },
             action: { type: 'message', label: '目標', text: '目標' },
         },
         {
-            bounds: { x: 1666, y: 843, width: 834, height: 843 },
-            action: { type: 'postback', data: 'action=recent_meals', displayText: '履歴から記録したい' },
+            bounds: { x: 1666, y: 1124, width: 834, height: 562 },
+            action: { type: 'message', label: '週間レポート', text: '週間レポート' },
         },
     ],
 };

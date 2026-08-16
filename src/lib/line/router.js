@@ -10,6 +10,9 @@ import { handleGoalEvent, parseGoalCommand } from '@/lib/line/handlers/goal';
 import {
     handleRecentMealsEvent, handleRecentSearchInput, parseRecentMealsQuery,
 } from '@/lib/line/handlers/recent-meals';
+import { handleRecipesEvent, isRecipesText } from '@/lib/line/handlers/recipes';
+import { handleDailyReviewEvent, isDailyReviewText } from '@/lib/line/handlers/daily-review';
+import { handleWeeklyReportEvent, isWeeklyReportText } from '@/lib/line/handlers/weekly-report';
 import { handleKeywordSuggestEvent, MEAL_KEYWORDS } from '@/lib/line/handlers/keyword-suggest';
 import { handleMealEditEvent } from '@/lib/line/handlers/meal-edit';
 import { handleMealCorrectionEvent, handleMealTextEvent } from '@/lib/line/handlers/meal-text';
@@ -55,6 +58,9 @@ export const classifyTextRoute = (text, state = null) => {
     if (MEAL_KEYWORDS[trimmed]) return { type: 'keyword', targetType: MEAL_KEYWORDS[trimmed] };
     if (isDailySummaryText(trimmed)) return { type: 'summary' };
     if (isBodyText(trimmed)) return { type: 'body' };
+    if (isDailyReviewText(trimmed)) return { type: 'daily_review' };
+    if (isWeeklyReportText(trimmed)) return { type: 'weekly_report' };
+    if (isRecipesText(trimmed)) return { type: 'recipes' };
     // 「履歴」だけでも「履歴 唐揚げ」でも拾う（query は空文字なら絞り込みなし）
     const recentQuery = parseRecentMealsQuery(trimmed);
     if (recentQuery !== null) return { type: 'recent_meals', query: recentQuery };
@@ -131,6 +137,18 @@ export const handleLineEvent = async (event) => {
     if (route.type === 'recent_meals') {
         await handleRecentMealsEvent(event, user, { query: route.query });
         return { handled: 'recent_meals' };
+    }
+    if (route.type === 'daily_review') {
+        await handleDailyReviewEvent(event, user);
+        return { handled: 'daily_review' };
+    }
+    if (route.type === 'weekly_report') {
+        await handleWeeklyReportEvent(event, user);
+        return { handled: 'weekly_report' };
+    }
+    if (route.type === 'recipes') {
+        await handleRecipesEvent(event, user);
+        return { handled: 'recipes' };
     }
 
     const state = await getAwaitingCorrectionState(user.uid);

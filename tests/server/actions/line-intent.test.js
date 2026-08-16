@@ -58,4 +58,16 @@ describe('classifyLineIntent', () => {
 
     expect(result).toEqual({ intent: 'log_meal', mealDescription: '唐揚げ' });
   });
+
+  it('classifies photo captions as photo_context', async () => {
+    mocks.generateContent.mockResolvedValue(makeResponse({ intent: 'photo_context', mealDescription: null }));
+
+    const result = await classifyLineIntent('これを昼に食べた');
+
+    expect(result).toEqual({ intent: 'photo_context', mealDescription: null });
+    const schema = mocks.createModel.mock.calls[0][2];
+    expect(schema.properties.intent.enum).toContain('photo_context');
+    const prompt = mocks.generateContent.mock.calls[0][0];
+    expect(prompt).toContain('「これを昼に食べた」→ photo_context');
+  });
 });

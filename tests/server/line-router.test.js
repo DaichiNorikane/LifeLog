@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
     handleMealCorrectionEvent: vi.fn(),
     handleMealTextEvent: vi.fn(),
     handleMealPhotoEvent: vi.fn(),
+    handlePhotoContextStash: vi.fn(),
     handlePostbackEvent: vi.fn(),
     handleWeightEvent: vi.fn(),
     handleGoalEvent: vi.fn(),
@@ -26,6 +27,7 @@ const mocks = vi.hoisted(() => {
     resolveUserOrReply: vi.fn().mockResolvedValue({ uid: 'uid-1', data: {} }),
     getAwaitingCorrectionState: vi.fn().mockResolvedValue(null),
     getAwaitingRecentSearchState: vi.fn().mockResolvedValue(null),
+    getLatestPendingMealState: vi.fn().mockResolvedValue(null),
     classifyLineIntent: vi.fn().mockResolvedValue({ intent: 'other', mealDescription: null }),
   };
 });
@@ -83,6 +85,7 @@ vi.mock('@/lib/line/handlers/meal-text', () => ({
 
 vi.mock('@/lib/line/handlers/meal-photo', () => ({
   handleMealPhotoEvent: mocks.handleMealPhotoEvent,
+  handlePhotoContextStash: mocks.handlePhotoContextStash,
 }));
 
 vi.mock('@/lib/line/handlers/postback', () => ({
@@ -137,6 +140,7 @@ vi.mock('@/lib/line/resolveUser', () => ({
 vi.mock('@/lib/line/state', () => ({
   getAwaitingCorrectionState: mocks.getAwaitingCorrectionState,
   getAwaitingRecentSearchState: mocks.getAwaitingRecentSearchState,
+  getLatestPendingMealState: mocks.getLatestPendingMealState,
 }));
 
 vi.mock('@/app/actions/line-intent', () => ({
@@ -159,6 +163,7 @@ beforeEach(() => {
   mocks.webhookCreate.mockResolvedValue(undefined);
   mocks.resolveUserOrReply.mockResolvedValue({ uid: 'uid-1', data: {} });
   mocks.getAwaitingCorrectionState.mockResolvedValue(null);
+  mocks.getLatestPendingMealState.mockResolvedValue(null);
   mocks.classifyLineIntent.mockResolvedValue({ intent: 'other', mealDescription: null });
 });
 
@@ -246,6 +251,34 @@ describe('LINE router dispatch', () => {
     await handleLineEvent(event);
     expect(mocks.handleWeeklyReportEvent).toHaveBeenCalledWith(event, { uid: 'uid-1', data: {} });
     expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
+  });
+
+  it('stashes photo context when no confirm card is pending', async () => {
+    mocks.classifyLineIntent.mockResolvedValue({ intent: 'photo_context', mealDescription: null });
+
+    const event = textEvent('これを昼に食べた');
+    const result = await handleLineEvent(event);
+
+    expect(result).toEqual({ handled: 'photo_context_stash' });
+    expect(mocks.handlePhotoContextStash).toHaveBeenCalledWith(
+      event, { uid: 'uid-1', data: {} }, 'これを昼に食べた',
+    );
+    expect(mocks.handleMealCorrectionEvent).not.toHaveBeenCalled();
+  });
+
+  it('treats photo context as a correction when a confirm card is pending', async () => {
+    mocks.classifyLineIntent.mockResolvedValue({ intent: 'photo_context', mealDescription: null });
+    const pendingState = { sid: 'sid-photo', pendingMeal: { foodName: '焼き魚定食' }, mode: null };
+    mocks.getLatestPendingMealState.mockResolvedValue(pendingState);
+
+    const event = textEvent('半分残した');
+    const result = await handleLineEvent(event);
+
+    expect(result).toEqual({ handled: 'photo_context_correction' });
+    expect(mocks.handleMealCorrectionEvent).toHaveBeenCalledWith(
+      event, { uid: 'uid-1', data: {} }, pendingState, '半分残した',
+    );
+    expect(mocks.handlePhotoContextStash).not.toHaveBeenCalled();
   });
 
   it('routes goal commands to the goal handler', async () => {
@@ -374,5 +407,26 @@ describe('LINE router dispatch', () => {
     expect(results).toHaveLength(2);
     expect(results.filter(r => r?.error)).toHaveLength(1);
     expect(mocks.handleMealPhotoEvent).toHaveBeenCalledTimes(2);
+  });
+
+  it('processes text before the photo when both arrive in one batch', async () => {
+    // 「これを昼に食べた」+ 写真 が同じWebhookで届いたケース。
+    // 並列だと補足の保存より先に写真解析が走るため、順番に処理される
+    mocks.classifyLineIntent.mockResolvedValue({ intent: 'photo_context', mealDescription: null });
+    const events = [
+      textEvent('これを昼に食べた'),
+      { type: 'message', webhookEventId: 'evt-img-mix', message: { id: 'img-mix', type: 'image' }, source: { userId: 'line-user-1' }, replyToken: 'r2' },
+    ];
+
+    const results = await handleLineEvents(events);
+
+    expect(results).toEqual([
+      { handled: 'photo_context_stash' },
+      { handled: 'image' },
+    ]);
+    // 補足の保存（stash）が写真処理より先に完了している
+    const stashOrder = mocks.handlePhotoContextStash.mock.invocationCallOrder[0];
+    const photoOrder = mocks.handleMealPhotoEvent.mock.invocationCallOrder[0];
+    expect(stashOrder).toBeLessThan(photoOrder);
   });
 });

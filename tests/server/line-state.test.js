@@ -35,9 +35,12 @@ import {
   clearLineState,
   getActiveLineStates,
   getAwaitingCorrectionState,
+  getAwaitingPhotoContextState,
+  getLatestPendingMealState,
   getLineStateBySid,
   isLineStateFresh,
   LINE_STATE_TTL_MS,
+  PHOTO_CONTEXT_TTL_MS,
   setLineState,
 } from '@/lib/line/state';
 
@@ -107,5 +110,50 @@ describe('sid-keyed concurrent states', () => {
     const now = Date.now();
     store.set('sid-exp', { sid: 'sid-exp', updatedAt: new Date(now - LINE_STATE_TTL_MS - 1).toISOString() });
     expect(await getLineStateBySid('uid-1', 'sid-exp', now)).toBeNull();
+  });
+});
+
+describe('photo context state', () => {
+  it('stores and returns the stashed photo context text', async () => {
+    await setLineState('uid-1', {
+      sid: 'photo-context-1', mode: 'awaiting_photo_context', contextText: 'これを昼に食べた',
+    });
+
+    const state = await getAwaitingPhotoContextState('uid-1');
+    expect(state?.contextText).toBe('これを昼に食べた');
+    expect(state?.sid).toBe('photo-context-1');
+  });
+
+  it('expires the context faster than normal states', async () => {
+    await setLineState('uid-1', {
+      sid: 'photo-context-1', mode: 'awaiting_photo_context', contextText: 'これを昼に食べた',
+    });
+
+    // 通常のTTL(10分)内でも、写真待ちのTTL(3分)を過ぎたら使わない
+    const later = Date.now() + PHOTO_CONTEXT_TTL_MS + 1000;
+    expect(await getAwaitingPhotoContextState('uid-1', later)).toBeNull();
+  });
+
+  it('does not confuse photo context with pending meal cards', async () => {
+    const now = Date.now();
+    store.set('photo-context-1', {
+      sid: 'photo-context-1', mode: 'awaiting_photo_context', contextText: '半分残した',
+      updatedAt: new Date(now - 1000).toISOString(),
+    });
+    store.set('sid-a', {
+      sid: 'sid-a', pendingMeal: { foodName: 'カレー' }, mode: null,
+      updatedAt: new Date(now - 5000).toISOString(),
+    });
+
+    const pending = await getLatestPendingMealState('uid-1', now);
+    expect(pending?.sid).toBe('sid-a');
+    expect(pending?.pendingMeal?.foodName).toBe('カレー');
+
+    const context = await getAwaitingPhotoContextState('uid-1', now);
+    expect(context?.sid).toBe('photo-context-1');
+  });
+
+  it('returns null when there is no pending meal card', async () => {
+    expect(await getLatestPendingMealState('uid-1')).toBeNull();
   });
 });

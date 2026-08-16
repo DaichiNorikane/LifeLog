@@ -16,11 +16,13 @@ import { handleWeeklyReportEvent, isWeeklyReportText } from '@/lib/line/handlers
 import { handleKeywordSuggestEvent, MEAL_KEYWORDS } from '@/lib/line/handlers/keyword-suggest';
 import { handleMealEditEvent } from '@/lib/line/handlers/meal-edit';
 import { handleMealCorrectionEvent, handleMealTextEvent } from '@/lib/line/handlers/meal-text';
-import { handleMealPhotoEvent } from '@/lib/line/handlers/meal-photo';
+import { handleMealPhotoEvent, handlePhotoContextStash } from '@/lib/line/handlers/meal-photo';
 import { handlePostbackEvent } from '@/lib/line/handlers/postback';
 import { handleWeightEvent, parseWeightText } from '@/lib/line/handlers/weight';
 import { resolveUserOrReply } from '@/lib/line/resolveUser';
-import { getAwaitingCorrectionState, getAwaitingRecentSearchState } from '@/lib/line/state';
+import {
+    getAwaitingCorrectionState, getAwaitingRecentSearchState, getLatestPendingMealState,
+} from '@/lib/line/state';
 
 const isAlreadyExistsError = (error) => {
     const code = String(error?.code || error?.details || '').toLowerCase();
@@ -175,16 +177,44 @@ export const handleLineEvent = async (event) => {
         await handleMealEditEvent(event, user, text);
         return { handled: 'meal_edit' };
     }
+    // 写真への補足（「これを昼に食べた」「半分残した」など）。
+    // 確認カードが出ている直後なら「修正する」を押さなくてもそのまま修正として扱い、
+    // まだ写真が来ていなければ、次の写真が来るまで補足として覚えておく
+    if (intent.intent === 'photo_context') {
+        const pendingState = await getLatestPendingMealState(user.uid);
+        if (pendingState) {
+            await handleMealCorrectionEvent(event, user, pendingState, text);
+            return { handled: 'photo_context_correction' };
+        }
+        await handlePhotoContextStash(event, user, text);
+        return { handled: 'photo_context_stash' };
+    }
 
     await handleChatEvent(event, user, text);
     return { handled: 'chat' };
 };
 
+const handleLineEventSafely = (event) => handleLineEvent(event).catch(e => {
+    console.error("LINE event handling failed:", e);
+    return { error: e.message };
+});
+
 // 複数の写真・メッセージが同時に届いても並列で処理する（各イベントは独立したカードになる）
-// 1件の失敗が他のイベントを巻き込まないよう、エラーはイベント単位で握りつぶす
-export const handleLineEvents = async (events = []) => Promise.all(
-    events.map(event => handleLineEvent(event).catch(e => {
-        console.error("LINE event handling failed:", e);
-        return { error: e.message };
-    })),
-);
+// 1件の失敗が他のイベントを巻き込まないよう、エラーはイベント単位で握りつぶす。
+// ただし写真とテキストが同じバッチに混在するときだけは届いた順に処理する。
+// 「これを昼に食べた」+ 写真 が同時に届いた場合、並列だと補足の保存より先に
+// 写真の解析が始まってしまい、補足が反映されないため
+export const handleLineEvents = async (events = []) => {
+    const hasImage = events.some(event => event?.message?.type === 'image');
+    const hasText = events.some(event => event?.message?.type === 'text');
+
+    if (hasImage && hasText) {
+        const results = [];
+        for (const event of events) {
+            results.push(await handleLineEventSafely(event));
+        }
+        return results;
+    }
+
+    return Promise.all(events.map(handleLineEventSafely));
+};

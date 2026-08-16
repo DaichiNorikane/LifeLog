@@ -5,6 +5,7 @@ import { evaluateDailyLog } from '@/app/actions/daily-evaluation';
 import { sendPushToUser, getJSTToday } from '@/lib/pushHelper';
 import { buildConditionContextAdmin } from '@/lib/firebase/adminHelpers';
 import { AXIS_LABELS } from '@/lib/health/conditionRules';
+import { formatElenaText } from '@/lib/line/textFormat';
 
 // Elena's random one-liners
 const ELENA_HITOKOTO = [
@@ -92,7 +93,7 @@ export async function GET(request) {
                         }
                     }
 
-                    const text = `【${todayStr}の評価レポート by エレナ 🌙】\nスコア: ${evaluation.score}点\n判定: ${evaluation.title}\n\n${evaluation.reason || evaluation.advice}${conditionText}\n\n(自動配信: 明日も一緒に頑張りましょうね♪)`;
+                    const text = `【${todayStr}の評価レポート by エレナ 🌙】\nスコア: ${evaluation.score}点\n判定: ${evaluation.title}\n\n${formatElenaText(evaluation.reason || evaluation.advice)}${conditionText}\n\n(自動配信: 明日も一緒に頑張りましょうね♪)`;
 
                     if (lineUserId) {
                         try {

@@ -80,8 +80,10 @@ export const collectWeeklyStats = async (uid, weekDates) => {
         userRef.collection('weights').doc(weekEnd).get(),
     ]);
     if (startWeightDoc.exists && endWeightDoc.exists) {
-        const startW = startWeightDoc.data().weight;
-        const endW = endWeightDoc.data().weight;
+        // HealthKit 由来の体重は浮動小数点誤差を含むことがあるので、表示前に必ず丸める
+        const round1 = (value) => Math.round(Number(value) * 10) / 10;
+        const startW = round1(startWeightDoc.data().weight);
+        const endW = round1(endWeightDoc.data().weight);
         const diff = (endW - startW).toFixed(1);
         const sign = diff > 0 ? '+' : '';
         weightText = `\n体重: ${startW}kg → ${endW}kg (${sign}${diff}kg)`;

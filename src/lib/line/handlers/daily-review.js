@@ -2,6 +2,7 @@ import { evaluateDailyLog } from '@/app/actions/daily-evaluation';
 import { db } from '@/lib/firebase/admin';
 import { getLineChatContextAdmin } from '@/lib/firebase/adminHelpers';
 import { replyOrPushMessage } from '@/lib/line/client';
+import { formatElenaText } from '@/lib/line/textFormat';
 
 /**
  * 「今日の総評」。
@@ -101,7 +102,7 @@ export const buildDailyReviewFlex = (evaluation, { dateId, totalCalories, target
                     },
                     {
                         type: 'text',
-                        text: evaluation.advice || 'コメントなし',
+                        text: formatElenaText(evaluation.advice) || 'コメントなし',
                         size: 'sm',
                         wrap: true,
                         color: '#374151',

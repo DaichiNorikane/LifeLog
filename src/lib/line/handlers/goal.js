@@ -3,6 +3,7 @@ import {
     getRecentAverageCaloriesAdmin, updateUserProfileAdmin,
 } from '@/lib/firebase/adminHelpers';
 import { replyOrPushMessage } from '@/lib/line/client';
+import { formatElenaText } from '@/lib/line/textFormat';
 
 /**
  * LINE からダイエット目標を確認・変更・診断する。
@@ -199,7 +200,7 @@ export const handleGoalEvent = async (event, user, command) => {
     await updateUserProfileAdmin(user.uid, { lastDiagnosis: result });
 
     const label = FEASIBILITY_LABEL[result.feasibility] || result.feasibility || '';
-    const reasoning = String(result.reasoning || '').replace(/<[^>]*>/g, '');
+    const reasoning = formatElenaText(String(result.reasoning || '').replace(/<[^>]*>/g, ''));
     const suggestion = result.recommended_daily_calories
         ? `\n\n目安は 1日 ${result.recommended_daily_calories}kcal です。\nこれにするなら「目標カロリー ${result.recommended_daily_calories}」と送ってください✍️`
         : '';

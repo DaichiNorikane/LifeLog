@@ -5,6 +5,7 @@ import {
 } from '@/lib/firebase/adminHelpers';
 import { replyOrPushMessage } from '@/lib/line/client';
 import { resolveUserOrReply } from '@/lib/line/resolveUser';
+import { formatElenaText } from '@/lib/line/textFormat';
 
 export const handleChatEvent = async (event, user = null, userText = event?.message?.text) => {
     const resolvedUser = user || await resolveUserOrReply(event);
@@ -17,9 +18,10 @@ export const handleChatEvent = async (event, user = null, userText = event?.mess
         userText: text,
     });
 
+    // 表示だけ整形し、履歴には元のテキストを保存する
     await replyOrPushMessage(event, {
         type: 'text',
-        text: replyText,
+        text: formatElenaText(replyText),
     });
 
     try {

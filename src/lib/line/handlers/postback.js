@@ -11,6 +11,7 @@ import { buildMealConfirmFlex } from '@/lib/line/flex/mealConfirm';
 import { buildMealSavedFlex } from '@/lib/line/flex/mealSaved';
 import { MEAL_TYPE_LABELS } from '@/lib/line/mealUtils';
 import { resolveUserOrReply } from '@/lib/line/resolveUser';
+import { formatElenaText } from '@/lib/line/textFormat';
 import { clearLineState, getLineStateBySid, setLineState } from '@/lib/line/state';
 
 export const EXPIRED_CARD_MESSAGE = {
@@ -257,7 +258,7 @@ export const handlePostbackEvent = async (event) => {
 
     await replyOrPushMessage(event, {
         type: 'text',
-        text: replyText,
+        text: formatElenaText(replyText),
     });
     await saveMealExchangeToHistory(user.uid, meal, mealTypeLabel, replyText);
 };

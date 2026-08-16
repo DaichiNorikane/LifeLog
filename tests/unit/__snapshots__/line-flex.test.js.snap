@@ -68,6 +68,7 @@ exports[`LINE meal Flex templates > builds the confirm card 1`] = `
             {
               "action": {
                 "data": "action=save_meal&sid=sid-test&type=breakfast",
+                "displayText": "朝食で記録",
                 "label": "朝で記録",
                 "type": "postback",
               },
@@ -78,6 +79,7 @@ exports[`LINE meal Flex templates > builds the confirm card 1`] = `
             {
               "action": {
                 "data": "action=save_meal&sid=sid-test&type=lunch",
+                "displayText": "昼食で記録",
                 "label": "昼で記録",
                 "type": "postback",
               },
@@ -96,6 +98,7 @@ exports[`LINE meal Flex templates > builds the confirm card 1`] = `
             {
               "action": {
                 "data": "action=save_meal&sid=sid-test&type=dinner",
+                "displayText": "夕食で記録",
                 "label": "夕で記録",
                 "type": "postback",
               },
@@ -106,6 +109,7 @@ exports[`LINE meal Flex templates > builds the confirm card 1`] = `
             {
               "action": {
                 "data": "action=save_meal&sid=sid-test&type=snack",
+                "displayText": "間食で記録",
                 "label": "間食で記録",
                 "type": "postback",
               },
@@ -121,6 +125,7 @@ exports[`LINE meal Flex templates > builds the confirm card 1`] = `
         {
           "action": {
             "data": "action=edit_meal&sid=sid-test",
+            "displayText": "修正する",
             "label": "✏️ 修正する",
             "type": "postback",
           },
@@ -130,6 +135,7 @@ exports[`LINE meal Flex templates > builds the confirm card 1`] = `
         {
           "action": {
             "data": "action=cancel_meal&sid=sid-test",
+            "displayText": "やめる",
             "label": "❌ やめる",
             "type": "postback",
           },
@@ -727,6 +733,7 @@ exports[`LINE meal Flex templates > builds the edit confirmation card 1`] = `
         {
           "action": {
             "data": "action=apply_edit&sid=sid-edit",
+            "displayText": "実行する",
             "label": "✅ 実行する",
             "type": "postback",
           },
@@ -737,6 +744,7 @@ exports[`LINE meal Flex templates > builds the edit confirmation card 1`] = `
         {
           "action": {
             "data": "action=cancel_edit&sid=sid-edit",
+            "displayText": "やめる",
             "label": "❌ やめる",
             "type": "postback",
           },
@@ -829,7 +837,8 @@ exports[`LINE meal Flex templates > builds the saved card 1`] = `
         {
           "color": "#374151",
           "size": "sm",
-          "text": "いい感じ！でも野菜も足したいね✨",
+          "text": "いい感じ！
+でも野菜も足したいね✨",
           "type": "text",
           "wrap": true,
         },

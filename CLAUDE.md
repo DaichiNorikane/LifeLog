@@ -82,6 +82,8 @@ src/
 │   ├── pushHelper.js        # Push通知ヘルパー（サーバー側）
 │   ├── health/healthMetrics.js # HealthKit指標の定義（唯一の真実）
 │   ├── health/ingest.js     # HealthKit受信の共通処理（認証・検証・書き込み）
+│   ├── recipeCategories.js  # レシピカテゴリの定義（唯一の真実。WebとLINEで共通）
+│   ├── reports/weeklyReport.js # 週間レポートの集計（cronとLINEオンデマンドで共通）
 │   └── game/                # SoundManager
 ├── data/
 │   └── elena-character.js   # エレナのキャラクター定義
@@ -159,11 +161,21 @@ HealthKitから取得できる体組成はこの5項目で全部（筋肉量・�
 
 ## LINE のリッチメニュー
 
-`scripts/create-richmenu.mjs` で登録する（画像は 2500×1686）。3列×2行:
-アルバムから / 何食べる？ / 今日のまとめ ／ からだ / 目標 / 履歴から
+`scripts/create-richmenu.mjs` で登録する（画像は 2500×1686）。3列×3行:
+アルバムから / 履歴から / レシピ登録 ／ 何食べる？ / 今日のまとめ / 今日の総評 ／ からだ / 目標 / 週間レポート
+
+画像は `scripts/generate-richmenu-image.mjs` で生成する（`--dark` で黒背景版）。
+セルの並びを変えたら create-richmenu.mjs の areas と両方直すこと。
 
 「からだ」は `src/lib/line/handlers/body.js`（歩数・睡眠・体組成・目標までの残り）。
 「何食べる？」は postback `action=suggest_meal` で、時刻から朝/昼/夕を選んで既存の提案ハンドラを呼ぶ。
+「レシピ登録」は `src/lib/line/handlers/recipes.js`。Webで登録したレシピをカルーセルで出し、
+`action=log_recipe&rid=<レシピID>` で今日の記録として保存する（履歴と同じく食事タイプを選んでから保存）。
+カテゴリは Web と共通の `src/lib/recipeCategories.js` を使い、末尾の操作カードから絞り込める（`cat=none` は未分類）。
+「今日の総評」は `src/lib/line/handlers/daily-review.js`。`evaluateDailyLog` をその場で実行し、
+cron の日次レポートと同じ `daily_evaluations/{YYYYMMDD}` に保存する（週間レポートの集計対象になる）。
+「週間レポート」は `src/lib/line/handlers/weekly-report.js`。集計は cron/weekly-summary と共通の
+`src/lib/reports/weeklyReport.js`（相関分析の更新だけは週1回の cron のみ）。
 「履歴から」は `src/lib/line/handlers/recent-meals.js`。料理名で重複を除いた過去の記録をカルーセルで出し、
 `action=log_recent&mid=<食事ID>` で今日の記録として複製する（評価スコアは引き継がない）。
 「これを記録」を押すと、まず朝食/昼食/夕食/間食を選ぶカードを返す（`buildRecentMealTypeFlex`）。

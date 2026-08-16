@@ -255,6 +255,17 @@ export const getRecipesFromFirestore = async (userId) => {
     }
 };
 
+// カテゴリの付け替えなど、レシピの一部だけを更新する
+export const updateRecipeInFirestore = async (userId, recipeId, patch) => {
+    try {
+        const recipeDoc = doc(db, "users", userId, "recipes", recipeId);
+        await updateDoc(recipeDoc, { ...patch, updatedAt: Timestamp.now() });
+    } catch (e) {
+        console.error("Error updating recipe:", e);
+        throw e;
+    }
+};
+
 export const deleteRecipeFromFirestore = async (userId, recipeId) => {
     try {
         const recipeDoc = doc(db, "users", userId, "recipes", recipeId);

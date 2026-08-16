@@ -20,6 +20,9 @@ const mocks = vi.hoisted(() => {
     handleGoalEvent: vi.fn(),
     handleBodyEvent: vi.fn(),
     handleRecentMealsEvent: vi.fn(),
+    handleRecipesEvent: vi.fn(),
+    handleDailyReviewEvent: vi.fn(),
+    handleWeeklyReportEvent: vi.fn(),
     resolveUserOrReply: vi.fn().mockResolvedValue({ uid: 'uid-1', data: {} }),
     getAwaitingCorrectionState: vi.fn().mockResolvedValue(null),
     getAwaitingRecentSearchState: vi.fn().mockResolvedValue(null),
@@ -106,6 +109,21 @@ vi.mock('@/lib/line/handlers/body', async () => {
   return { ...actual, handleBodyEvent: mocks.handleBodyEvent };
 });
 
+vi.mock('@/lib/line/handlers/recipes', async () => {
+  const actual = await vi.importActual('@/lib/line/handlers/recipes');
+  return { ...actual, handleRecipesEvent: mocks.handleRecipesEvent };
+});
+
+vi.mock('@/lib/line/handlers/daily-review', async () => {
+  const actual = await vi.importActual('@/lib/line/handlers/daily-review');
+  return { ...actual, handleDailyReviewEvent: mocks.handleDailyReviewEvent };
+});
+
+vi.mock('@/lib/line/handlers/weekly-report', async () => {
+  const actual = await vi.importActual('@/lib/line/handlers/weekly-report');
+  return { ...actual, handleWeeklyReportEvent: mocks.handleWeeklyReportEvent };
+});
+
 vi.mock('@/lib/line/handlers/goal', async () => {
   // parseGoalCommand は本物を使い、送信だけモックする（ルーティング判定そのものを検証したいため）
   const actual = await vi.importActual('@/lib/line/handlers/goal');
@@ -190,6 +208,43 @@ describe('LINE router dispatch', () => {
     const event = textEvent('からだ');
     await handleLineEvent(event);
     expect(mocks.handleBodyEvent).toHaveBeenCalledWith(event, { uid: 'uid-1', data: {} });
+    expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
+  });
+
+  it('routes recipe requests to the recipes handler', async () => {
+    expect(classifyTextRoute('レシピ')).toEqual({ type: 'recipes' });
+    expect(classifyTextRoute('レシピ登録')).toEqual({ type: 'recipes' });
+    // 「〜のレシピ」のような文章には誤爆しない
+    expect(classifyTextRoute('唐揚げのレシピ')).toEqual({ type: 'intent' });
+
+    const event = textEvent('レシピ');
+    await handleLineEvent(event);
+    expect(mocks.handleRecipesEvent).toHaveBeenCalledWith(event, { uid: 'uid-1', data: {} });
+    expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
+  });
+
+  it('routes daily review requests to the daily review handler', async () => {
+    expect(classifyTextRoute('今日の総評')).toEqual({ type: 'daily_review' });
+    expect(classifyTextRoute('総評')).toEqual({ type: 'daily_review' });
+    expect(classifyTextRoute('評価')).toEqual({ type: 'daily_review' });
+    // 日次サマリー（今日のまとめ）とは別ルート
+    expect(classifyTextRoute('サマリー')).toEqual({ type: 'summary' });
+
+    const event = textEvent('今日の総評');
+    await handleLineEvent(event);
+    expect(mocks.handleDailyReviewEvent).toHaveBeenCalledWith(event, { uid: 'uid-1', data: {} });
+    expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
+  });
+
+  it('routes weekly report requests to the weekly report handler', async () => {
+    expect(classifyTextRoute('週間レポート')).toEqual({ type: 'weekly_report' });
+    expect(classifyTextRoute('今週のふりかえり')).toEqual({ type: 'weekly_report' });
+    // 週の言葉がなければ週間扱いしない
+    expect(classifyTextRoute('レポート')).toEqual({ type: 'intent' });
+
+    const event = textEvent('週間レポート');
+    await handleLineEvent(event);
+    expect(mocks.handleWeeklyReportEvent).toHaveBeenCalledWith(event, { uid: 'uid-1', data: {} });
     expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
   });
 

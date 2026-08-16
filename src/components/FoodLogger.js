@@ -5,8 +5,9 @@ import { analyzeImage } from '@/services/aiService';
 import { searchAiFood } from '@/app/actions/food-search';
 import { calculateRecipeHybrid, calculateRecipeWithGemini, searchRecipesWithGemini } from '@/app/actions/recipe';
 import { useAuth } from '@/lib/contexts/AuthContext';
-import { getRecipesFromFirestore, addRecipeToFirestore, deleteRecipeFromFirestore, addSearchHistory, getSearchHistory } from '@/lib/firebase/firestore';
+import { getRecipesFromFirestore, addRecipeToFirestore, updateRecipeInFirestore, deleteRecipeFromFirestore, addSearchHistory, getSearchHistory } from '@/lib/firebase/firestore';
 import { getCache, setCache } from '@/utils/db';
+import { RECIPE_CATEGORIES, normalizeRecipeCategory, getRecipeCategoryLabel, groupRecipesByCategory } from '@/lib/recipeCategories';
 
 export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRecipeSearch = null, stockItems = [], savedRecipeSearch, onSaveRecipeSearch, recentMeals: recentMealsProp = [] }) {
     const [activeTab, setActiveTab] = useState('camera'); // 'camera', 'search', 'manual', 'review', 'history', 'recipes'
@@ -37,7 +38,9 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
 
     // Recipe State
     const [isCreatingRecipe, setIsCreatingRecipe] = useState(false);
-    const [recipeForm, setRecipeForm] = useState({ foodName: '', calories: '', protein: '', fat: '', carbs: '', ingredients: '', instructions: [], description: '' });
+    const [recipeForm, setRecipeForm] = useState({ foodName: '', calories: '', protein: '', fat: '', carbs: '', ingredients: '', instructions: [], description: '', category: '' });
+    // レシピ一覧のカテゴリ絞り込み。'all' | カテゴリid | 'none'（未分類）
+    const [recipeCategoryFilter, setRecipeCategoryFilter] = useState('all');
     // New Recipe State
     const [recipeIngredients, setRecipeIngredients] = useState([]); // Array of objects
     const [isIngredientModalOpen, setIsIngredientModalOpen] = useState(false);
@@ -552,14 +555,30 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                 },
                 ingredients: recipeForm.ingredients,
                 instructions: recipeForm.instructions || [],
-                description: recipeForm.description || ""
+                description: recipeForm.description || "",
+                category: normalizeRecipeCategory(recipeForm.category)
             });
             // Refresh
             const r = await getRecipesFromFirestore(user.uid);
             setRecipes(r);
             setIsCreatingRecipe(false);
-            setRecipeForm({ foodName: '', calories: '', protein: '', fat: '', carbs: '', ingredients: '', instructions: [], description: '' });
+            setRecipeForm({ foodName: '', calories: '', protein: '', fat: '', carbs: '', ingredients: '', instructions: [], description: '', category: '' });
         } catch (e) { console.error(e); }
+    };
+
+    // 保存済みレシピのカテゴリを付け替える（詳細モーダルから）
+    const handleChangeRecipeCategory = async (recipeId, categoryId) => {
+        if (!user) return;
+        try {
+            await updateRecipeInFirestore(user.uid, recipeId, { category: normalizeRecipeCategory(categoryId) });
+            const r = await getRecipesFromFirestore(user.uid);
+            setRecipes(r);
+            setViewingRecipe(prev => (prev && prev.id === recipeId ? { ...prev, category: normalizeRecipeCategory(categoryId) } : prev));
+            showToast(`カテゴリを「${getRecipeCategoryLabel(normalizeRecipeCategory(categoryId))}」にしました`);
+        } catch (e) {
+            console.error(e);
+            showToast("カテゴリの変更に失敗しました");
+        }
     };
 
     const handleDeleteRecipe = (id, e) => {
@@ -643,7 +662,8 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
             carbs: recipe.macros?.carbs || 0,
             ingredients: recipe.ingredients,
             instructions: recipe.instructions || [],
-            description: recipe.description || ""
+            description: recipe.description || "",
+            category: normalizeRecipeCategory(recipe.category) || ''
         });
         // Keep search mode active so user can go back
         // setRecipeSearchMode(false); 
@@ -1042,6 +1062,13 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                         )}
                                     </div>
                                     <div style={{ marginBottom: '10px' }}><label style={labelStyle}>レシピ名</label><input required style={inputStyle} value={recipeForm.foodName} onChange={e => setRecipeForm({ ...recipeForm, foodName: e.target.value })} /></div>
+                                    <div style={{ marginBottom: '10px' }}>
+                                        <label style={labelStyle}>カテゴリ</label>
+                                        <RecipeCategoryChips
+                                            value={recipeForm.category}
+                                            onChange={(id) => setRecipeForm(prev => ({ ...prev, category: prev.category === id ? '' : id }))}
+                                        />
+                                    </div>
                                     <div style={{ marginBottom: '10px' }}><label style={labelStyle}>カロリー (1人前)</label><input type="number" required style={inputStyle} value={recipeForm.calories} onChange={e => setRecipeForm({ ...recipeForm, calories: e.target.value })} /></div>
                                     <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
                                         <div style={{ flex: 1 }}><label style={labelStyle}>タンパク質 (g)</label><input type="number" style={inputStyle} value={recipeForm.protein} onChange={e => setRecipeForm({ ...recipeForm, protein: e.target.value })} /></div>
@@ -1109,23 +1136,69 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                         <Sparkles size={16} /> AI検索
                                     </button>
                                 </div>
-                                <div style={{ flex: 1, overflowY: 'auto' }}>
-                                    {recipes.map((recipe) => (
-                                        <div key={recipe.id} onClick={() => handleSelectRecipe(recipe)} className="glass-panel hover-card" style={{ padding: '12px', marginBottom: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <div>
-                                                <div style={{ fontWeight: 'bold' }}>{recipe.foodName}</div>
-                                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{recipe.calories} kcal/人前</div>
-                                            </div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                <button onClick={(e) => { e.stopPropagation(); setViewingRecipe(recipe); }} style={{ border: 'none', background: 'none', color: 'var(--primary)' }}>
-                                                    <BookOpen size={18} />
-                                                </button>
-                                                <button onClick={(e) => handleDeleteRecipe(recipe.id, e)} style={{ border: 'none', background: 'none', color: 'var(--text-muted)' }}>
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
+                                {/* カテゴリ絞り込みチップ（レシピがあるカテゴリだけ表示） */}
+                                {recipes.length > 0 && (() => {
+                                    const groups = groupRecipesByCategory(recipes);
+                                    const chips = [
+                                        { key: 'all', label: `すべて (${recipes.length})` },
+                                        ...groups.map(g => ({
+                                            key: g.id === null ? 'none' : g.id,
+                                            label: `${g.icon} ${g.label} (${g.recipes.length})`,
+                                        })),
+                                    ];
+                                    return (
+                                        <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '8px', marginBottom: '8px', flexShrink: 0 }}>
+                                            {chips.map(chip => {
+                                                const active = recipeCategoryFilter === chip.key;
+                                                return (
+                                                    <button
+                                                        key={chip.key}
+                                                        onClick={() => setRecipeCategoryFilter(active ? 'all' : chip.key)}
+                                                        style={{
+                                                            flex: '0 0 auto', padding: '5px 10px', borderRadius: '15px', fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap',
+                                                            border: active ? '1px solid var(--primary)' : '1px solid var(--border-subtle)',
+                                                            background: active ? 'var(--primary-glow)' : 'white',
+                                                            color: active ? 'var(--primary-dark)' : 'var(--text-secondary)',
+                                                            fontWeight: active ? 'bold' : 'normal',
+                                                        }}
+                                                    >
+                                                        {chip.label}
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
-                                    ))}
+                                    );
+                                })()}
+                                <div style={{ flex: 1, overflowY: 'auto' }}>
+                                    {recipes.length === 0 && (
+                                        <p style={{ color: 'var(--text-muted)', textAlign: 'center', fontSize: '0.9rem' }}>まだレシピがありません</p>
+                                    )}
+                                    {groupRecipesByCategory(recipes)
+                                        .filter(group => recipeCategoryFilter === 'all'
+                                            || (recipeCategoryFilter === 'none' ? group.id === null : group.id === recipeCategoryFilter))
+                                        .map(group => (
+                                            <div key={group.id ?? 'none'} style={{ marginBottom: '10px' }}>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 'bold', padding: '4px 6px', marginBottom: '6px', borderLeft: '3px solid var(--primary)' }}>
+                                                    {group.icon} {group.label} ({group.recipes.length})
+                                                </div>
+                                                {group.recipes.map((recipe) => (
+                                                    <div key={recipe.id} onClick={() => handleSelectRecipe(recipe)} className="glass-panel hover-card" style={{ padding: '12px', marginBottom: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <div>
+                                                            <div style={{ fontWeight: 'bold' }}>{recipe.foodName}</div>
+                                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{recipe.calories} kcal/人前</div>
+                                                        </div>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                            <button onClick={(e) => { e.stopPropagation(); setViewingRecipe(recipe); }} style={{ border: 'none', background: 'none', color: 'var(--primary)' }}>
+                                                                <BookOpen size={18} />
+                                                            </button>
+                                                            <button onClick={(e) => handleDeleteRecipe(recipe.id, e)} style={{ border: 'none', background: 'none', color: 'var(--text-muted)' }}>
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ))}
                                 </div>
                             </>
                         )}
@@ -1149,6 +1222,17 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                             <span>{viewingRecipe.calories} kcal</span>
                                             <span style={{ color: 'var(--text-muted)' }}>P: {viewingRecipe.macros?.protein || viewingRecipe.protein}g</span>
                                         </div>
+
+                                        {/* 保存済みレシピはここからカテゴリを付け替えられる（既存レシピの分類用） */}
+                                        {recipes.find(r => r.id === viewingRecipe.id) && (
+                                            <div style={{ marginBottom: '20px' }}>
+                                                <h4 style={{ fontSize: '0.9rem', marginBottom: '5px' }}>カテゴリ</h4>
+                                                <RecipeCategoryChips
+                                                    value={normalizeRecipeCategory(viewingRecipe.category) || ''}
+                                                    onChange={(id) => handleChangeRecipeCategory(viewingRecipe.id, id)}
+                                                />
+                                            </div>
+                                        )}
 
                                         <div style={{ marginBottom: '20px' }}>
                                             <h4 style={{ fontSize: '0.9rem', marginBottom: '5px' }}>材料</h4>
@@ -1251,6 +1335,31 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
         </div >
     );
 }
+
+// カテゴリ選択チップ。value が '' のときはどれも選ばれていない（=未分類）
+const RecipeCategoryChips = ({ value, onChange }) => (
+    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        {RECIPE_CATEGORIES.map(category => {
+            const active = value === category.id;
+            return (
+                <button
+                    key={category.id}
+                    type="button"
+                    onClick={() => onChange(category.id)}
+                    style={{
+                        padding: '6px 10px', borderRadius: '15px', fontSize: '0.8rem', cursor: 'pointer',
+                        border: active ? '1px solid var(--primary)' : '1px solid var(--border-subtle)',
+                        background: active ? 'var(--primary-glow)' : 'white',
+                        color: active ? 'var(--primary-dark)' : 'var(--text-secondary)',
+                        fontWeight: active ? 'bold' : 'normal',
+                    }}
+                >
+                    {category.icon} {category.label}
+                </button>
+            );
+        })}
+    </div>
+);
 
 const TabButton = ({ active, onClick, icon, label }) => (
     <button onClick={onClick} style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: '4px', padding: '8px 12px', background: active ? 'var(--primary-glow)' : 'transparent', border: active ? '1px solid var(--primary)' : '1px solid transparent', borderRadius: '20px', color: active ? 'var(--primary-dark)' : 'var(--text-secondary)', fontWeight: active ? 'bold' : 'normal', cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap' }}>

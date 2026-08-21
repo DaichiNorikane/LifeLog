@@ -26,7 +26,8 @@ export async function POST(request) {
     try {
         const result = await writeSleep(uid, payload);
         if (!result.ok) {
-            return NextResponse.json({ error: result.error }, { status: result.status || 400 });
+            const { ok, status, ...rest } = result;
+            return NextResponse.json(rest, { status: status || 400 });
         }
         return NextResponse.json({ success: true, date: result.date, sleep: result.sleep });
     } catch (error) {

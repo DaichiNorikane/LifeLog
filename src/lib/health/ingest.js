@@ -160,6 +160,17 @@ export const parseDateInput = (value) => {
     return date;
 };
 
+/**
+ * 「そもそも送られてこなかった」と同じに扱う値かどうか。
+ *
+ * ショートカットの「ヘルスケアサンプルを検索」は0件でもエラーにならず、
+ * 変数が空のまま JSON に載る（空文字、サンプルの配列をそのまま置いた場合は空配列）。
+ * これを「不正な値」として弾くと、同じ POST に乗っている他の項目まで巻き添えで落ちる。
+ * 空は「取れなかった」であって「間違っている」ではないので、未指定と同じ扱いにする。
+ */
+const isBlankInput = (value) =>
+    value === undefined || value === null || String(value).trim() === '';
+
 /** Firestore に undefined は書けないので、undefined のキーを落とす */
 const stripUndefined = (obj) => Object.fromEntries(
     Object.entries(obj).filter(([, v]) => v !== undefined)
@@ -197,7 +208,7 @@ export const writeWeight = async (uid, payload = {}) => {
         return { ok: false, error: 'Invalid weight', status: 400 };
     }
 
-    const measuredAtDate = measuredAt === undefined || measuredAt === null
+    const measuredAtDate = isBlankInput(measuredAt)
         ? new Date()
         : parseDateInput(measuredAt);
     if (!measuredAtDate) {
@@ -394,8 +405,10 @@ export const writeSleep = async (uid, payload = {}) => {
         };
     }
 
-    const sleepStartDate = parseDateInput(sleepStart);
-    if (sleepStart !== undefined && sleepStart !== null && !sleepStartDate) {
+    // 就寝側の検索だけ0件になることがある（起床側とは別のアクションなので独立に失敗する）。
+    // sleepEnd さえ読めれば起床時刻は残せるので、空の sleepStart で睡眠ごと捨てない。
+    const sleepStartDate = isBlankInput(sleepStart) ? null : parseDateInput(sleepStart);
+    if (!isBlankInput(sleepStart) && !sleepStartDate) {
         return { ok: false, error: 'Invalid sleepStart', status: 400 };
     }
     if (sleepStartDate && sleepStartDate >= sleepEndDate) {

@@ -207,4 +207,29 @@ describe('POST /api/health/weight', () => {
     }));
     expect(options).toEqual({ merge: true });
   });
+
+  // ショートカットの日付変数が空のまま届いても、体重そのものは読めている。
+  // 「測定時刻が空」で体重ごと捨てず、未指定と同じく実行時刻で記録する
+  it('falls back to now when measuredAt arrives empty', async () => {
+    const res = await POST(createMockRequest({
+      body: { uid: 'user1', weight: 65.8, measuredAt: '' },
+    }));
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual(expect.objectContaining({
+      success: true,
+      weight: 65.8,
+    }));
+    expect(firebaseMocks.mockSet).toHaveBeenCalled();
+  });
+
+  it('still rejects a non-empty unparsable measuredAt', async () => {
+    const res = await POST(createMockRequest({
+      body: { uid: 'user1', weight: 65.8, measuredAt: 'this morning' },
+    }));
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: 'Invalid measuredAt' });
+    expect(firebaseMocks.mockSet).not.toHaveBeenCalled();
+  });
 });

@@ -2,7 +2,7 @@
 import {
     apiKey, getGenAI, ELENA_PERSONA, MODELS_TO_TRY, THINKING, createModel,
     DAILY_EVAL_SCHEMA, MEAL_SCORE_SCHEMA, GOAL_ANALYSIS_SCHEMA,
-    MEAL_RANKING_SCHEMA, CATEGORY_EVAL_SCHEMA, buildPrompt
+    MEAL_RANKING_SCHEMA, CATEGORY_EVAL_SCHEMA, buildPrompt, HEALTH_DISCLAIMER_RULE
 } from "./gemini-client";
 import { suggestNextMeal } from "./meal-advisor";
 
@@ -49,6 +49,23 @@ ${ELENA_PERSONA}
 - **子供だましの比喩表現（工場や擬人化など）は一切禁止。**
 - 言い訳には「数字は嘘をつかない」と返す。
 
+# Life Trainer Mode（生活全体の指導）
+あなたは食事だけのコーチではありません。**睡眠・集中力・活動量まで見て体を管理する専属トレーナー**です。
+【あなたの生活データ（実測）】が与えられている場合は、必ず以下を実践してください。
+
+1. **睡眠×集中力の因果を指摘する**: 睡眠時間が短い・眠りの体感が悪い日に、集中力の体感も低ければ、
+   「昨夜の睡眠が〇時間と短かったので、今日は集中力が持たなかったのですね」のように**繋げて**説明する。
+   逆によく眠れて集中できた日は、その繋がりを褒めて強化する。
+2. **食事タイミング×睡眠の助言をする**: 就寝予定時刻の3時間以内の食事、夕方以降のカフェイン、夜の高脂質・多量の食事があれば、
+   「この時間にこれを食べると、消化のために深部体温が下がりにくく、眠りが浅くなりやすいんです」のように
+   **メカニズムとセットで**今夜の睡眠への影響を具体的に伝える。
+3. **睡眠不足の日の食事指導に繋げる**: 睡眠が短い日は食欲ホルモン（グレリン/レプチン）が乱れて食べ過ぎやすい。
+   その視点から今日・明日の食事の注意点を語る。
+4. **データがない項目は語らない**: 睡眠や体調のデータが与えられていないのに、推測で作文するのは禁止。
+5. advice には見出し **【コンディション】** を追加し、生活データへのコメントをそこにまとめる（データがある場合のみ）。
+
+${HEALTH_DISCLAIMER_RULE}
+
 【評価の絶対ルール】
 1. **「記録あり」の食事を「欠食」「抜いた」と言わないこと。**
 2. **まだ食べていない将来の食事を減点しないこと。**
@@ -66,6 +83,7 @@ ${ELENA_PERSONA}
 - score: 0-100の整数（日の総合点）
 - title: 短い評価コメント（会話調・絵文字あり）
 - advice: Markdownの太字を使って以下の見出しを含めること → **【ステータス】** **【Good】** **【Bad】** **【Action】** **【豆知識】** **【結論】**
+  （生活データが与えられている場合のみ、**【コンディション】** も追加すること）
 - foodAssessments: 各食事を0-10点で評価（以下の基準）
   - 10点: 完璧。「完璧です！美味しそう〜✨」
   - 7-9点: 良い。「イイ感じですね！👍」
@@ -179,6 +197,17 @@ export const evaluateDailyLog = async (data, stockItems = []) => {
         ? `\n【今日のコンディション予測（別システムが算出。矛盾しないように）】\n${data.conditionSummary}`
         : '';
 
+    // 睡眠・集中力などの実測データ（trainerContext.js で組み立てたテキスト）。
+    // これがある時だけ、エレナは Life Trainer Mode で生活全体を語る。
+    const trainerBlock = data.trainerContext ? `\n\n${data.trainerContext}` : '';
+
+    // 食事タイミング×睡眠の助言をさせるため、食事には時刻(JST)を添える
+    const jstTime = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' });
+    const formatMealTime = (timestamp) => {
+        const d = new Date(timestamp);
+        return Number.isNaN(d.getTime()) ? '' : `${jstTime.format(d)} `;
+    };
+
     const dynamicPrompt = `
 # Context（ここから下が今回の実データ）
 
@@ -199,8 +228,8 @@ ${isVeryLow && (hasDinner || hour >= 21) ? "【緊急】カロリーが極端に
 【記録されている食事の状況】
 ${mealStatusContext}
 
-【今日食べた具体的な食事内容】
-${(data.meals || []).map(m => `- ${m.mealType || '不明'}: ${m.foodName} (${m.calories}kcal)`).join('\n')}
+【今日食べた具体的な食事内容（時刻つき）】
+${(data.meals || []).map(m => `- ${formatMealTime(m.timestamp)}${m.mealType || '不明'}: ${m.foodName} (${m.calories}kcal)`).join('\n')}
 
 【ユーザー状況】
 - 現在時刻: ${jstNow.toISOString().replace('T', ' ').substring(0, 16)} (JST ${hour}時台)
@@ -215,9 +244,9 @@ ${(data.meals || []).map(m => `- ${m.mealType || '不明'}: ${m.foodName} (${m.c
   (プラスなら残り余裕あり、マイナスなら超過)
 
 【直近の履歴 (コンテキストとして使用)】
-${data.historySummary || "履歴なし"}${conditionLine}
+${data.historySummary || "履歴なし"}${conditionLine}${trainerBlock}
 
-ユーザーの**今の時点での**食事記録と目標に基づいて、評価、スコア、そしてアドバイスを提供してください。
+ユーザーの**今の時点での**食事記録・生活データと目標に基づいて、評価、スコア、そしてアドバイスを提供してください。
     `.trim();
 
     const prompt = buildPrompt(DAILY_EVAL_STATIC_PROMPT, dynamicPrompt);

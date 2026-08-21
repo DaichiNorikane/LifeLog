@@ -137,6 +137,10 @@ export async function getOrRunEvaluation(userId, todayStr, meals = null, userDat
     const target = userData.targetCalories || 2000;
 
     try {
+        // 睡眠・集中力などの生活データ（取れなければ null で従来通りの食事評価になる）
+        const { buildTrainerContextTextAdmin } = await import('@/lib/firebase/adminHelpers');
+        const trainerContext = await buildTrainerContextTextAdmin(userId, userData);
+
         const evaluation = await evaluateDailyLog({
             date: todayStr,
             consumedCalories,
@@ -145,6 +149,7 @@ export async function getOrRunEvaluation(userId, todayStr, meals = null, userDat
             currentWeight: userData.currentWeight,
             targetWeight: userData.targetWeight,
             targetDate: userData.targetDate,
+            trainerContext,
         });
 
         if (evaluation && !evaluation.error) {

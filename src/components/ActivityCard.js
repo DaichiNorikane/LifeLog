@@ -263,7 +263,10 @@ function GoalProgressLine({ goal }) {
 
     let daysLeft = null;
     if (targetDate) {
-        const end = new Date(targetDate);
+        // 'YYYY-MM-DD' を new Date() に渡すと UTC 深夜になり、JST ではローカル深夜との
+        // 9時間差を ceil が拾って常に1日多く表示されてしまう。ローカルの暦日として解釈する。
+        const [ty, tm, td] = String(targetDate).split('-').map(Number);
+        const end = (ty && tm && td) ? new Date(ty, tm - 1, td) : new Date(NaN);
         if (!Number.isNaN(end.getTime())) {
             const today = new Date();
             today.setHours(0, 0, 0, 0);

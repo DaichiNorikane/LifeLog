@@ -1,6 +1,6 @@
 import { evaluateDailyLog } from '@/app/actions/daily-evaluation';
 import { db } from '@/lib/firebase/admin';
-import { getLineChatContextAdmin } from '@/lib/firebase/adminHelpers';
+import { getLineChatContextAdmin, buildTrainerContextTextAdmin } from '@/lib/firebase/adminHelpers';
 import { replyOrPushMessage } from '@/lib/line/client';
 import { formatElenaText } from '@/lib/line/textFormat';
 
@@ -125,6 +125,9 @@ export const handleDailyReviewEvent = async (event, user) => {
         return { mealsCount: 0 };
     }
 
+    // 睡眠・集中力などの生活データ（取れなくても総評自体は止めない）
+    const trainerContext = await buildTrainerContextTextAdmin(user.uid, user.data || {});
+
     const evaluation = await evaluateDailyLog({
         date: context.today?.dateId,
         consumedCalories: context.today?.totalCalories || 0,
@@ -134,6 +137,7 @@ export const handleDailyReviewEvent = async (event, user) => {
         currentWeight: context.user?.currentWeight,
         targetWeight: context.user?.targetWeight,
         targetDate: context.user?.targetDate,
+        trainerContext,
     }, context.stockItems || []);
 
     if (evaluation?.error || evaluation?.score == null) {

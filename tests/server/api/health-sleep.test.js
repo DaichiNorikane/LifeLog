@@ -105,6 +105,42 @@ describe('POST /api/health/sleep', () => {
     });
   });
 
+  // 就寝側の検索が0件だと sleepStart だけが空で届く。ここで睡眠ごと捨てると
+  // 読めている起床時刻まで失う（実機で睡眠だけ入らなかった原因と同じ構図）
+  it('keeps the sleep record when sleepStart arrives empty', async () => {
+    const res = await POST(createMockRequest({
+      body: { uid: 'u1', sleepStart: '', sleepEnd: '2026-07-30T08:00:00+09:00' },
+    }));
+
+    expect(res.status).toBe(200);
+    const [payload] = firebaseMocks.mockSet.mock.calls[0];
+    expect(payload.sleep.objective.sleepStart).toBeNull();
+    expect(payload.sleep.objective.sleepEnd).toBe('2026-07-29T23:00:00.000Z');
+    // 就寝時刻が無ければ臥床時間は出せない。0 を作らず null のままにする
+    expect(payload.sleep.objective.inBedMinutes).toBeNull();
+  });
+
+  it('keeps the sleep record when sleepStart arrives as an empty list', async () => {
+    const res = await POST(createMockRequest({
+      body: { uid: 'u1', sleepStart: [], sleepEnd: '2026-07-30T08:00:00+09:00' },
+    }));
+
+    expect(res.status).toBe(200);
+    const [payload] = firebaseMocks.mockSet.mock.calls[0];
+    expect(payload.sleep.objective.sleepStart).toBeNull();
+  });
+
+  // 空は「取れなかった」、読めない文字は「設定ミス」。後者は今まで通り弾く
+  it('still rejects a non-empty unparsable sleepStart', async () => {
+    const res = await POST(createMockRequest({
+      body: { uid: 'u1', sleepStart: 'last night', sleepEnd: '2026-07-30T08:00:00+09:00' },
+    }));
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: 'Invalid sleepStart' });
+    expect(firebaseMocks.mockSet).not.toHaveBeenCalled();
+  });
+
   it('returns 400 when sleepStart is not before sleepEnd', async () => {
     const res = await POST(createMockRequest({
       body: {

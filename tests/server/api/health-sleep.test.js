@@ -85,17 +85,24 @@ describe('POST /api/health/sleep', () => {
     await expect(res.json()).resolves.toEqual({ error: 'Missing uid' });
   });
 
+  // received は診断用。何が届いたのかを返さないと、実機のショートカットの設定ミスを追えない
   it('returns 400 when sleepEnd is missing', async () => {
     const res = await POST(createMockRequest({ body: { uid: 'u1' } }));
     expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toEqual({ error: 'Missing or invalid sleepEnd' });
+    await expect(res.json()).resolves.toEqual({
+      error: 'Missing or invalid sleepEnd',
+      received: null,
+    });
     expect(firebaseMocks.mockSet).not.toHaveBeenCalled();
   });
 
-  it('returns 400 when sleepEnd is unparsable', async () => {
+  it('returns 400 when sleepEnd is unparsable, echoing back what arrived', async () => {
     const res = await POST(createMockRequest({ body: { uid: 'u1', sleepEnd: 'last night' } }));
     expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toEqual({ error: 'Missing or invalid sleepEnd' });
+    await expect(res.json()).resolves.toEqual({
+      error: 'Missing or invalid sleepEnd',
+      received: 'last night',
+    });
   });
 
   it('returns 400 when sleepStart is not before sleepEnd', async () => {

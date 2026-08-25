@@ -85,14 +85,29 @@ describe('POST /api/health/sleep', () => {
     await expect(res.json()).resolves.toEqual({ error: 'Missing uid' });
   });
 
-  // received は診断用。何が届いたのかを返さないと、実機のショートカットの設定ミスを追えない
+  // received は診断用。何が届いたのかを返さないと、実機のショートカットの設定ミスを追えない。
+  // hint は届き方（行が無い / 空 / 読めない文字）ごとに別の対処を返す
   it('returns 400 when sleepEnd is missing', async () => {
     const res = await POST(createMockRequest({ body: { uid: 'u1' } }));
     expect(res.status).toBe(400);
     await expect(res.json()).resolves.toEqual({
       error: 'Missing or invalid sleepEnd',
       received: null,
+      hint: expect.stringContaining('sleepEnd の行'),
     });
+    expect(firebaseMocks.mockSet).not.toHaveBeenCalled();
+  });
+
+  // 実機で睡眠だけ入らなかった原因。空文字は「詳細を取得」の項目未選択・読み取り許可なし・
+  // データなしのどれでも起きる（いずれもエラーにならず空になる）。
+  // 応答で候補を全部言わないと、実機からは原因に辿り着けない
+  it('hints at the empty-value causes when sleepEnd arrives blank', async () => {
+    const res = await POST(createMockRequest({ body: { uid: 'u1', sleepEnd: '' } }));
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.received).toBe('');
+    expect(json.hint).toContain('詳細を取得');
+    expect(json.hint).toContain('読み取り許可');
     expect(firebaseMocks.mockSet).not.toHaveBeenCalled();
   });
 
@@ -102,6 +117,7 @@ describe('POST /api/health/sleep', () => {
     await expect(res.json()).resolves.toEqual({
       error: 'Missing or invalid sleepEnd',
       received: 'last night',
+      hint: expect.stringContaining('終了日'),
     });
   });
 
@@ -137,8 +153,53 @@ describe('POST /api/health/sleep', () => {
     }));
 
     expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toEqual({ error: 'Invalid sleepStart' });
+    await expect(res.json()).resolves.toEqual({
+      error: 'Invalid sleepStart',
+      received: 'last night',
+      hint: expect.stringContaining('開始日'),
+    });
     expect(firebaseMocks.mockSet).not.toHaveBeenCalled();
+  });
+
+  // 実機で起きた形。就寝と起床は別々の検索なので、就寝側だけ前の夜を掴むことがある。
+  // 29時間の「一晩」をそのまま保存すると、就寝〜起床としてそのまま表示されてしまう
+  it('drops a sleepStart that belongs to a different night', async () => {
+    const res = await POST(createMockRequest({
+      body: {
+        uid: 'u1',
+        sleepStart: '2026-08-24T01:49:00+09:00',   // 前の夜
+        sleepEnd: '2026-08-25T07:00:00+09:00',     // 今朝
+      },
+    }));
+
+    expect(res.status).toBe(200);
+    const [payload] = firebaseMocks.mockSet.mock.calls[0];
+    // 起床時刻は正しいので残す。ペアになっていない就寝時刻だけ捨てる
+    expect(payload.sleep.objective.sleepEnd).toBe('2026-08-24T22:00:00.000Z');
+    expect(payload.sleep.objective.sleepStart).toBeNull();
+    expect(payload.sleep.objective.inBedMinutes).toBeNull();
+
+    // 黙って捨てると「就寝時刻だけ出ない」という別の謎になる
+    const json = await res.json();
+    expect(json.warning).toBe('sleepStart ignored (different night)');
+    expect(json.hint).toContain('終了日 が今日である');
+  });
+
+  it('keeps a long but plausible night intact', async () => {
+    // 12時間の臥床は珍しいがありえる。夜の取り違えだけを捕まえ、長く眠った日を巻き添えにしない
+    const res = await POST(createMockRequest({
+      body: {
+        uid: 'u1',
+        sleepStart: '2026-08-24T21:00:00+09:00',
+        sleepEnd: '2026-08-25T09:00:00+09:00',
+      },
+    }));
+
+    expect(res.status).toBe(200);
+    const [payload] = firebaseMocks.mockSet.mock.calls[0];
+    expect(payload.sleep.objective.sleepStart).toBe('2026-08-24T12:00:00.000Z');
+    expect(payload.sleep.objective.inBedMinutes).toBe(720);
+    await expect(res.json()).resolves.not.toHaveProperty('warning');
   });
 
   it('returns 400 when sleepStart is not before sleepEnd', async () => {
@@ -150,7 +211,10 @@ describe('POST /api/health/sleep', () => {
       },
     }));
     expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toEqual({ error: 'sleepStart must be before sleepEnd' });
+    await expect(res.json()).resolves.toEqual({
+      error: 'sleepStart must be before sleepEnd',
+      hint: expect.stringContaining('入れ違っていないか'),
+    });
   });
 
   // --- 日付の帰属（この機能の肝） ---

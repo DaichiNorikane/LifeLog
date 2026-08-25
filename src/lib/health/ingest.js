@@ -404,7 +404,7 @@ export const writeSleep = async (uid, payload = {}) => {
         const hint = sleepEnd === undefined
             ? 'JSON に sleepEnd の行がありません。本文に sleepStart / sleepEnd の2行を追加してください（docs/healthkit-activity-setup.md §5-3）'
             : isBlankInput(sleepEnd)
-                ? 'ヘルスケアの睡眠の検索が0件でした。(1) ヘルスケア→プロフィール→Appとサービス→ショートカットで「睡眠」の読み取りがオンか (2) ヘルスケアの「睡眠」に前夜のデータが入っているか、を確認してください。Apple Watch や睡眠アプリが無い場合は、ヘルスケアで睡眠スケジュールを設定すると iPhone だけでも記録されます'
+                ? '睡眠の時刻が空のまま届きました。(1)「ヘルスケアサンプルの詳細を取得」で取得する項目（開始日/終了日）を選んでいるか — 薄い「詳細」のままだと出力が空になります (2) ショートカットに睡眠の読み取り許可があるか (3) ヘルスケアの「睡眠」にデータが入っているか、を順に確認してください（docs/healthkit-activity-setup.md §5-4）'
                 : '日付として読めませんでした。「ヘルスケアサンプルの詳細を取得」で「終了日」を選んでいるか確認してください';
         return {
             ok: false,

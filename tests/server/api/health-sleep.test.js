@@ -98,16 +98,16 @@ describe('POST /api/health/sleep', () => {
     expect(firebaseMocks.mockSet).not.toHaveBeenCalled();
   });
 
-  // 実機で睡眠だけ入らなかった原因。検索0件は「データが無い」だけでなく
-  // 「ショートカットに睡眠の読み取り許可が無い」でも起きる（どちらもエラーにならず空になる）。
-  // 応答でその両方を言わないと、実機からは原因に辿り着けない
-  it('hints at missing data or missing read permission when sleepEnd arrives blank', async () => {
+  // 実機で睡眠だけ入らなかった原因。空文字は「詳細を取得」の項目未選択・読み取り許可なし・
+  // データなしのどれでも起きる（いずれもエラーにならず空になる）。
+  // 応答で候補を全部言わないと、実機からは原因に辿り着けない
+  it('hints at the empty-value causes when sleepEnd arrives blank', async () => {
     const res = await POST(createMockRequest({ body: { uid: 'u1', sleepEnd: '' } }));
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.received).toBe('');
-    expect(json.hint).toContain('読み取り');
-    expect(json.hint).toContain('睡眠スケジュール');
+    expect(json.hint).toContain('詳細を取得');
+    expect(json.hint).toContain('読み取り許可');
     expect(firebaseMocks.mockSet).not.toHaveBeenCalled();
   });
 

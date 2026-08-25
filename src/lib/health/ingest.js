@@ -396,11 +396,21 @@ export const writeSleep = async (uid, payload = {}) => {
     const sleepEndDate = parseDateInput(sleepEnd);
     if (!sleepEndDate) {
         // 何が届いたのかを返さないと設定ミスの切り分けができない（writeActivity の rejected と同じ意図）。
-        // 空文字ならヘルスケアに睡眠が無い、文字が入っていれば書式が読めない、と一目で分かる。
+        // 空文字ならヘルスケアの検索が0件、文字が入っていれば書式が読めない、と一目で分かる。
+        //
+        // hint はショートカットの実行結果にそのまま表示される前提の文面。
+        // 特に「検索0件」は、ショートカットに睡眠の読み取り許可が無い場合も
+        // エラーにならず空になるだけなので、応答で言わないと実機からは原因に辿り着けない。
+        const hint = sleepEnd === undefined
+            ? 'JSON に sleepEnd の行がありません。本文に sleepStart / sleepEnd の2行を追加してください（docs/healthkit-activity-setup.md §5-3）'
+            : isBlankInput(sleepEnd)
+                ? 'ヘルスケアの睡眠の検索が0件でした。(1) ヘルスケア→プロフィール→Appとサービス→ショートカットで「睡眠」の読み取りがオンか (2) ヘルスケアの「睡眠」に前夜のデータが入っているか、を確認してください。Apple Watch や睡眠アプリが無い場合は、ヘルスケアで睡眠スケジュールを設定すると iPhone だけでも記録されます'
+                : '日付として読めませんでした。「ヘルスケアサンプルの詳細を取得」で「終了日」を選んでいるか確認してください';
         return {
             ok: false,
             error: 'Missing or invalid sleepEnd',
             received: sleepEnd === undefined ? null : String(sleepEnd).slice(0, 60),
+            hint,
             status: 400,
         };
     }
@@ -409,7 +419,13 @@ export const writeSleep = async (uid, payload = {}) => {
     // sleepEnd さえ読めれば起床時刻は残せるので、空の sleepStart で睡眠ごと捨てない。
     const sleepStartDate = isBlankInput(sleepStart) ? null : parseDateInput(sleepStart);
     if (!isBlankInput(sleepStart) && !sleepStartDate) {
-        return { ok: false, error: 'Invalid sleepStart', status: 400 };
+        return {
+            ok: false,
+            error: 'Invalid sleepStart',
+            received: String(sleepStart).slice(0, 60),
+            hint: '日付として読めませんでした。「ヘルスケアサンプルの詳細を取得」で「開始日」を選んでいるか確認してください',
+            status: 400,
+        };
     }
     if (sleepStartDate && sleepStartDate >= sleepEndDate) {
         return { ok: false, error: 'sleepStart must be before sleepEnd', status: 400 };

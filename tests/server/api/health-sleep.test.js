@@ -85,14 +85,29 @@ describe('POST /api/health/sleep', () => {
     await expect(res.json()).resolves.toEqual({ error: 'Missing uid' });
   });
 
-  // received は診断用。何が届いたのかを返さないと、実機のショートカットの設定ミスを追えない
+  // received は診断用。何が届いたのかを返さないと、実機のショートカットの設定ミスを追えない。
+  // hint は届き方（行が無い / 空 / 読めない文字）ごとに別の対処を返す
   it('returns 400 when sleepEnd is missing', async () => {
     const res = await POST(createMockRequest({ body: { uid: 'u1' } }));
     expect(res.status).toBe(400);
     await expect(res.json()).resolves.toEqual({
       error: 'Missing or invalid sleepEnd',
       received: null,
+      hint: expect.stringContaining('sleepEnd の行'),
     });
+    expect(firebaseMocks.mockSet).not.toHaveBeenCalled();
+  });
+
+  // 実機で睡眠だけ入らなかった原因。検索0件は「データが無い」だけでなく
+  // 「ショートカットに睡眠の読み取り許可が無い」でも起きる（どちらもエラーにならず空になる）。
+  // 応答でその両方を言わないと、実機からは原因に辿り着けない
+  it('hints at missing data or missing read permission when sleepEnd arrives blank', async () => {
+    const res = await POST(createMockRequest({ body: { uid: 'u1', sleepEnd: '' } }));
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.received).toBe('');
+    expect(json.hint).toContain('読み取り');
+    expect(json.hint).toContain('睡眠スケジュール');
     expect(firebaseMocks.mockSet).not.toHaveBeenCalled();
   });
 
@@ -102,6 +117,7 @@ describe('POST /api/health/sleep', () => {
     await expect(res.json()).resolves.toEqual({
       error: 'Missing or invalid sleepEnd',
       received: 'last night',
+      hint: expect.stringContaining('終了日'),
     });
   });
 
@@ -137,7 +153,11 @@ describe('POST /api/health/sleep', () => {
     }));
 
     expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toEqual({ error: 'Invalid sleepStart' });
+    await expect(res.json()).resolves.toEqual({
+      error: 'Invalid sleepStart',
+      received: 'last night',
+      hint: expect.stringContaining('開始日'),
+    });
     expect(firebaseMocks.mockSet).not.toHaveBeenCalled();
   });
 

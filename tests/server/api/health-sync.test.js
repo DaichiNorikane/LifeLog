@@ -289,7 +289,8 @@ describe('POST /api/health/sync', () => {
     expect(payload.sleep.objective.inBedMinutes).toBeNull();
   });
 
-  // 実機で睡眠だけ落ち続けた形。received が空文字なら「ヘルスケアに睡眠が無い」と一目で分かる
+  // 実機で睡眠だけ落ち続けた形。received が空文字なら検索が0件だったと一目で分かる。
+  // hint（データが無い or 読み取り許可が無い）までショートカットの実行結果に出す
   it('echoes an empty received when the wake time arrives blank', async () => {
     const res = await POST(createMockRequest({
       body: { uid: 'user1', steps: 8421, sleepEnd: '' },
@@ -301,6 +302,7 @@ describe('POST /api/health/sync', () => {
       ok: false,
       error: 'Missing or invalid sleepEnd',
       received: '',
+      hint: expect.stringContaining('読み取り'),
     });
     expect(json.results.activity.ok).toBe(true);
     expect(setCalls.conditionLogs).not.toHaveBeenCalled();

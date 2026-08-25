@@ -381,6 +381,18 @@ export const writeWorkouts = async (uid, list = []) => {
 // ========== 睡眠 ==========
 
 /**
+ * 一晩の臥床としてありえる上限。これを超えたら「就寝と起床が別の夜」と判断する。
+ * 実際の睡眠でここまで伸びることはまずないが、夜をまたぐと必ず24時間以上ずれるので、
+ * 長く眠った日を巻き添えにせず取り違えだけを捕まえられる。
+ */
+const MAX_IN_BED_MINUTES = 16 * 60;
+
+/** 診断メッセージ用。JST の時刻だけを出す */
+const formatJstClock = (date) => new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
+}).format(date);
+
+/**
  * 睡眠を users/{uid}/conditionLogs/{YYYY-MM-DD}.sleep.objective に保存する。
  *
  * 日付キーは「その睡眠を引き起こした食事の日」＝起床日の前日。
@@ -427,25 +439,40 @@ export const writeSleep = async (uid, payload = {}) => {
             status: 400,
         };
     }
+    // 就寝が起床より後になるのは、2つのアクションで開始日と終了日を取り違えた形。
+    // 下の「別の夜を掴んだ」ケースと違って設定ミスなので、黙って直さず知らせる。
     if (sleepStartDate && sleepStartDate >= sleepEndDate) {
-        return { ok: false, error: 'sleepStart must be before sleepEnd', status: 400 };
+        return {
+            ok: false,
+            error: 'sleepStart must be before sleepEnd',
+            hint: '就寝が起床より後になっています。就寝側の「詳細を取得」で「開始日」、起床側で「終了日」を選んでいるか（入れ違っていないか）確認してください',
+            status: 400,
+        };
     }
 
     const date = getSleepTargetDateKey(sleepEndDate);
     const dayMinutes = { min: 0, max: 24 * 60 };
 
+    // 就寝と起床は別々の検索アクションから届く。片方が別の夜のサンプルを掴むと
+    // 「前夜の就寝 → 今朝の起床」という29時間の一晩ができあがる（実機で発生した）。
+    // ペアになっていない就寝時刻をそのまま保存すると、就寝〜起床としてそのまま表示されるため、
+    // 一晩としてありえない長さなら別の夜のものと判断して捨てる。起床時刻は正しいので残す。
+    const rawSpanMinutes = sleepStartDate
+        ? Math.round((sleepEndDate - sleepStartDate) / 60000)
+        : null;
+    const isSameNight = rawSpanMinutes !== null && rawSpanMinutes <= MAX_IN_BED_MINUTES;
+    const pairedStartDate = isSameNight ? sleepStartDate : null;
+
     // ショートカットは睡眠セグメントの合計時間を出せない（HealthKitの睡眠は
     // 数値ではなくカテゴリのサンプルとして入るため「統計を計算」が使えない）。
     // 就寝〜起床の時刻さえ送れば臥床時間が出せるので、届いていなければここで補う。
     // asleepMinutes（実際に眠っていた時間）は推測できないので補わない。
-    const spanMinutes = sleepStartDate
-        ? Math.round((sleepEndDate - sleepStartDate) / 60000)
-        : null;
+    const spanMinutes = isSameNight ? rawSpanMinutes : null;
     const inBedValue = toBoundedNumber(inBedMinutes, dayMinutes)
         ?? toBoundedNumber(spanMinutes, dayMinutes);
 
     const objective = {
-        sleepStart: sleepStartDate ? sleepStartDate.toISOString() : null,
+        sleepStart: pairedStartDate ? pairedStartDate.toISOString() : null,
         sleepEnd: sleepEndDate.toISOString(),
         inBedMinutes: inBedValue,
         asleepMinutes: toBoundedNumber(asleepMinutes, dayMinutes),
@@ -468,5 +495,15 @@ export const writeSleep = async (uid, payload = {}) => {
         updatedAt: FieldValue.serverTimestamp(),
     }), { merge: true });
 
-    return { ok: true, date, sleep: objective };
+    // 捨てたことを黙っていると「就寝時刻だけ出ない」という別の謎になる。
+    // 何が起きたのかと直し方を返し、ショートカットの実行結果から追えるようにする。
+    const droppedStart = sleepStartDate && !isSameNight
+        ? {
+            warning: 'sleepStart ignored (different night)',
+            receivedSleepStart: sleepStartDate.toISOString(),
+            hint: `就寝(${formatJstClock(sleepStartDate)})と起床(${formatJstClock(sleepEndDate)})が${Math.round(rawSpanMinutes / 60)}時間離れており、同じ夜の組になっていません。就寝側の検索が前の夜を拾っています。就寝側の検索に「終了日 が今日である」フィルタを足すと、その夜のぶんだけが対象になります（docs/healthkit-activity-setup.md §5-1）`,
+        }
+        : null;
+
+    return { ok: true, date, sleep: objective, ...(droppedStart || {}) };
 };

@@ -161,6 +161,47 @@ describe('POST /api/health/sleep', () => {
     expect(firebaseMocks.mockSet).not.toHaveBeenCalled();
   });
 
+  // 実機で起きた形。就寝と起床は別々の検索なので、就寝側だけ前の夜を掴むことがある。
+  // 29時間の「一晩」をそのまま保存すると、就寝〜起床としてそのまま表示されてしまう
+  it('drops a sleepStart that belongs to a different night', async () => {
+    const res = await POST(createMockRequest({
+      body: {
+        uid: 'u1',
+        sleepStart: '2026-08-24T01:49:00+09:00',   // 前の夜
+        sleepEnd: '2026-08-25T07:00:00+09:00',     // 今朝
+      },
+    }));
+
+    expect(res.status).toBe(200);
+    const [payload] = firebaseMocks.mockSet.mock.calls[0];
+    // 起床時刻は正しいので残す。ペアになっていない就寝時刻だけ捨てる
+    expect(payload.sleep.objective.sleepEnd).toBe('2026-08-24T22:00:00.000Z');
+    expect(payload.sleep.objective.sleepStart).toBeNull();
+    expect(payload.sleep.objective.inBedMinutes).toBeNull();
+
+    // 黙って捨てると「就寝時刻だけ出ない」という別の謎になる
+    const json = await res.json();
+    expect(json.warning).toBe('sleepStart ignored (different night)');
+    expect(json.hint).toContain('終了日 が今日である');
+  });
+
+  it('keeps a long but plausible night intact', async () => {
+    // 12時間の臥床は珍しいがありえる。夜の取り違えだけを捕まえ、長く眠った日を巻き添えにしない
+    const res = await POST(createMockRequest({
+      body: {
+        uid: 'u1',
+        sleepStart: '2026-08-24T21:00:00+09:00',
+        sleepEnd: '2026-08-25T09:00:00+09:00',
+      },
+    }));
+
+    expect(res.status).toBe(200);
+    const [payload] = firebaseMocks.mockSet.mock.calls[0];
+    expect(payload.sleep.objective.sleepStart).toBe('2026-08-24T12:00:00.000Z');
+    expect(payload.sleep.objective.inBedMinutes).toBe(720);
+    await expect(res.json()).resolves.not.toHaveProperty('warning');
+  });
+
   it('returns 400 when sleepStart is not before sleepEnd', async () => {
     const res = await POST(createMockRequest({
       body: {
@@ -170,7 +211,10 @@ describe('POST /api/health/sleep', () => {
       },
     }));
     expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toEqual({ error: 'sleepStart must be before sleepEnd' });
+    await expect(res.json()).resolves.toEqual({
+      error: 'sleepStart must be before sleepEnd',
+      hint: expect.stringContaining('入れ違っていないか'),
+    });
   });
 
   // --- 日付の帰属（この機能の肝） ---

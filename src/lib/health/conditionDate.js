@@ -18,7 +18,8 @@
 /** 論理日の切り替え時刻（JST）。この時刻より前は前日の続きとして扱う */
 export const DAY_BOUNDARY_HOUR = 4;
 
-const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+/** JST の UTC からのずれ。タイムゾーンを持たない入力を組み立てるときの既定値でもある */
+export const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
 /** 任意の Date を JST の {year, month, day, hour, minute} に分解する（サーバー/クライアント共通） */
 export const getJstParts = (date = new Date()) => {

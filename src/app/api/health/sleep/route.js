@@ -26,9 +26,13 @@ export async function POST(request) {
     try {
         const result = await writeSleep(uid, payload);
         if (!result.ok) {
-            return NextResponse.json({ error: result.error }, { status: result.status || 400 });
+            const { ok, status, ...rest } = result;
+            return NextResponse.json(rest, { status: status || 400 });
         }
-        return NextResponse.json({ success: true, date: result.date, sleep: result.sleep });
+        // warning / hint は「就寝時刻を別の夜のものと判断して捨てた」ときだけ付く。
+        // 落とすと就寝時刻が消えた理由が実機から分からなくなるので、そのまま通す
+        const { ok, status, date, sleep, ...diagnostics } = result;
+        return NextResponse.json({ success: true, date, sleep, ...diagnostics });
     } catch (error) {
         console.error('[Health Sleep] Error:', error);
         return NextResponse.json({ error: 'Internal error' }, { status: 500 });

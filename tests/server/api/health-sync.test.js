@@ -267,6 +267,47 @@ describe('POST /api/health/sync', () => {
     expect(payload.sleep.objective.asleepMinutes).toBe(402);
   });
 
+  // 起床側の検索だけが直っても、就寝側が空の日は必ず出る。
+  // そこで睡眠ごと 400 にすると「直したのにまだ入らない」に逆戻りする
+  it('saves the wake time even when the bedtime search returned nothing', async () => {
+    const res = await POST(createMockRequest({
+      body: {
+        uid: 'user1',
+        steps: 8421,
+        sleepStart: '',
+        sleepEnd: '2026-08-01T22:52:00Z',
+      },
+    }));
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.results.sleep.ok).toBe(true);
+    expect(json.results.activity.ok).toBe(true);
+
+    const [payload] = setCalls.conditionLogs.mock.calls[0];
+    expect(payload.sleep.objective.sleepStart).toBeNull();
+    expect(payload.sleep.objective.inBedMinutes).toBeNull();
+  });
+
+  // 実機で睡眠だけ落ち続けた形。received が空文字なら検索が0件だったと一目で分かる。
+  // hint（データが無い or 読み取り許可が無い）までショートカットの実行結果に出す
+  it('echoes an empty received when the wake time arrives blank', async () => {
+    const res = await POST(createMockRequest({
+      body: { uid: 'user1', steps: 8421, sleepEnd: '' },
+    }));
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.results.sleep).toEqual({
+      ok: false,
+      error: 'Missing or invalid sleepEnd',
+      received: '',
+      hint: expect.stringContaining('読み取り'),
+    });
+    expect(json.results.activity.ok).toBe(true);
+    expect(setCalls.conditionLogs).not.toHaveBeenCalled();
+  });
+
   it('does not treat sleep as present without an end time', async () => {
     const res = await POST(createMockRequest({
       body: { uid: 'user1', sleepStart: '2026-08-01T14:10:00Z', steps: 100 },

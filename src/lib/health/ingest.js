@@ -14,7 +14,9 @@
 
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '@/lib/firebase/admin';
-import { getCalendarDateKey, getLogicalDateKey, getSleepTargetDateKey } from '@/lib/health/conditionDate';
+import {
+    getCalendarDateKey, getLogicalDateKey, getSleepTargetDateKey, JST_OFFSET_MS,
+} from '@/lib/health/conditionDate';
 import { ACTIVITY_METRICS, BODY_METRIC_MAP, normalizeBodyFatPercent } from '@/lib/health/healthMetrics';
 
 // ========== 検証ヘルパー ==========
@@ -25,9 +27,12 @@ export const verifyWidgetToken = (request) => {
     return Boolean(token) && token === process.env.WIDGET_TOKEN;
 };
 
-/** 全角の数字・記号を半角に直す（ショートカットの表示形式に引きずられないため） */
+/**
+ * 全角の数字・記号を半角に直す（ショートカットの表示形式に引きずられないため）。
+ * 日付にはコロンとスラッシュが全角で混ざることがあるので、そこまで含めて倒す。
+ */
 const toHalfWidth = (text) =>
-    text.replace(/[０-９．－，]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+    text.replace(/[０-９．－，：／]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
 
 /**
  * 数値化。空文字・null・非数値は null（0 は 0 のまま通す）。
@@ -72,12 +77,99 @@ export const toBoundedNumber = (value, { min = -Infinity, max = Infinity } = {})
     return number;
 };
 
-/** ISO 文字列などを Date に。不正なら null */
-export const parseIsoDate = (value) => {
-    if (!value) return null;
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? null : date;
+/** 曜日表記を落とす。「2026年8月21日金曜日」「2026/08/21(金)」のような長い書式に混ざる */
+const stripWeekday = (text) => text
+    .replace(/[日月火水木金土]曜日/g, ' ')
+    .replace(/[（(][日月火水木金土][)）]/g, ' ');
+
+/** 「日本標準時」「GMT+9」などの明示タイムゾーン。書かれていなければ null */
+const extractOffsetMs = (text) => {
+    if (/日本標準時|\bJST\b/i.test(text)) return JST_OFFSET_MS;
+
+    const match = /(?:GMT|UTC)\s*([+-])\s*(\d{1,2})(?::?(\d{2}))?/i.exec(text);
+    if (!match) return null;
+
+    const hours = Number(match[2]);
+    const minutes = Number(match[3] || 0);
+    if (hours > 14 || minutes > 59) return null;
+
+    const sign = match[1] === '-' ? -1 : 1;
+    return sign * (hours * 60 + minutes) * 60 * 1000;
 };
+
+/** 午前/午後・AM/PM を 24 時間表記に直す */
+const applyMeridiem = (hour, text) => {
+    if (/午前|\bAM\b/i.test(text)) return hour === 12 ? 0 : hour;
+    if (/午後|\bPM\b/i.test(text)) return hour === 12 ? 12 : hour + 12;
+    return hour;
+};
+
+const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/i;
+const DATE_PARTS = /(\d{4})\s*[-/年]\s*(\d{1,2})\s*[-/月]\s*(\d{1,2})/;
+const TIME_PARTS = /(\d{1,2})\s*[:時]\s*(\d{1,2})(?:\s*[:分]\s*(\d{1,2}))?/;
+
+/**
+ * ショートカットが送ってくる日付表記を Date に直す。読めなければ null。
+ *
+ * iOSショートカットの「開始日 / 終了日」は Date 型で、JSON のテキスト欄に入れると
+ * 端末のロケール表記のまま送られてくる（`2026年8月21日 7:30`）。`new Date()` は
+ * これを解釈できないため、そのままでは「送っているのに Missing or invalid と
+ * 言われる」という、原因の分かりにくい失敗になる。
+ * toFiniteNumber が表示用の数値文字列を吸収しているのと同じ理由で、ここでも表記ゆれを吸収する。
+ *
+ * 【重要】タイムゾーンを持たない表記は JST の壁時計時刻として組み立てる。
+ * 実行環境（Vercel）は UTC で動くため、ここを `new Date()` まかせにすると
+ * 同じ文字列が 9 時間ずれて保存される。
+ */
+export const parseDateInput = (value) => {
+    if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+    if (!value || typeof value !== 'string') return null;
+
+    const text = stripWeekday(toHalfWidth(value)).trim();
+    if (text === '') return null;
+
+    // オフセット付き ISO 8601 は曖昧さがないのでそのまま信用する
+    if (ISO_WITH_OFFSET.test(text)) {
+        const iso = new Date(text.replace(' ', 'T'));
+        return Number.isNaN(iso.getTime()) ? null : iso;
+    }
+
+    const dateMatch = DATE_PARTS.exec(text);
+    if (!dateMatch) return null;
+
+    const year = Number(dateMatch[1]);
+    const month = Number(dateMatch[2]);
+    const day = Number(dateMatch[3]);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+    // 日付より後ろだけを時刻の捜索対象にする（`2026/08/21` の 08:21 を時刻と読まないため）
+    const rest = text.slice(dateMatch.index + dateMatch[0].length);
+    const timeMatch = TIME_PARTS.exec(rest);
+    const hour = timeMatch ? applyMeridiem(Number(timeMatch[1]), rest) : 0;
+    const minute = timeMatch ? Number(timeMatch[2]) : 0;
+    const second = timeMatch?.[3] ? Number(timeMatch[3]) : 0;
+    if (hour > 23 || minute > 59 || second > 59) return null;
+
+    const offsetMs = extractOffsetMs(rest) ?? JST_OFFSET_MS;
+    const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second) - offsetMs);
+
+    // Date.UTC は 2月31日を3月へ繰り上げてしまう。読めなかったものは読めなかったと返す
+    const wallClock = new Date(date.getTime() + offsetMs);
+    if (wallClock.getUTCMonth() + 1 !== month || wallClock.getUTCDate() !== day) return null;
+
+    return date;
+};
+
+/**
+ * 「そもそも送られてこなかった」と同じに扱う値かどうか。
+ *
+ * ショートカットの「ヘルスケアサンプルを検索」は0件でもエラーにならず、
+ * 変数が空のまま JSON に載る（空文字、サンプルの配列をそのまま置いた場合は空配列）。
+ * これを「不正な値」として弾くと、同じ POST に乗っている他の項目まで巻き添えで落ちる。
+ * 空は「取れなかった」であって「間違っている」ではないので、未指定と同じ扱いにする。
+ */
+const isBlankInput = (value) =>
+    value === undefined || value === null || String(value).trim() === '';
 
 /** Firestore に undefined は書けないので、undefined のキーを落とす */
 const stripUndefined = (obj) => Object.fromEntries(
@@ -116,9 +208,9 @@ export const writeWeight = async (uid, payload = {}) => {
         return { ok: false, error: 'Invalid weight', status: 400 };
     }
 
-    const measuredAtDate = measuredAt === undefined || measuredAt === null
+    const measuredAtDate = isBlankInput(measuredAt)
         ? new Date()
-        : parseIsoDate(measuredAt);
+        : parseDateInput(measuredAt);
     if (!measuredAtDate) {
         return { ok: false, error: 'Invalid measuredAt', status: 400 };
     }
@@ -169,7 +261,7 @@ export const writeWeight = async (uid, payload = {}) => {
  * 「歩数だけ再送」のようなショートカットを許すため。
  */
 export const writeActivity = async (uid, payload = {}) => {
-    const capturedAtDate = parseIsoDate(payload.capturedAt) || new Date();
+    const capturedAtDate = parseDateInput(payload.capturedAt) || new Date();
     const targetDate = payload.date ? String(payload.date) : getCalendarDateKey(capturedAtDate);
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
@@ -229,10 +321,10 @@ const sanitizeDocId = (value) => String(value).replace(/[/\\.#$[\]\s:]/g, '-').s
  * HealthKit の UUID があればそれを、無ければ「開始時刻＋種目」を ID にする。
  */
 export const normalizeWorkout = (raw = {}) => {
-    const start = parseIsoDate(raw.start);
+    const start = parseDateInput(raw.start);
     if (!start) return null;
 
-    const end = parseIsoDate(raw.end);
+    const end = parseDateInput(raw.end);
     const durationFromRange = end && end > start
         ? Math.round((end - start) / 60000)
         : null;
@@ -289,6 +381,18 @@ export const writeWorkouts = async (uid, list = []) => {
 // ========== 睡眠 ==========
 
 /**
+ * 一晩の臥床としてありえる上限。これを超えたら「就寝と起床が別の夜」と判断する。
+ * 実際の睡眠でここまで伸びることはまずないが、夜をまたぐと必ず24時間以上ずれるので、
+ * 長く眠った日を巻き添えにせず取り違えだけを捕まえられる。
+ */
+const MAX_IN_BED_MINUTES = 16 * 60;
+
+/** 診断メッセージ用。JST の時刻だけを出す */
+const formatJstClock = (date) => new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
+}).format(date);
+
+/**
  * 睡眠を users/{uid}/conditionLogs/{YYYY-MM-DD}.sleep.objective に保存する。
  *
  * 日付キーは「その睡眠を引き起こした食事の日」＝起床日の前日。
@@ -301,34 +405,74 @@ export const writeSleep = async (uid, payload = {}) => {
         deepMinutes, remMinutes, awakenings,
     } = payload;
 
-    const sleepEndDate = parseIsoDate(sleepEnd);
+    const sleepEndDate = parseDateInput(sleepEnd);
     if (!sleepEndDate) {
-        return { ok: false, error: 'Missing or invalid sleepEnd', status: 400 };
+        // 何が届いたのかを返さないと設定ミスの切り分けができない（writeActivity の rejected と同じ意図）。
+        // 空文字ならヘルスケアの検索が0件、文字が入っていれば書式が読めない、と一目で分かる。
+        //
+        // hint はショートカットの実行結果にそのまま表示される前提の文面。
+        // 特に「検索0件」は、ショートカットに睡眠の読み取り許可が無い場合も
+        // エラーにならず空になるだけなので、応答で言わないと実機からは原因に辿り着けない。
+        const hint = sleepEnd === undefined
+            ? 'JSON に sleepEnd の行がありません。本文に sleepStart / sleepEnd の2行を追加してください（docs/healthkit-activity-setup.md §5-3）'
+            : isBlankInput(sleepEnd)
+                ? '睡眠の時刻が空のまま届きました。(1)「ヘルスケアサンプルの詳細を取得」で取得する項目（開始日/終了日）を選んでいるか — 薄い「詳細」のままだと出力が空になります (2) ショートカットに睡眠の読み取り許可があるか (3) ヘルスケアの「睡眠」にデータが入っているか、を順に確認してください（docs/healthkit-activity-setup.md §5-4）'
+                : '日付として読めませんでした。「ヘルスケアサンプルの詳細を取得」で「終了日」を選んでいるか確認してください';
+        return {
+            ok: false,
+            error: 'Missing or invalid sleepEnd',
+            received: sleepEnd === undefined ? null : String(sleepEnd).slice(0, 60),
+            hint,
+            status: 400,
+        };
     }
 
-    const sleepStartDate = parseIsoDate(sleepStart);
-    if (sleepStart !== undefined && sleepStart !== null && !sleepStartDate) {
-        return { ok: false, error: 'Invalid sleepStart', status: 400 };
+    // 就寝側の検索だけ0件になることがある（起床側とは別のアクションなので独立に失敗する）。
+    // sleepEnd さえ読めれば起床時刻は残せるので、空の sleepStart で睡眠ごと捨てない。
+    const sleepStartDate = isBlankInput(sleepStart) ? null : parseDateInput(sleepStart);
+    if (!isBlankInput(sleepStart) && !sleepStartDate) {
+        return {
+            ok: false,
+            error: 'Invalid sleepStart',
+            received: String(sleepStart).slice(0, 60),
+            hint: '日付として読めませんでした。「ヘルスケアサンプルの詳細を取得」で「開始日」を選んでいるか確認してください',
+            status: 400,
+        };
     }
+    // 就寝が起床より後になるのは、2つのアクションで開始日と終了日を取り違えた形。
+    // 下の「別の夜を掴んだ」ケースと違って設定ミスなので、黙って直さず知らせる。
     if (sleepStartDate && sleepStartDate >= sleepEndDate) {
-        return { ok: false, error: 'sleepStart must be before sleepEnd', status: 400 };
+        return {
+            ok: false,
+            error: 'sleepStart must be before sleepEnd',
+            hint: '就寝が起床より後になっています。就寝側の「詳細を取得」で「開始日」、起床側で「終了日」を選んでいるか（入れ違っていないか）確認してください',
+            status: 400,
+        };
     }
 
     const date = getSleepTargetDateKey(sleepEndDate);
     const dayMinutes = { min: 0, max: 24 * 60 };
 
+    // 就寝と起床は別々の検索アクションから届く。片方が別の夜のサンプルを掴むと
+    // 「前夜の就寝 → 今朝の起床」という29時間の一晩ができあがる（実機で発生した）。
+    // ペアになっていない就寝時刻をそのまま保存すると、就寝〜起床としてそのまま表示されるため、
+    // 一晩としてありえない長さなら別の夜のものと判断して捨てる。起床時刻は正しいので残す。
+    const rawSpanMinutes = sleepStartDate
+        ? Math.round((sleepEndDate - sleepStartDate) / 60000)
+        : null;
+    const isSameNight = rawSpanMinutes !== null && rawSpanMinutes <= MAX_IN_BED_MINUTES;
+    const pairedStartDate = isSameNight ? sleepStartDate : null;
+
     // ショートカットは睡眠セグメントの合計時間を出せない（HealthKitの睡眠は
     // 数値ではなくカテゴリのサンプルとして入るため「統計を計算」が使えない）。
     // 就寝〜起床の時刻さえ送れば臥床時間が出せるので、届いていなければここで補う。
     // asleepMinutes（実際に眠っていた時間）は推測できないので補わない。
-    const spanMinutes = sleepStartDate
-        ? Math.round((sleepEndDate - sleepStartDate) / 60000)
-        : null;
+    const spanMinutes = isSameNight ? rawSpanMinutes : null;
     const inBedValue = toBoundedNumber(inBedMinutes, dayMinutes)
         ?? toBoundedNumber(spanMinutes, dayMinutes);
 
     const objective = {
-        sleepStart: sleepStartDate ? sleepStartDate.toISOString() : null,
+        sleepStart: pairedStartDate ? pairedStartDate.toISOString() : null,
         sleepEnd: sleepEndDate.toISOString(),
         inBedMinutes: inBedValue,
         asleepMinutes: toBoundedNumber(asleepMinutes, dayMinutes),
@@ -351,5 +495,15 @@ export const writeSleep = async (uid, payload = {}) => {
         updatedAt: FieldValue.serverTimestamp(),
     }), { merge: true });
 
-    return { ok: true, date, sleep: objective };
+    // 捨てたことを黙っていると「就寝時刻だけ出ない」という別の謎になる。
+    // 何が起きたのかと直し方を返し、ショートカットの実行結果から追えるようにする。
+    const droppedStart = sleepStartDate && !isSameNight
+        ? {
+            warning: 'sleepStart ignored (different night)',
+            receivedSleepStart: sleepStartDate.toISOString(),
+            hint: `就寝(${formatJstClock(sleepStartDate)})と起床(${formatJstClock(sleepEndDate)})が${Math.round(rawSpanMinutes / 60)}時間離れており、同じ夜の組になっていません。就寝側の検索が前の夜を拾っています。就寝側の検索に「終了日 が今日である」フィルタを足すと、その夜のぶんだけが対象になります（docs/healthkit-activity-setup.md §5-1）`,
+        }
+        : null;
+
+    return { ok: true, date, sleep: objective, ...(droppedStart || {}) };
 };

@@ -114,7 +114,10 @@ export async function POST(request) {
                 const { ok, status, ...rest } = result;
                 results[key] = { ok: true, ...rest };
             } else {
-                results[key] = { ok: false, error: result.error };
+                // 失敗側も status 以外はそのまま返す。診断用の値（received 等）を
+                // ここで落とすと、ショートカットの設定ミスが実機から追えなくなる
+                const { ok, status, ...rest } = result;
+                results[key] = { ok: false, ...rest };
             }
         } catch (error) {
             // 1ドメインの例外で他のドメインを巻き添えにしない

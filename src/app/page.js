@@ -29,7 +29,8 @@ import { usePushNotification } from '@/lib/usePushNotification';
 import { sumMacroTotals, isNutritionallyTrivial, EXTENDED_NUTRIENTS } from '@/lib/health/nutrients';
 import { evaluateCondition, toPredictedScores, toFiredDrivers, hasAnyScore, ENGINE_VERSION } from '@/lib/health/conditionEngine';
 import { toDisplayableFindings } from '@/lib/health/correlation';
-import { getLogicalDateKey, getSleepTargetDateKey } from '@/lib/health/conditionDate';
+import { getLogicalDateKey, getSleepTargetDateKey, shiftDateKey } from '@/lib/health/conditionDate';
+import { buildTrainerContextText } from '@/lib/health/trainerContext';
 
 export default function Home() {
   const { user, logOut, googleSignIn, loading } = useAuth();
@@ -358,6 +359,20 @@ export default function Home() {
     return `${line}${top}`;
   }, [conditionResult]);
 
+  // 睡眠・集中力などの実測データをエレナの日次評価に渡す（生活全体のトレーナー化）。
+  // 「昨夜の睡眠」は論理日-1のログに入っている（conditionDate.js の帰属ルール）。
+  const trainerContext = useMemo(() => {
+    const logicalKey = conditionInput.dateKey;
+    const sleepKey = shiftDateKey(logicalKey, -1);
+    return buildTrainerContextText({
+      todayLog: conditionLogs.find(l => l.date === logicalKey) || null,
+      sleepLog: conditionLogs.find(l => l.date === sleepKey) || null,
+      bedtime: userProfile?.bedtime || null,
+      activity: activityForDate,
+      findings: toDisplayableFindings(conditionModel),
+    });
+  }, [conditionInput.dateKey, conditionLogs, userProfile?.bedtime, activityForDate, conditionModel]);
+
   // エレナの解説はモーダルを開いた時だけ取得する（食事追加ごとには呼ばない）
   const handleRequestConditionAnalysis = useCallback(async (result) => {
     if (!user?.uid) return null;
@@ -510,8 +525,11 @@ export default function Home() {
     })),
     currentWeight: selectedWeightEntry?.weight,
     targetWeight: userProfile?.targetWeight,
-    targetDate: userProfile?.targetDate
-  }), [avgCal3Days, streakDays, currentDate, dayTotals, targetCalories, baseTarget, displayMeals, selectedWeightEntry, userProfile, getHistorySummary]);
+    targetDate: userProfile?.targetDate,
+    // コンディション予測（1行）と生活データ（実測）。エレナが生活全体を評価する材料
+    conditionSummary,
+    trainerContext,
+  }), [avgCal3Days, streakDays, currentDate, dayTotals, targetCalories, baseTarget, displayMeals, selectedWeightEntry, userProfile, getHistorySummary, conditionSummary, trainerContext]);
 
   // Handlers
   const handleLogMeal = async (mealOrMeals) => {
@@ -609,6 +627,8 @@ export default function Home() {
             targetDate: userProfile?.targetDate,
             // コンディション予測を1行だけ渡し、エレナの発言が別画面と矛盾しないようにする
             conditionSummary,
+            // 睡眠・集中力などの実測データ（生活全体のトレーナーとして語らせる）
+            trainerContext,
           });
           if (dailyResult && !dailyResult.error) {
             await saveDailyEvaluation(user.uid, dateKey, dailyResult);

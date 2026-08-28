@@ -81,6 +81,7 @@ src/
 │   ├── usePushNotification.js # Web Push購読フック
 │   ├── pushHelper.js        # Push通知ヘルパー（サーバー側）
 │   ├── health/healthMetrics.js # HealthKit指標の定義（唯一の真実）
+│   ├── health/trainerContext.js # 日次評価に渡す「生活データ」テキストの組み立て（唯一の真実）
 │   ├── health/ingest.js     # HealthKit受信の共通処理（認証・検証・書き込み）
 │   ├── recipeCategories.js  # レシピカテゴリの定義（唯一の真実。WebとLINEで共通）
 │   ├── reports/weeklyReport.js # 週間レポートの集計（cronとLINEオンデマンドで共通）
@@ -199,6 +200,19 @@ Firestore は部分一致検索ができないため、直近300件を読んで�
 - **表情**: スコアに応じて6段階 (`public/images/elena/`)
 - **ステータス**: NORMAL, SCOLD, LOGIC, ENCOURAGE, CHEER
 - 機能追加時はエレナのキャラクター性を常に意識すること
+
+## エレナの日次評価は「生活全体のトレーナー」
+
+日次評価（`evaluateDailyLog`）は食事だけでなく**睡眠・集中力・活動量**まで見て評価する。
+
+- 材料は `src/lib/health/trainerContext.js` の `buildTrainerContextText()` が組み立てる（唯一の真実・純粋関数）。
+  昨夜の実測睡眠（`conditionLogs/{論理日-1}.sleep.objective`）・体感スコア・歩数・就寝予定時刻・個人相関の知見を
+  1つのテキストブロックにし、`data.trainerContext` として渡す
+- サーバー側（LINE総評・cron日次レポート・Push）は `adminHelpers.buildTrainerContextTextAdmin()` で取得する。
+  Web は page.js が state（conditionLogs / activityLogs / conditionModel）から組み立てる
+- プロンプト側は Life Trainer Mode（daily-evaluation.js）＋ `HEALTH_DISCLAIMER_RULE` で、
+  睡眠×集中力の因果指摘・食事タイミング×睡眠の助言をさせる。**データがない項目は語らせない**
+- 生活データがある場合のみ advice に **【コンディション】** 見出しが追加される
 
 ## パフォーマンス設計
 - **コンポーネント**: 全て `next/dynamic` で動的インポート（初期バンドル最小化）

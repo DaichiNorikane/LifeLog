@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => {
     evalDocSet,
     replyOrPushMessage: vi.fn().mockResolvedValue({ success: true }),
     getLineChatContextAdmin: vi.fn(),
+    buildTrainerContextTextAdmin: vi.fn().mockResolvedValue(null),
     evaluateDailyLog: vi.fn(),
   };
 });
@@ -16,6 +17,7 @@ vi.mock('@/lib/line/client', () => ({
 
 vi.mock('@/lib/firebase/adminHelpers', () => ({
   getLineChatContextAdmin: mocks.getLineChatContextAdmin,
+  buildTrainerContextTextAdmin: mocks.buildTrainerContextTextAdmin,
 }));
 
 vi.mock('@/app/actions/daily-evaluation', () => ({

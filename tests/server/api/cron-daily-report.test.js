@@ -40,6 +40,17 @@ const mockCollection = vi.fn().mockReturnValue({
 
 vi.mock('@/lib/firebase/admin', () => ({ db: { collection: mockCollection } }));
 
+// 生活データの取得は別モジュールの責務なので、ここでは null（データなし）に固定する。
+// 実体を通すと mockGet の Once キューを消費してしまい、既存の呼び出し順の検証が壊れるため。
+const mockBuildTrainerContextTextAdmin = vi.fn().mockResolvedValue(null);
+vi.mock('@/lib/firebase/adminHelpers', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    buildTrainerContextTextAdmin: (...args) => mockBuildTrainerContextTextAdmin(...args),
+  };
+});
+
 const mockPushMessage = vi.fn().mockResolvedValue({});
 vi.mock('@/lib/line', () => ({
   getLineClient: vi.fn(() => ({ pushMessage: mockPushMessage })),
@@ -184,6 +195,32 @@ describe('GET /api/cron/daily-report', () => {
     expect(data.success).toBe(true);
     expect(data.processed).toBe(1);
     expect(mockPushMessage).toHaveBeenCalled();
+  });
+
+  it('passes trainerContext (life data) to evaluateDailyLog', async () => {
+    const userDoc = createUserDoc('user1', {
+      lineUserId: 'line-123',
+      targetCalories: 2000,
+    });
+    mockGet.mockResolvedValueOnce({ empty: false, docs: [userDoc] });
+
+    const mealDoc = createMealDoc('meal1', {
+      calories: 500,
+      timestamp: '2024-01-15T12:00:00+09:00',
+    });
+    mockGet.mockResolvedValueOnce({ empty: false, docs: [mealDoc] });
+    mockSet.mockResolvedValue();
+
+    const lifeData = '【あなたの生活データ（実測）】\n- 昨夜の睡眠（実測）: 5.5時間';
+    mockBuildTrainerContextTextAdmin.mockResolvedValueOnce(lifeData);
+
+    const req = createMockRequest();
+    await GET(req);
+
+    expect(mockBuildTrainerContextTextAdmin).toHaveBeenCalledWith('user1', expect.any(Object));
+    expect(mockEvaluateDailyLog).toHaveBeenCalledWith(
+      expect.objectContaining({ trainerContext: lifeData })
+    );
   });
 
   it('sends push notification when pushSubscription exists and meals recorded', async () => {

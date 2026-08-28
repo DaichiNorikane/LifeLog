@@ -16,6 +16,7 @@ vi.mock('@google/generative-ai', () => {
 vi.mock('@/app/actions/gemini-client', () => ({
   apiKey: 'test-key',
   ELENA_PERSONA: 'Test persona',
+  HEALTH_DISCLAIMER_RULE: '# 健康に関する表現の制約（テスト用）',
   MODELS_TO_TRY: ['model-1'],
   THINKING: { OFF: 0, MEDIUM: 1024, DYNAMIC: -1 },
   getGenAI: vi.fn(),
@@ -108,6 +109,47 @@ describe('evaluateDailyLog', () => {
     mockGenerateContent.mockRejectedValue(new Error('Model down'));
     const result = await evaluateDailyLog(baseData);
     expect(result.error).toBeDefined();
+  });
+
+  it('includes trainerContext (sleep/focus data) in the prompt when provided', async () => {
+    mockGenerateContent.mockResolvedValue(makeGeminiResponse({ score: 60, title: 'OK' }));
+
+    const trainerContext = '【あなたの生活データ（実測）】\n- 昨夜の睡眠（実測）: 5.5時間\n- 今日の集中力の体感: 2/5（いまいち）';
+    await evaluateDailyLog({ ...baseData, trainerContext });
+
+    const prompt = mockGenerateContent.mock.calls[0][0];
+    expect(prompt).toContain('昨夜の睡眠（実測）: 5.5時間');
+    expect(prompt).toContain('今日の集中力の体感: 2/5');
+    // 静的プロンプト側にトレーナー指示と健康表現の制約が入っていること
+    expect(prompt).toContain('Life Trainer Mode');
+    expect(prompt).toContain('健康に関する表現の制約');
+  });
+
+  it('omits trainer block but keeps trainer rules when trainerContext is absent', async () => {
+    mockGenerateContent.mockResolvedValue(makeGeminiResponse({ score: 60, title: 'OK' }));
+
+    await evaluateDailyLog(baseData);
+
+    const prompt = mockGenerateContent.mock.calls[0][0];
+    // 静的指示には見出しへの言及があるが、実データの行は入らない
+    expect(prompt).not.toContain('昨夜の睡眠（実測）:');
+    expect(prompt).toContain('Life Trainer Mode');
+  });
+
+  it('includes meal time (JST) in the meal list for timing advice', async () => {
+    mockGenerateContent.mockResolvedValue(makeGeminiResponse({ score: 60, title: 'OK' }));
+
+    await evaluateDailyLog({
+      ...baseData,
+      meals: [{
+        foodName: 'ラーメン', calories: 800, mealType: 'dinner',
+        timestamp: '2026-08-21T14:30:00.000Z', // JST 23:30
+      }],
+    });
+
+    const prompt = mockGenerateContent.mock.calls[0][0];
+    expect(prompt).toContain('23:30');
+    expect(prompt).toContain('ラーメン');
   });
 
   it('handles suggestNextMeal failure gracefully', async () => {

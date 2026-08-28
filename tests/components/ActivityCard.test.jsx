@@ -115,9 +115,12 @@ describe('ActivityCard', () => {
     it('shows the remaining days when the goal has a deadline', () => {
       const future = new Date();
       future.setDate(future.getDate() + 45);
+      // toISOString() は UTC に変換されてタイムゾーン次第で日付がずれるため、ローカルの暦日で組む
+      const pad = (n) => String(n).padStart(2, '0');
+      const targetDate = `${future.getFullYear()}-${pad(future.getMonth() + 1)}-${pad(future.getDate())}`;
 
       render(<ActivityCard compact body={{ weight: 83.4 }} goal={{
-        current: 83.4, target: 75, start: 90, targetDate: future.toISOString().split('T')[0],
+        current: 83.4, target: 75, start: 90, targetDate,
       }} />);
 
       expect(screen.getByText('残り45日')).toBeInTheDocument();

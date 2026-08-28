@@ -3,7 +3,7 @@ import { db } from '@/lib/firebase/admin';
 import { getLineClient } from '@/lib/line';
 import { evaluateDailyLog } from '@/app/actions/daily-evaluation';
 import { sendPushToUser, getJSTToday } from '@/lib/pushHelper';
-import { buildConditionContextAdmin } from '@/lib/firebase/adminHelpers';
+import { buildConditionContextAdmin, buildTrainerContextTextAdmin } from '@/lib/firebase/adminHelpers';
 import { AXIS_LABELS } from '@/lib/health/conditionRules';
 import { formatElenaText } from '@/lib/line/textFormat';
 
@@ -60,6 +60,8 @@ export async function GET(request) {
             // --- 1. Daily Evaluation (only if meals exist) ---
             if (meals.length > 0) {
                 const consumedCalories = meals.reduce((acc, m) => acc + (Number(m.calories) || 0), 0);
+                // 睡眠・集中力などの生活データを添えて、生活全体のトレーナーとして評価させる
+                const trainerContext = await buildTrainerContextTextAdmin(userId, userData);
                 const evaluation = await evaluateDailyLog({
                     date: todayStr,
                     consumedCalories,
@@ -68,6 +70,7 @@ export async function GET(request) {
                     currentWeight: userData.currentWeight,
                     targetWeight: userData.targetWeight,
                     targetDate: userData.targetDate,
+                    trainerContext,
                 });
 
                 if (!evaluation.error) {

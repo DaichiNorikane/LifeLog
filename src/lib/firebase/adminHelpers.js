@@ -2,9 +2,11 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '@/lib/firebase/admin';
 import { cleanData } from '@/utils/cleanData';
 import { evaluateCondition, hasAnyScore } from '@/lib/health/conditionEngine';
-import { getLogicalDateKey } from '@/lib/health/conditionDate';
+import { getLogicalDateKey, getCalendarDateKey, shiftDateKey } from '@/lib/health/conditionDate';
 import { AXES, AXIS_LABELS } from '@/lib/health/conditionRules';
 import { buildEveningSleepNote } from '@/lib/health/conditionMessages';
+import { buildTrainerContextText } from '@/lib/health/trainerContext';
+import { toDisplayableFindings } from '@/lib/health/correlation';
 
 const VALID_MEAL_TYPES = new Set(['breakfast', 'lunch', 'dinner', 'snack']);
 
@@ -51,6 +53,39 @@ export const buildConditionContextAdmin = (meals = [], userProfile = {}, now = n
         sleepNote: buildEveningSleepNote(result),
         result,
     };
+};
+
+/**
+ * エレナの日次評価に渡す「生活データ」テキストを組み立てる（Admin SDK）。
+ * LINE 総評・cron 日次レポート・Push の3経路で共通に使う。
+ * 睡眠・体感・活動量のどれも無ければ null（エレナは食事だけで評価する）。
+ */
+export const buildTrainerContextTextAdmin = async (uid, userProfile = {}, now = new Date()) => {
+    if (!uid) return null;
+    try {
+        const todayKey = getLogicalDateKey(now);
+        const sleepKey = shiftDateKey(todayKey, -1); // 昨夜の睡眠は前日キーに保存されている
+        const activityKey = getCalendarDateKey(now); // アクティビティはカレンダー日
+
+        const [todaySnap, sleepSnap, modelSnap, activitySnap] = await Promise.all([
+            userRef(uid).collection('conditionLogs').doc(todayKey).get(),
+            userRef(uid).collection('conditionLogs').doc(sleepKey).get(),
+            userRef(uid).collection('insights').doc('conditionModel').get(),
+            userRef(uid).collection('activityLogs').doc(activityKey).get(),
+        ]);
+
+        return buildTrainerContextText({
+            todayLog: todaySnap.exists ? todaySnap.data() : null,
+            sleepLog: sleepSnap.exists ? sleepSnap.data() : null,
+            bedtime: userProfile?.bedtime || null,
+            activity: activitySnap.exists ? activitySnap.data() : null,
+            findings: toDisplayableFindings(modelSnap.exists ? modelSnap.data() : null),
+        });
+    } catch (e) {
+        // 生活データが取れなくても日次評価そのものは止めない
+        console.warn('[adminHelpers] buildTrainerContextTextAdmin failed:', e.message);
+        return null;
+    }
 };
 
 export const getConditionLogsAdmin = async (uid, limitCount = 60) => {

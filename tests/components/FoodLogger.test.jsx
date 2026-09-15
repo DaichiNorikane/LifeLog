@@ -94,6 +94,32 @@ describe('FoodLogger', () => {
     vi.useRealTimers();
   });
 
+  it('creates a separate recipe from saved ingredients and clears the next draft', async () => {
+    const { addRecipeToFirestore } = await import('@/lib/firebase/firestore');
+    render(<FoodLogger {...defaultProps} />);
+    fireEvent.click(screen.getByText('レシピ'));
+    await screen.findByText('マイレシピ');
+    fireEvent.click(screen.getByText('+ 新規作成'));
+    fireEvent.change(screen.getByLabelText('登録済みレシピを元に作成'), { target: { value: 'r1' } });
+    expect(screen.getByText('鶏肉')).toBeInTheDocument();
+    expect(screen.getByLabelText('手順（1行に1手順）')).toHaveValue('焼く');
+    fireEvent.change(screen.getByDisplayValue('マイレシピ'), { target: { value: '鶏肉アレンジ' } });
+    fireEvent.change(screen.getByLabelText('手順（1行に1手順）'), { target: { value: '蒸す' } });
+    fireEvent.click(screen.getByText('鶏肉'));
+    fireEvent.change(screen.getByPlaceholderText('例: 鶏むね肉 150g'), { target: { value: '鶏肉 200g' } });
+    fireEvent.submit(screen.getByPlaceholderText('例: 鶏むね肉 150g').closest('form'));
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    await waitFor(() => expect(addRecipeToFirestore).toHaveBeenCalledWith('test-user', expect.objectContaining({
+      foodName: '鶏肉アレンジ', ingredients: '鶏肉 200g', instructions: ['蒸す'], calories: 500,
+    })));
+    expect(addRecipeToFirestore.mock.calls[0][1]).not.toHaveProperty('id');
+    await screen.findByText('+ 新規作成');
+    expect(screen.getByText('マイレシピ')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('+ 新規作成'));
+    expect(screen.getByText('食材がまだありません')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('鶏肉アレンジ')).not.toBeInTheDocument();
+  });
+
   // ─── Rendering & Tab Navigation ─────────────────────────────
 
   it('renders without crashing and shows camera tab by default', () => {

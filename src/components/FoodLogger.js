@@ -553,7 +553,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                     fat: parseInt(recipeForm.fat || 0),
                     carbs: parseInt(recipeForm.carbs || 0)
                 },
-                ingredients: recipeForm.ingredients,
+                ingredients: recipeIngredients.map(ing => [ing.name, ing.amountLabel || (ing.amount != null ? `${ing.amount}g` : '')].filter(Boolean).join(' ')).join('\n'),
                 instructions: recipeForm.instructions || [],
                 description: recipeForm.description || "",
                 category: normalizeRecipeCategory(recipeForm.category)
@@ -653,15 +653,23 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
         }
     }, [foundRecipes, recipeSearchQuery]);
 
-    const importRecipe = (recipe) => {
+    const importRecipe = (recipe = {}) => {
+        setRecipeIngredients((recipe.ingredients || '').split(/\r?\n/).filter(line => line.trim()).map((line, index) => ({
+            id: `import-${index}`, name: line.trim(), amount: null, source: 'text', nutrients: null
+        })));
+        setEditingId(null);
+        setIngredientSearchQuery('');
+        setBulkIngredientText('');
+        setIsIngredientModalOpen(false);
+        setIsBulkIngredientModalOpen(false);
         setRecipeForm({
-            foodName: recipe.foodName,
-            calories: recipe.calories,
+            foodName: recipe.foodName ?? '',
+            calories: recipe.calories ?? '',
             protein: recipe.macros?.protein || 0,
             fat: recipe.macros?.fat || 0,
             carbs: recipe.macros?.carbs || 0,
-            ingredients: recipe.ingredients,
-            instructions: recipe.instructions || [],
+            ingredients: recipe.ingredients || '',
+            instructions: [...(recipe.instructions || [])],
             description: recipe.description || "",
             category: normalizeRecipeCategory(recipe.category) || ''
         });
@@ -980,6 +988,16 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                             <form onSubmit={handleCreateRecipe} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
                                 <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', paddingBottom: '10px' }}>
                                     <div style={{ marginBottom: '10px' }}>
+                                        {recipes.length > 0 && (
+                                            <div style={{ marginBottom: '15px' }}>
+                                                <label htmlFor="recipe-source" style={labelStyle}>登録済みレシピを元に作成</label>
+                                                <select id="recipe-source" value="" onChange={e => { const source = recipes.find(r => r.id === e.target.value); if (source) importRecipe(source); }} style={inputStyle}>
+                                                    <option value="">元にするレシピを選択</option>
+                                                    {recipes.map(recipe => <option key={recipe.id} value={recipe.id}>{recipe.foodName}</option>)}
+                                                </select>
+                                                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>選ぶと入力内容を置き換えます。保存すると別のレシピとして登録されます。</p>
+                                            </div>
+                                        )}
                                         <label style={labelStyle}>食材・調味料リスト</label>
 
                                         {/* Ingredient List */}
@@ -1061,6 +1079,12 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                             </div>
                                         )}
                                     </div>
+                                    <div style={{ marginBottom: '10px' }}>
+                                        <label htmlFor="recipe-instructions" style={labelStyle}>手順（1行に1手順）</label>
+                                        <textarea id="recipe-instructions" style={inputStyle} value={recipeForm.instructions.join('\n')} onChange={e => setRecipeForm({ ...recipeForm, instructions: e.target.value.split('\n') })} />
+                                        <label htmlFor="recipe-description" style={labelStyle}>メモ</label>
+                                        <textarea id="recipe-description" style={inputStyle} value={recipeForm.description} onChange={e => setRecipeForm({ ...recipeForm, description: e.target.value })} />
+                                    </div>
                                     <div style={{ marginBottom: '10px' }}><label style={labelStyle}>レシピ名</label><input required style={inputStyle} value={recipeForm.foodName} onChange={e => setRecipeForm({ ...recipeForm, foodName: e.target.value })} /></div>
                                     <div style={{ marginBottom: '10px' }}>
                                         <label style={labelStyle}>カテゴリ</label>
@@ -1129,7 +1153,7 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                             /* Default List Mode */
                             <>
                                 <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-                                    <button onClick={() => setIsCreatingRecipe(true)} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px dashed var(--primary)', background: 'var(--primary-glow)', color: 'var(--primary-dark)', fontWeight: 'bold' }}>
+                                    <button onClick={() => importRecipe()} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px dashed var(--primary)', background: 'var(--primary-glow)', color: 'var(--primary-dark)', fontWeight: 'bold' }}>
                                         + 新規作成
                                     </button>
                                     <button onClick={() => setRecipeSearchMode(true)} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid var(--border-subtle)', background: 'white', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
@@ -1249,11 +1273,11 @@ export default function FoodLogger({ onLogMeal, onCancel, activeDate, initialRec
                                         )}
 
 
-                                        {!recipes.find(r => r.id === viewingRecipe.id) && (
+                                        {
                                             <button onClick={() => importRecipe(viewingRecipe)} className="btn-primary" style={{ width: '100%', marginTop: '20px' }}>
-                                                このレシピを取り込む
+                                                {recipes.some(r => r.id === viewingRecipe.id) ? 'このレシピを元に新規作成' : 'このレシピを取り込む'}
                                             </button>
-                                        )}
+                                        }
                                     </div>
                                 </div>
                             </div>

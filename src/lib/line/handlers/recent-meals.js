@@ -1,9 +1,10 @@
+import { replyWithSavedMeal } from '@/lib/line/mealSavedReply';
 import {
     addMealAdmin, getMealByIdAdmin, getRecentUniqueMealsAdmin,
 } from '@/lib/firebase/adminHelpers';
 import { replyOrPushMessage } from '@/lib/line/client';
 import { MAX_MEAL_BUBBLES, buildRecentMealTypeFlex, buildRecentMealsFlex } from '@/lib/line/flex/recentMeals';
-import { MEAL_TYPE_LABELS, getMealTypeForJst, isMealType } from '@/lib/line/mealUtils';
+import { getMealTypeForJst, isMealType } from '@/lib/line/mealUtils';
 import { clearLineState, setLineState } from '@/lib/line/state';
 
 /**
@@ -133,14 +134,6 @@ export const handleLogRecentMeal = async (event, user, mealId, requestedType) =>
         return { saved: false };
     }
 
-    const label = MEAL_TYPE_LABELS[mealType] || '食事';
-    const calories = Number.isFinite(Number(source.calories))
-        ? `${Math.round(Number(source.calories))}kcal`
-        : '';
-
-    await replyOrPushMessage(event, {
-        type: 'text',
-        text: `${label}に「${source.foodName}」を記録しました✅ ${calories}\n同じものを続けて食べるのは、記録が楽で続きやすいですよ💪`,
-    });
+    await replyWithSavedMeal(event, user, meal);
     return { saved: true, id: meal.id, mealType };
 };

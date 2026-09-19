@@ -1,10 +1,11 @@
+import { replyWithSavedMeal } from '@/lib/line/mealSavedReply';
 import {
     addMealAdmin, getRecipeByIdAdmin, getRecipesAdmin,
 } from '@/lib/firebase/adminHelpers';
 import { replyOrPushMessage } from '@/lib/line/client';
 import { buildRecentMealTypeFlex } from '@/lib/line/flex/recentMeals';
 import { MAX_RECIPE_BUBBLES, buildRecipeCategoriesFlex, buildRecipesFlex } from '@/lib/line/flex/recipes';
-import { MEAL_TYPE_LABELS, getMealTypeForJst, isMealType } from '@/lib/line/mealUtils';
+import { getMealTypeForJst, isMealType } from '@/lib/line/mealUtils';
 import { groupRecipesByCategory, normalizeRecipeCategory } from '@/lib/recipeCategories';
 
 /**
@@ -130,14 +131,6 @@ export const handleLogRecipe = async (event, user, recipeId, requestedType) => {
         return { saved: false };
     }
 
-    const label = MEAL_TYPE_LABELS[mealType] || '食事';
-    const calories = Number.isFinite(Number(recipe.calories))
-        ? `${Math.round(Number(recipe.calories))}kcal`
-        : '';
-
-    await replyOrPushMessage(event, {
-        type: 'text',
-        text: `${label}に「${recipe.foodName}」を記録しました✅ ${calories}\n自炊の記録、いいですね！レシピからならワンタップで続けられますよ💪`,
-    });
+    await replyWithSavedMeal(event, user, meal);
     return { saved: true, id: meal.id, mealType };
 };

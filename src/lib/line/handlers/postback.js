@@ -1,17 +1,13 @@
-import { evaluateSingleMeal } from '@/app/actions/daily-evaluation';
+import { replyWithSavedMeal } from '@/lib/line/mealSavedReply';
 import {
     addMealAdmin,
     deleteMealsAdmin,
-    getLineChatContextAdmin,
-    saveLineChatExchangeAdmin,
     updateMealsTypeAdmin,
 } from '@/lib/firebase/adminHelpers';
 import { replyOrPushMessage } from '@/lib/line/client';
 import { buildMealConfirmFlex } from '@/lib/line/flex/mealConfirm';
-import { buildMealSavedFlex } from '@/lib/line/flex/mealSaved';
 import { MEAL_TYPE_LABELS } from '@/lib/line/mealUtils';
 import { resolveUserOrReply } from '@/lib/line/resolveUser';
-import { formatElenaText } from '@/lib/line/textFormat';
 import { clearLineState, getLineStateBySid, setLineState } from '@/lib/line/state';
 
 export const EXPIRED_CARD_MESSAGE = {
@@ -238,40 +234,5 @@ export const handlePostbackEvent = async (event) => {
         return;
     }
 
-    const mealTypeLabel = MEAL_TYPE_LABELS[meal.mealType] || '食事';
-    let replyText = `${mealTypeLabel}に記録しました✅`;
-
-    try {
-        const context = await getLineChatContextAdmin(user.uid, user.data || {});
-        const evaluation = await evaluateSingleMeal(meal, context.today?.meals || [], {
-            messageHistory: context.messageHistory || [],
-        });
-        if (!evaluation?.error && evaluation?.score != null && evaluation?.reason) {
-            await replyOrPushMessage(event, buildMealSavedFlex(meal, evaluation));
-            replyText = evaluation.reason;
-            await saveMealExchangeToHistory(user.uid, meal, mealTypeLabel, replyText);
-            return;
-        }
-    } catch (e) {
-        console.warn("Single meal evaluation failed:", e.message);
-    }
-
-    await replyOrPushMessage(event, {
-        type: 'text',
-        text: formatElenaText(replyText),
-    });
-    await saveMealExchangeToHistory(user.uid, meal, mealTypeLabel, replyText);
-};
-
-// 記録イベントをチャット履歴に残し、以降の自由チャットが記録の文脈を把握できるようにする
-const saveMealExchangeToHistory = async (uid, meal, mealTypeLabel, assistantText) => {
-    try {
-        await saveLineChatExchangeAdmin(
-            uid,
-            `（食事を記録: ${meal.foodName} ${meal.calories}kcal / ${mealTypeLabel}）`,
-            assistantText,
-        );
-    } catch (e) {
-        console.warn("Meal exchange history save failed:", e.message);
-    }
+    await replyWithSavedMeal(event, user, meal, { flex: true });
 };

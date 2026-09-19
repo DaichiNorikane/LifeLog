@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  getLineChatContextAdmin: vi.fn().mockResolvedValue({ today: { meals: [], totalCalories: 1000 }, user: { targetCalories: 1800 } }),
+  saveLineChatExchangeAdmin: vi.fn().mockResolvedValue(undefined),
+  evaluateSingleMeal: vi.fn().mockResolvedValue({ score: 8, reason: 'たんぱく質が摂れていますね' }),
   replyOrPushMessage: vi.fn().mockResolvedValue({ success: true }),
   getRecentUniqueMealsAdmin: vi.fn(),
   getMealByIdAdmin: vi.fn(),
@@ -13,7 +16,10 @@ vi.mock('@/lib/line/client', () => ({
   replyOrPushMessage: mocks.replyOrPushMessage,
 }));
 
+vi.mock('@/app/actions/daily-evaluation', () => ({ evaluateSingleMeal: mocks.evaluateSingleMeal }));
 vi.mock('@/lib/firebase/adminHelpers', () => ({
+  getLineChatContextAdmin: mocks.getLineChatContextAdmin,
+  saveLineChatExchangeAdmin: mocks.saveLineChatExchangeAdmin,
   getRecentUniqueMealsAdmin: mocks.getRecentUniqueMealsAdmin,
   getMealByIdAdmin: mocks.getMealByIdAdmin,
   addMealAdmin: mocks.addMealAdmin,
@@ -330,7 +336,9 @@ describe('handleLogRecentMeal', () => {
     await handleLogRecentMeal(event, user, 'm1', 'snack');
 
     expect(lastMessage().text).toContain('鶏胸肉のグリル');
-    expect(lastMessage().text).toContain('320kcal');
+    expect(lastMessage().text).toContain('現在1000kcal / 1800kcal');
+    expect(lastMessage().text).toContain('たんぱく質が摂れていますね');
+    expect(mocks.evaluateSingleMeal).toHaveBeenCalled();
     expect(lastMessage().text).toContain('間食');
   });
 
@@ -361,3 +369,12 @@ describe('handleLogRecentMeal', () => {
     expect(lastMessage().text).toContain('保存に失敗');
   });
 });
+
+ it('keeps the saved daily total when evaluation fails', async () => {
+   mocks.getMealByIdAdmin.mockResolvedValue(MEALS[0]);
+   mocks.evaluateSingleMeal.mockRejectedValueOnce(new Error('unavailable'));
+   await handleLogRecentMeal(event, user, 'm1', 'lunch');
+   expect(mocks.addMealAdmin).toHaveBeenCalledTimes(1);
+   expect(lastMessage().text).toContain('現在1000kcal / 1800kcal');
+   expect(lastMessage().text).toContain('記録は保存されています');
+ });

@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  getLineChatContextAdmin: vi.fn().mockResolvedValue({ today: { meals: [], totalCalories: 1000 }, user: { targetCalories: 1800 } }),
+  saveLineChatExchangeAdmin: vi.fn().mockResolvedValue(undefined),
+  evaluateSingleMeal: vi.fn().mockResolvedValue({ score: 8, reason: 'たんぱく質が摂れていますね' }),
   replyOrPushMessage: vi.fn().mockResolvedValue({ success: true }),
   getRecipesAdmin: vi.fn(),
   getRecipeByIdAdmin: vi.fn(),
@@ -11,7 +14,10 @@ vi.mock('@/lib/line/client', () => ({
   replyOrPushMessage: mocks.replyOrPushMessage,
 }));
 
+vi.mock('@/app/actions/daily-evaluation', () => ({ evaluateSingleMeal: mocks.evaluateSingleMeal }));
 vi.mock('@/lib/firebase/adminHelpers', () => ({
+  getLineChatContextAdmin: mocks.getLineChatContextAdmin,
+  saveLineChatExchangeAdmin: mocks.saveLineChatExchangeAdmin,
   getRecipesAdmin: mocks.getRecipesAdmin,
   getRecipeByIdAdmin: mocks.getRecipeByIdAdmin,
   addMealAdmin: mocks.addMealAdmin,
@@ -172,6 +178,7 @@ describe('handleLogRecipe', () => {
     }));
     expect(lastMessage().text).toContain('昼食');
     expect(lastMessage().text).toContain('鶏むねの塩麹焼き');
+    expect(lastMessage().text).toContain('現在1000kcal / 1800kcal');
   });
 
   it('replies gently when the recipe no longer exists', async () => {

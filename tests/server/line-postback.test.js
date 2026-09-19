@@ -5,7 +5,8 @@ const mocks = vi.hoisted(() => ({
   deleteMealsAdmin: vi.fn().mockResolvedValue(1),
   updateMealsTypeAdmin: vi.fn().mockResolvedValue(1),
   getLineChatContextAdmin: vi.fn().mockResolvedValue({
-    today: { meals: [] },
+    today: { meals: [], totalCalories: 1000 },
+    user: { targetCalories: 2000 },
     messageHistory: [{ role: 'user', text: 'カップヌードルが食べたい' }],
   }),
   saveLineChatExchangeAdmin: vi.fn().mockResolvedValue(undefined),
@@ -142,6 +143,7 @@ describe('LINE postback meal confirmation', () => {
     expect(mocks.clearLineState).toHaveBeenCalledTimes(1);
     const flex = mocks.replyOrPushMessage.mock.calls[0][1];
     expect(flex.type).toBe('flex');
+    expect(JSON.stringify(flex)).toContain('現在1000kcal / 2000kcal');
   });
 
   it('passes chat history to the evaluation and records the exchange', async () => {
@@ -157,7 +159,7 @@ describe('LINE postback meal confirmation', () => {
     expect(mocks.saveLineChatExchangeAdmin).toHaveBeenCalledWith(
       'uid-1',
       '（食事を記録: カレー 650kcal / 昼食）',
-      'いい感じ！',
+      'いい感じ！\n\n現在1000kcal / 2000kcal',
     );
   });
 

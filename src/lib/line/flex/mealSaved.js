@@ -1,7 +1,7 @@
-import { MEAL_TYPE_LABELS } from '@/lib/line/mealUtils';
 import { formatElenaText } from '@/lib/line/textFormat';
+import { MEAL_TYPE_LABELS } from '@/lib/line/mealUtils';
 
-export const buildMealSavedFlex = (meal, evaluation) => ({
+export const buildMealSavedFlex = (meal, evaluation, progress = '') => ({
     type: 'flex',
     altText: `${meal.foodName}を記録しました`,
     contents: {
@@ -61,6 +61,7 @@ export const buildMealSavedFlex = (meal, evaluation) => ({
                     size: 'sm',
                     color: '#374151',
                 },
+                ...(progress ? [{ type: 'text', text: progress, wrap: true, weight: 'bold', size: 'md' }] : []),
             ],
         },
     },

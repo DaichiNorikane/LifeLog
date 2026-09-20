@@ -24,6 +24,9 @@ const iconNames = [
   'ReferenceArea', 'ReferenceLine',
   'Moon', 'Settings2', 'Check', 'Coffee', 'TrendingUp',
   'ChevronDown', 'ChevronUp', 'Dumbbell', 'Footprints', 'Scale',
+  // ProjectorSimulator
+  'Projector', 'MoveVertical', 'Sun', 'Eye', 'Monitor',
+  'ArrowLeftRight', 'Lightbulb', 'Maximize2',
 ];
 
 const mocks = {};

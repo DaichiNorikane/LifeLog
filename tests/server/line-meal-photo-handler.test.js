@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getAwaitingPhotoContextState: vi.fn().mockResolvedValue(null),
   clearLineState: vi.fn().mockResolvedValue(undefined),
   setLineState: vi.fn().mockResolvedValue({}),
+  addPhotoSetItem: vi.fn(),
 }));
 
 vi.mock('@/app/actions/image-analysis', () => ({
@@ -27,9 +28,10 @@ vi.mock('@/lib/line/state', () => ({
   getAwaitingPhotoContextState: mocks.getAwaitingPhotoContextState,
   clearLineState: mocks.clearLineState,
   setLineState: mocks.setLineState,
+  addPhotoSetItem: mocks.addPhotoSetItem,
 }));
 
-import { handleMealPhotoEvent, handlePhotoContextStash } from '@/lib/line/handlers/meal-photo';
+import { getImageSet, handleMealPhotoEvent, handlePhotoContextStash } from '@/lib/line/handlers/meal-photo';
 import { parseMealTypeHint } from '@/lib/line/mealUtils';
 
 const event = {
@@ -125,5 +127,75 @@ describe('handlePhotoContextStash', () => {
     }));
     const message = mocks.replyOrPushMessage.mock.calls[0][1];
     expect(message.text).toContain('写真');
+  });
+});
+
+describe('複数枚まとめて送られた写真（imageSet）', () => {
+  const setEvent = (index) => ({
+    ...event,
+    message: { id: `img-${index}`, type: 'image', imageSet: { id: 'set-1', index, total: 2 } },
+  });
+
+  it('treats a single image or a set of one as a normal photo', () => {
+    expect(getImageSet(event)).toBeNull();
+    expect(getImageSet({ message: { imageSet: { id: 's', index: 1, total: 1 } } })).toBeNull();
+    expect(getImageSet(setEvent(0))).toEqual({ setId: 'set-1', index: 0, total: 2 });
+  });
+
+  it('does not reply until every photo in the set is analyzed', async () => {
+    mocks.addPhotoSetItem.mockResolvedValue({ complete: false, meals: [] });
+
+    const result = await handleMealPhotoEvent(setEvent(0));
+
+    expect(result.waiting).toBe(true);
+    expect(mocks.addPhotoSetItem).toHaveBeenCalledWith('uid-1', expect.objectContaining({
+      setId: 'set-1', index: 0, total: 2, meal: expect.objectContaining({ foodName: '焼き魚定食' }),
+    }));
+    expect(mocks.replyOrPushMessage).not.toHaveBeenCalled();
+    expect(mocks.setLineState).not.toHaveBeenCalled();
+  });
+
+  it('replies with one grouped confirm card when the last photo arrives', async () => {
+    mocks.getAwaitingPhotoContextState.mockResolvedValue({
+      sid: 'photo-context-1', mode: 'awaiting_photo_context', contextText: '夜に食べた',
+    });
+    mocks.addPhotoSetItem.mockResolvedValue({
+      complete: true,
+      meals: [
+        { foodName: '焼き魚定食', calories: 560, macros: { protein: 32, fat: 14, carbs: 70 }, mealType: 'dinner' },
+        { foodName: '味噌汁', calories: 60, macros: { protein: 4, fat: 2, carbs: 6 }, mealType: 'lunch' },
+      ],
+    });
+
+    const result = await handleMealPhotoEvent(setEvent(1));
+
+    expect(result.count).toBe(2);
+    // 補足はまとめて使い終わってから消す
+    expect(mocks.clearLineState).toHaveBeenCalledWith('uid-1', 'photo-context-1');
+    // 同じ食事なので食事タイプは揃える
+    const saved = mocks.setLineState.mock.calls[0][1];
+    expect(saved.pendingMeals.map(meal => meal.mealType)).toEqual(['dinner', 'dinner']);
+    const message = mocks.replyOrPushMessage.mock.calls[0][1];
+    expect(message.type).toBe('flex');
+    expect(JSON.stringify(message)).toContain('2品まとめて記録しますか？');
+    expect(JSON.stringify(message)).toContain('620 kcal');
+  });
+
+  it('tells the user when some photos in the set could not be analyzed', async () => {
+    mocks.analyzeImageWithGemini.mockResolvedValue({ error: 'boom' });
+    mocks.addPhotoSetItem.mockResolvedValue({
+      complete: true,
+      meals: [{ foodName: '味噌汁', calories: 60, macros: {}, mealType: 'lunch' }],
+    });
+
+    await handleMealPhotoEvent(setEvent(1));
+
+    // 失敗した写真も null で登録する（揃わずに待ち続けないように）
+    expect(mocks.addPhotoSetItem.mock.calls[0][1].meal).toBeNull();
+    // 1品だけ残ったら通常の確認カード + 失敗枚数の案内
+    expect(mocks.setLineState.mock.calls[0][1].pendingMeal.foodName).toBe('味噌汁');
+    const messages = mocks.replyOrPushMessage.mock.calls[0][1];
+    expect(messages).toHaveLength(2);
+    expect(messages[1].text).toContain('1枚は解析できませんでした');
   });
 });

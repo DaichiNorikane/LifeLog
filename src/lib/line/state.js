@@ -93,6 +93,8 @@ export const setLineState = async (uid, state) => {
     if (!state?.sid) throw new Error('LINE state requires a sid');
     const payload = {
         pendingMeal: state.pendingMeal || null,
+        // 複数写真をまとめた確認カード。1回の食事として一括保存・合計評価する
+        pendingMeals: Array.isArray(state.pendingMeals) && state.pendingMeals.length ? state.pendingMeals : null,
         pendingEdit: state.pendingEdit || null,
         mode: state.mode || null,
         contextText: state.contextText || null,
@@ -101,6 +103,40 @@ export const setLineState = async (uid, state) => {
     };
     await statesRef(uid).doc(state.sid).set(payload, { merge: false });
     return payload;
+};
+
+/**
+ * 同時に送られた複数の写真（LINEの imageSet）を1つにまとめる。
+ *
+ * 写真は1枚ずつ別イベントで届き、並列に解析される（別リクエストで届くこともある）。
+ * 解析が終わった写真から順にここへ書き込み、最後の1枚が揃った時点で complete=true を返す。
+ * complete を受け取ったイベントだけがまとめの確認カードを返信する。
+ * 解析に失敗した写真も meal=null で書き込む（揃わずに永遠に待ち続けないように）。
+ */
+export const addPhotoSetItem = async (uid, { setId, index, total, meal }) => {
+    const ref = statesRef(uid).doc(`photoset-${setId}`);
+    return db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const current = snap.exists ? (snap.data() || {}) : {};
+        if (current.completed) return { complete: false, meals: [] };
+
+        const items = { ...(current.items || {}), [String(index)]: meal || null };
+        const complete = Object.keys(items).length >= total;
+        tx.set(ref, {
+            sid: `photoset-${setId}`,
+            mode: 'photo_set',
+            pendingMeal: null,
+            items,
+            total,
+            completed: complete,
+            updatedAt: new Date().toISOString(),
+        });
+
+        const meals = complete
+            ? Object.keys(items).map(Number).sort((a, b) => a - b).map(key => items[String(key)]).filter(Boolean)
+            : [];
+        return { complete, meals };
+    });
 };
 
 export const clearLineState = async (uid, sid) => {

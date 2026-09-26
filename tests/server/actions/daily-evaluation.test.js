@@ -236,6 +236,24 @@ describe('evaluateSingleMeal', () => {
     expect(result.score).toBe(5);
   });
 
+  it('evaluates grouped items as one meal instead of "only this dish"', async () => {
+    mockGenerateContent.mockResolvedValue(makeGeminiResponse({ score: 7, reason: 'OK' }));
+    await evaluateSingleMeal(
+      { foodName: 'ハンバーグ、ライス', calories: 750, macros: { protein: 29, fat: 30, carbs: 75 }, mealType: 'dinner' },
+      [],
+      {
+        items: [
+          { foodName: 'ハンバーグ', calories: 500, macros: { protein: 25, fat: 30, carbs: 20 } },
+          { foodName: 'ライス', calories: 250, macros: { protein: 4, fat: 0, carbs: 55 } },
+        ],
+      },
+    );
+    const prompt = mockGenerateContent.mock.calls[0][0];
+    expect(prompt).toContain('一緒に食べた料理（2品）');
+    expect(prompt).toContain('- ハンバーグ（500kcal');
+    expect(prompt).not.toContain('のみが登録されています');
+  });
+
   it('passes context meals for same mealType', async () => {
     mockGenerateContent.mockResolvedValue(makeGeminiResponse({ score: 7, reason: 'OK' }));
     const contextMeals = [

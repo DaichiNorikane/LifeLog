@@ -15,6 +15,10 @@ const makeDocRef = (sid) => ({
 
 vi.mock('@/lib/firebase/admin', () => ({
   db: {
+    runTransaction: vi.fn(async (fn) => fn({
+      get: (ref) => ref.get(),
+      set: (ref, payload) => ref.set(payload),
+    })),
     collection: vi.fn(() => ({
       doc: vi.fn(() => ({
         collection: vi.fn(() => ({
@@ -32,6 +36,7 @@ vi.mock('@/lib/firebase/admin', () => ({
 }));
 
 import {
+  addPhotoSetItem,
   clearLineState,
   getActiveLineStates,
   getAwaitingCorrectionState,
@@ -155,5 +160,41 @@ describe('photo context state', () => {
 
   it('returns null when there is no pending meal card', async () => {
     expect(await getLatestPendingMealState('uid-1')).toBeNull();
+  });
+});
+
+describe('addPhotoSetItem (複数写真のまとめ)', () => {
+  it('waits until every photo in the set is analyzed, then returns them in order', async () => {
+    const first = await addPhotoSetItem('uid-1', { setId: 'set-1', index: 2, total: 3, meal: { foodName: 'スープ' } });
+    expect(first).toEqual({ complete: false, meals: [] });
+
+    const second = await addPhotoSetItem('uid-1', { setId: 'set-1', index: 0, total: 3, meal: { foodName: 'ご飯' } });
+    expect(second.complete).toBe(false);
+
+    // 解析に失敗した写真は null で登録され、結果からは除かれる
+    const last = await addPhotoSetItem('uid-1', { setId: 'set-1', index: 1, total: 3, meal: null });
+    expect(last.complete).toBe(true);
+    expect(last.meals.map(meal => meal.foodName)).toEqual(['ご飯', 'スープ']);
+  });
+
+  it('does not complete the same set twice (再送イベントで二重にカードを出さない)', async () => {
+    await addPhotoSetItem('uid-1', { setId: 'set-2', index: 0, total: 2, meal: { foodName: 'A' } });
+    await addPhotoSetItem('uid-1', { setId: 'set-2', index: 1, total: 2, meal: { foodName: 'B' } });
+    const again = await addPhotoSetItem('uid-1', { setId: 'set-2', index: 1, total: 2, meal: { foodName: 'B' } });
+    expect(again.complete).toBe(false);
+  });
+
+  it('is not mistaken for a pending meal card', async () => {
+    await addPhotoSetItem('uid-1', { setId: 'set-3', index: 0, total: 2, meal: { foodName: 'A' } });
+    expect(await getLatestPendingMealState('uid-1')).toBeNull();
+  });
+});
+
+describe('setLineState with pendingMeals', () => {
+  it('stores the grouped meals for the set confirm card', async () => {
+    await setLineState('uid-1', { sid: 'sid-set', pendingMeals: [{ foodName: 'A' }, { foodName: 'B' }] });
+    const state = await getLineStateBySid('uid-1', 'sid-set');
+    expect(state.pendingMeals).toHaveLength(2);
+    expect(state.pendingMeal).toBeNull();
   });
 });

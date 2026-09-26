@@ -291,3 +291,99 @@ describe('LINE postback recipe actions', () => {
     }));
   });
 });
+
+describe('LINE postback grouped meals (複数写真のまとめカード)', () => {
+  const setState = {
+    sid: 'sid-set',
+    mode: null,
+    pendingMeal: null,
+    pendingMeals: [
+      { foodName: 'ハンバーグ', calories: 500, macros: { protein: 25, fat: 30, carbs: 20, fiber: null, sodium: 900 }, mealType: 'dinner' },
+      { foodName: 'ライス', calories: 250, macros: { protein: 4, fat: 0.5, carbs: 55, fiber: 0.5, sodium: null }, mealType: 'dinner' },
+    ],
+  };
+  const setEvent = (data) => ({ ...event, postback: { data } });
+
+  it('saves every item with the tapped type and evaluates them once as a whole', async () => {
+    mocks.getLineStateBySid.mockResolvedValue(setState);
+    mocks.addMealAdmin.mockResolvedValueOnce('meal-a').mockResolvedValueOnce('meal-b');
+    mocks.getLineChatContextAdmin.mockResolvedValueOnce({
+      today: {
+        meals: [
+          { id: 'meal-a', foodName: 'ハンバーグ', calories: 500, mealType: 'lunch' },
+          { id: 'meal-b', foodName: 'ライス', calories: 250, mealType: 'lunch' },
+          { id: 'meal-x', foodName: 'サラダ', calories: 80, mealType: 'lunch' },
+        ],
+        totalCalories: 830,
+      },
+      user: { targetCalories: 2000 },
+      messageHistory: [],
+    });
+
+    await handlePostbackEvent(setEvent('action=save_meals&sid=sid-set&type=lunch'));
+
+    expect(mocks.addMealAdmin).toHaveBeenCalledTimes(2);
+    expect(mocks.addMealAdmin.mock.calls.map(call => call[1].mealType)).toEqual(['lunch', 'lunch']);
+    expect(mocks.clearLineState).toHaveBeenCalledWith('uid-1', 'sid-set');
+
+    // 1品ずつではなく、合計した1回の食事として1度だけ評価する
+    expect(mocks.evaluateSingleMeal).toHaveBeenCalledTimes(1);
+    const [combined, otherMeals, options] = mocks.evaluateSingleMeal.mock.calls[0];
+    expect(combined).toMatchObject({ foodName: 'ハンバーグ、ライス', calories: 750, mealType: 'lunch' });
+    expect(combined.macros.protein).toBe(29);
+    expect(combined.macros.fiber).toBe(0.5);   // 推定できた品だけ合計
+    expect(combined.macros.sodium).toBe(900);
+    // 今回保存した分は二重計上しない
+    expect(otherMeals.map(meal => meal.id)).toEqual(['meal-x']);
+    expect(options.items).toHaveLength(2);
+
+    const message = mocks.replyOrPushMessage.mock.calls[0][1];
+    expect(JSON.stringify(message)).toContain('昼食に2品記録しました');
+    expect(JSON.stringify(message)).toContain('合計 750 kcal');
+  });
+
+  it('restores the card when nothing could be saved', async () => {
+    mocks.getLineStateBySid.mockResolvedValue(setState);
+    mocks.addMealAdmin.mockRejectedValueOnce(new Error('down'));
+
+    await handlePostbackEvent(setEvent('action=save_meals&sid=sid-set&type=dinner'));
+
+    expect(mocks.setLineState).toHaveBeenCalledWith('uid-1', expect.objectContaining({
+      sid: 'sid-set', pendingMeals: setState.pendingMeals,
+    }));
+    expect(mocks.replyOrPushMessage.mock.calls[0][1].text).toContain('保存に失敗');
+    expect(mocks.evaluateSingleMeal).not.toHaveBeenCalled();
+  });
+
+  it('splits the grouped card into individual confirm cards', async () => {
+    mocks.getLineStateBySid.mockResolvedValue(setState);
+
+    await handlePostbackEvent(setEvent('action=split_meals&sid=sid-set'));
+
+    expect(mocks.setLineState).toHaveBeenCalledTimes(2);
+    expect(mocks.setLineState.mock.calls.map(call => call[1].pendingMeal.foodName)).toEqual(['ハンバーグ', 'ライス']);
+    expect(mocks.clearLineState).toHaveBeenCalledWith('uid-1', 'sid-set');
+    const [message] = mocks.replyOrPushMessage.mock.calls[0][1];
+    expect(message.contents.type).toBe('carousel');
+    expect(message.contents.contents).toHaveLength(2);
+    expect(mocks.addMealAdmin).not.toHaveBeenCalled();
+  });
+
+  it('cancels a grouped card', async () => {
+    mocks.getLineStateBySid.mockResolvedValue(setState);
+
+    await handlePostbackEvent(setEvent('action=cancel_meal&sid=sid-set'));
+
+    expect(mocks.clearLineState).toHaveBeenCalledWith('uid-1', 'sid-set');
+    expect(mocks.addMealAdmin).not.toHaveBeenCalled();
+  });
+
+  it('rejects single-meal actions on a grouped card', async () => {
+    mocks.getLineStateBySid.mockResolvedValue(setState);
+
+    await handlePostbackEvent(setEvent('action=save_meal&sid=sid-set&type=lunch'));
+
+    expect(mocks.addMealAdmin).not.toHaveBeenCalled();
+    expect(mocks.replyOrPushMessage).toHaveBeenCalledWith(expect.anything(), EXPIRED_CARD_MESSAGE);
+  });
+});

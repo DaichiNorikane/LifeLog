@@ -1,12 +1,12 @@
-import { replyWithSavedMeal } from '@/lib/line/mealSavedReply';
+import { replyWithSavedMeal, replyWithSavedMeals } from '@/lib/line/mealSavedReply';
 import {
     addMealAdmin,
     deleteMealsAdmin,
     updateMealsTypeAdmin,
 } from '@/lib/firebase/adminHelpers';
 import { replyOrPushMessage } from '@/lib/line/client';
-import { buildMealConfirmFlex } from '@/lib/line/flex/mealConfirm';
-import { MEAL_TYPE_LABELS } from '@/lib/line/mealUtils';
+import { buildMealConfirmCarousels } from '@/lib/line/flex/mealConfirm';
+import { createSid, MEAL_TYPE_LABELS } from '@/lib/line/mealUtils';
 import { resolveUserOrReply } from '@/lib/line/resolveUser';
 import { clearLineState, getLineStateBySid, setLineState } from '@/lib/line/state';
 
@@ -31,7 +31,7 @@ export const parsePostbackData = (data) => {
 
 const getValidMealStateForPostback = async (uid, sid) => {
     const state = await getLineStateBySid(uid, sid);
-    if (!state?.pendingMeal) return null;
+    if (!state?.pendingMeal && !state?.pendingMeals?.length) return null;
     return state;
 };
 
@@ -183,6 +183,61 @@ export const handlePostbackEvent = async (event) => {
 
     const state = await getValidMealStateForPostback(user.uid, sid);
     if (!state) {
+        await replyOrPushMessage(event, EXPIRED_CARD_MESSAGE);
+        return;
+    }
+
+    // 複数写真のまとめカード。全品を同じタイプで保存し、合計で1回だけ評価する
+    if (action === 'save_meals' || action === 'split_meals') {
+        if (!state.pendingMeals?.length) {
+            await replyOrPushMessage(event, EXPIRED_CARD_MESSAGE);
+            return;
+        }
+
+        if (action === 'split_meals') {
+            // 従来の1品ずつのカードに分ける。1品だけ違う・直したいとき用
+            const entries = state.pendingMeals.map(meal => ({ meal, sid: createSid() }));
+            await Promise.all(entries.map(entry =>
+                setLineState(user.uid, { pendingMeal: entry.meal, mode: null, sid: entry.sid })));
+            await clearLineState(user.uid, sid);
+            await replyOrPushMessage(event, buildMealConfirmCarousels(entries));
+            return;
+        }
+
+        const timestamp = new Date().toISOString();
+        const meals = state.pendingMeals.map(pendingMeal => ({
+            ...pendingMeal,
+            ...(MEAL_TYPE_LABELS[type] ? { mealType: type } : {}),
+            timestamp,
+            image: null,
+        }));
+        try {
+            // 二重タップで全品が重複保存されないよう、保存より先にカードを消費する
+            await clearLineState(user.uid, sid);
+            for (const meal of meals) {
+                meal.id = await addMealAdmin(user.uid, meal);
+            }
+        } catch (e) {
+            console.error("Meal set save failed:", e);
+            const savedCount = meals.filter(meal => meal.id).length;
+            // 1品も保存できていなければカードを復活させ、同じボタンで再試行できるようにする
+            if (savedCount === 0) {
+                await setLineState(user.uid, { pendingMeals: state.pendingMeals, mode: null, sid }).catch(() => {});
+            }
+            await replyOrPushMessage(event, {
+                type: 'text',
+                text: savedCount > 0
+                    ? `ごめんなさい、${meals.length}品中${savedCount}品までしか保存できませんでした😢 残りは写真か文字でもう一度送ってください！`
+                    : 'ごめんなさい、保存に失敗しちゃいました😢 少し時間を置いてもう一度試してください！',
+            });
+            return;
+        }
+
+        await replyWithSavedMeals(event, user, meals, { flex: true });
+        return;
+    }
+
+    if (!state.pendingMeal && action !== 'cancel_meal') {
         await replyOrPushMessage(event, EXPIRED_CARD_MESSAGE);
         return;
     }

@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   addMealAdmin: vi.fn().mockResolvedValue('meal-1'),
   deleteMealsAdmin: vi.fn().mockResolvedValue(1),
   updateMealsTypeAdmin: vi.fn().mockResolvedValue(1),
+  getMealByIdAdmin: vi.fn(),
   getLineChatContextAdmin: vi.fn().mockResolvedValue({
     today: { meals: [], totalCalories: 1000 },
     user: { targetCalories: 2000 },
@@ -29,6 +30,7 @@ vi.mock('@/lib/firebase/adminHelpers', () => ({
   addMealAdmin: mocks.addMealAdmin,
   deleteMealsAdmin: mocks.deleteMealsAdmin,
   updateMealsTypeAdmin: mocks.updateMealsTypeAdmin,
+  getMealByIdAdmin: mocks.getMealByIdAdmin,
   getLineChatContextAdmin: mocks.getLineChatContextAdmin,
   saveLineChatExchangeAdmin: mocks.saveLineChatExchangeAdmin,
 }));
@@ -385,5 +387,67 @@ describe('LINE postback grouped meals (複数写真のまとめカード)', () =
 
     expect(mocks.addMealAdmin).not.toHaveBeenCalled();
     expect(mocks.replyOrPushMessage).toHaveBeenCalledWith(expect.anything(), EXPIRED_CARD_MESSAGE);
+  });
+});
+
+describe('LINE postback delete from the saved card', () => {
+  const deleteEvent = (mid) => ({ ...event, postback: { data: `action=delete_saved&mid=${mid}` } });
+
+  it('asks for confirmation instead of deleting right away', async () => {
+    mocks.getMealByIdAdmin.mockImplementation(async (uid, id) => ({
+      id, foodName: id === 'meal-a' ? 'ハンバーグ' : 'ライス', calories: 500, mealType: 'lunch',
+    }));
+
+    await handlePostbackEvent(deleteEvent('meal-a.meal-b'));
+
+    expect(mocks.getMealByIdAdmin).toHaveBeenCalledWith('uid-1', 'meal-a');
+    expect(mocks.getMealByIdAdmin).toHaveBeenCalledWith('uid-1', 'meal-b');
+    expect(mocks.deleteMealsAdmin).not.toHaveBeenCalled();
+    const [, saved] = mocks.setLineState.mock.calls[0];
+    expect(saved.pendingEdit).toMatchObject({ operation: 'delete', targetIds: ['meal-a', 'meal-b'] });
+    const message = mocks.replyOrPushMessage.mock.calls[0][1];
+    expect(message.altText).toBe('食事記録を削除しますか？');
+    expect(JSON.stringify(message)).toContain('ハンバーグ（昼食/500kcal）');
+  });
+
+  it('skips meals that are already gone', async () => {
+    mocks.getMealByIdAdmin.mockImplementation(async (uid, id) => (id === 'meal-a'
+      ? { id, foodName: 'ハンバーグ', calories: 500, mealType: 'lunch' } : null));
+
+    await handlePostbackEvent(deleteEvent('meal-a.meal-gone'));
+
+    expect(mocks.setLineState.mock.calls[0][1].pendingEdit.targetIds).toEqual(['meal-a']);
+  });
+
+  it('tells the user when everything is already deleted', async () => {
+    mocks.getMealByIdAdmin.mockResolvedValue(null);
+
+    await handlePostbackEvent(deleteEvent('meal-gone'));
+
+    expect(mocks.setLineState).not.toHaveBeenCalled();
+    expect(mocks.replyOrPushMessage.mock.calls[0][1].text).toContain('もう削除されている');
+  });
+
+  it('puts a delete button with the saved meal id on the saved card', async () => {
+    mocks.getLineStateBySid.mockResolvedValue(state);
+    mocks.addMealAdmin.mockResolvedValue('meal-new');
+
+    await handlePostbackEvent(event);
+
+    const message = mocks.replyOrPushMessage.mock.calls[0][1];
+    const button = message.contents.footer.contents[0];
+    expect(button.action.data).toBe('action=delete_saved&mid=meal-new');
+  });
+
+  it('adds a delete quick reply when the reply falls back to text', async () => {
+    mocks.getLineStateBySid.mockResolvedValue(state);
+    mocks.addMealAdmin.mockResolvedValue('meal-new');
+    mocks.evaluateSingleMeal.mockResolvedValue({ error: 'down' });
+
+    await handlePostbackEvent(event);
+
+    const message = mocks.replyOrPushMessage.mock.calls[0][1];
+    expect(message.type).toBe('text');
+    expect(message.quickReply.items[0].action.data).toBe('action=delete_saved&mid=meal-new');
   });
 });

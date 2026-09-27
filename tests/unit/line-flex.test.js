@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildDailySummaryFlex } from '@/lib/line/flex/dailySummary';
 import { buildEditConfirmFlex } from '@/lib/line/flex/editConfirm';
 import { buildMealConfirmFlex, buildMealSetConfirmFlex } from '@/lib/line/flex/mealConfirm';
-import { buildMealSavedFlex } from '@/lib/line/flex/mealSaved';
+import { buildDeleteSavedAction, buildMealSavedFlex, buildMealSetSavedFlex } from '@/lib/line/flex/mealSaved';
 
 const meal = {
   foodName: 'サラダチキンとおにぎり',
@@ -106,5 +106,27 @@ describe('LINE grouped meal confirm card', () => {
     expect(footer[3].action.data).toBe('action=cancel_meal&sid=sid-set');
     expect(flex.altText).toContain('2品');
     expect(JSON.stringify(flex)).toContain('730 kcal');
+  });
+});
+
+describe('LINE saved card delete button', () => {
+  const evaluation = { score: 7, reason: 'いい感じ！' };
+
+  it('shows no delete button when the meal has no id', () => {
+    expect(buildMealSavedFlex(meal, evaluation).contents.footer).toBeUndefined();
+  });
+
+  it('deletes every item of a grouped save with one button', () => {
+    const meals = [{ ...meal, id: 'a1' }, { ...meal, id: 'b2' }];
+    const flex = buildMealSetSavedFlex(meals, { ...meal, calories: 840 }, evaluation);
+    const action = flex.contents.footer.contents[0].action;
+    expect(action.data).toBe('action=delete_saved&mid=a1.b2');
+    expect(action.label).toBe('🗑 この2品を削除');
+  });
+
+  it('drops the button when the ids do not fit in postback data (300 chars)', () => {
+    const ids = Array.from({ length: 20 }, (_, i) => `abcdefghijklmnopqr${String(i).padStart(2, '0')}`);
+    expect(buildDeleteSavedAction(ids)).toBeNull();
+    expect(buildDeleteSavedAction(ids.slice(0, 12))).not.toBeNull();
   });
 });

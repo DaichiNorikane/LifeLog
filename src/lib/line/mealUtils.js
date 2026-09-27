@@ -75,4 +75,32 @@ export const normalizeMealForLine = (analysis, options = {}) => {
     };
 };
 
+const sumNullable = (meals, key) => {
+    const values = meals.map(meal => meal.macros?.[key]).filter(value => value !== null && value !== undefined);
+    // 1品でも推定できていれば合計を出す。全品不明なら null（0 と区別する）
+    return values.length ? Math.round(values.reduce((sum, value) => sum + Number(value), 0) * 10) / 10 : null;
+};
+
+const sumNumber = (meals, key) =>
+    Math.round(meals.reduce((sum, meal) => sum + numberOrZero(meal.macros?.[key]), 0) * 10) / 10;
+
+/**
+ * 一緒に食べた複数の料理を「1回の食事」として合算する（評価と合計表示用。保存はしない）。
+ * 保存は1品ずつ別の記録にするので、Web側の一覧・編集はこれまで通り1品単位で扱える。
+ */
+export const combineMeals = (meals = [], mealType) => ({
+    foodName: meals.map(meal => meal.foodName).join('、'),
+    calories: Math.round(meals.reduce((sum, meal) => sum + numberOrZero(meal.calories), 0)),
+    macros: {
+        protein: sumNumber(meals, 'protein'),
+        fat: sumNumber(meals, 'fat'),
+        carbs: sumNumber(meals, 'carbs'),
+        fiber: sumNullable(meals, 'fiber'),
+        sugar: sumNullable(meals, 'sugar'),
+        sodium: sumNullable(meals, 'sodium'),
+        potassium: sumNullable(meals, 'potassium'),
+    },
+    mealType: mealType || meals[0]?.mealType,
+});
+
 export const createSid = () => randomUUID();

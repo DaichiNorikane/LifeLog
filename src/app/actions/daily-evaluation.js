@@ -295,6 +295,16 @@ ${messageHistory.map(m => `${m.role === 'assistant' ? 'エレナ' : 'ユーザ�
     const mealTypeLabels = { breakfast: '朝食', lunch: '昼食', dinner: '夕食', snack: '間食' };
     const mealTypeLabel = mealTypeLabels[meal.mealType] || '食事';
 
+    // 複数の写真をまとめて記録したとき。一緒に食べた1回の食事として合計で評価させる
+    const items = Array.isArray(options.items) && options.items.length > 1 ? options.items : null;
+    const itemsInfo = items
+        ? `
+【一緒に食べた料理（${items.length}品）】
+${items.map(item => `- ${item.foodName}（${item.calories}kcal / P${item.macros?.protein || 0}g F${item.macros?.fat || 0}g C${item.macros?.carbs || 0}g）`).join('\n')}
+
+**評価ルール**: これら${items.length}品は同じ${mealTypeLabel}で一緒に食べたものです。1品ずつではなく、${items.length}品を合わせた1回の食事として評価してください。「〇〇だけ」「1品しか食べていない」という前提のコメントは禁止です。`
+        : '';
+
     let contextInfo = '';
     if (otherMealsInSameMeal.length > 0) {
         const totalCalsInMeal = otherMealsInSameMeal.reduce((sum, m) => sum + (m.calories || 0), 0) + meal.calories;
@@ -306,7 +316,7 @@ ${messageHistory.map(m => `${m.role === 'assistant' ? 'エレナ' : 'ユーザ�
 - ${mealTypeLabel}トータル: 約${Math.round(totalCalsInMeal)}kcal
 
 **評価ルール**: 「${meal.foodName}」単独では栄養が偏って見えても、${mealTypeLabel}全体として見た時のバランスを考慮してください。`;
-    } else {
+    } else if (!items) {
         contextInfo = `
 【この${mealTypeLabel}の構成】
 現在、この${mealTypeLabel}には「${meal.foodName}」のみが登録されています。
@@ -319,6 +329,7 @@ ${messageHistory.map(m => `${m.role === 'assistant' ? 'エレナ' : 'ユーザ�
 - カロリー: ${meal.calories} kcal
 - PFC: P${meal.macros?.protein || 0}g / F${meal.macros?.fat || 0}g / C${meal.macros?.carbs || 0}g
 - 時間帯: ${mealTypeLabel}
+${itemsInfo}
 ${contextInfo}
 ${historyInfo}
     `.trim();

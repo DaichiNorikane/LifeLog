@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildDailySummaryFlex } from '@/lib/line/flex/dailySummary';
 import { buildEditConfirmFlex } from '@/lib/line/flex/editConfirm';
-import { buildMealConfirmFlex } from '@/lib/line/flex/mealConfirm';
+import { buildMealConfirmFlex, buildMealSetConfirmFlex } from '@/lib/line/flex/mealConfirm';
 import { buildMealSavedFlex } from '@/lib/line/flex/mealSaved';
 
 const meal = {
@@ -83,5 +83,28 @@ describe('LINE meal Flex templates', () => {
       totalMacros: { protein: 60, fat: 35, carbs: 150, fiber: 8, sugar: null, sodium: 2100, potassium: null },
       mealsCount: 3,
     })).toMatchSnapshot();
+  });
+});
+
+describe('LINE grouped meal confirm card', () => {
+  const meals = [
+    { ...meal, foodName: 'カレー', calories: 650 },
+    { ...meal, foodName: 'サラダ', calories: 80 },
+  ];
+
+  it('saves all items at once with the type buttons and offers a split', () => {
+    const flex = buildMealSetConfirmFlex(meals, 'sid-set');
+    const footer = flex.contents.footer.contents;
+    const typeButtons = [...footer[0].contents, ...footer[1].contents];
+    expect(typeButtons.map(button => button.action.data)).toEqual([
+      'action=save_meals&sid=sid-set&type=breakfast',
+      'action=save_meals&sid=sid-set&type=lunch',
+      'action=save_meals&sid=sid-set&type=dinner',
+      'action=save_meals&sid=sid-set&type=snack',
+    ]);
+    expect(footer[2].action.data).toBe('action=split_meals&sid=sid-set');
+    expect(footer[3].action.data).toBe('action=cancel_meal&sid=sid-set');
+    expect(flex.altText).toContain('2品');
+    expect(JSON.stringify(flex)).toContain('730 kcal');
   });
 });

@@ -186,6 +186,18 @@ cron の日次レポートと同じ `daily_evaluations/{YYYYMMDD}` に保存す�
 検索は「履歴 唐揚げ」と送るか、「キーワードで探す」を押して次の発話を待つ（`awaiting_recent_search`）。
 Firestore は部分一致検索ができないため、直近300件を読んでメモリ上で絞り込む。
 
+## LINE の複数写真（まとめ記録）
+
+同時に送った写真には `message.imageSet`（id / index / total）が付く。1枚ずつ確認カードを出すと、
+1枚目を保存した時点で「それしか食べていない」前提の評価になるため、**まとめて1回の食事として扱う**。
+- 各写真の解析結果を `lineStates/photoset-<id>` にトランザクションで溜め（`addPhotoSetItem`）、
+  最後の1枚が揃ったイベントだけが確認カードを1枚返す。解析失敗も `null` で登録する（揃わず待ち続けないため）
+- まとめカード（`buildMealSetConfirmFlex`）のタイプボタンは `action=save_meals`。全品を同じタイプで
+  **1品ずつ別の記録として保存**し、評価は `combineMeals()` で合算して1回だけ（`replyWithSavedMeals`）。
+  `evaluateSingleMeal` に `options.items` を渡すと「一緒に食べたN品」として評価させるプロンプトになる
+- 「1品ずつ確認・修正」（`action=split_meals`）で従来の個別カード（カルーセル）に分けられる
+- 写真より先に送った補足テキストは全枚に効かせ、揃った時点で消す
+
 ## Gemini API の設計
 
 - **定義場所**: `src/app/actions/gemini-client.js`

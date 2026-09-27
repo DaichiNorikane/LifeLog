@@ -2,9 +2,11 @@ import { replyWithSavedMeal, replyWithSavedMeals } from '@/lib/line/mealSavedRep
 import {
     addMealAdmin,
     deleteMealsAdmin,
+    getMealByIdAdmin,
     updateMealsTypeAdmin,
 } from '@/lib/firebase/adminHelpers';
 import { replyOrPushMessage } from '@/lib/line/client';
+import { buildEditConfirmFlex } from '@/lib/line/flex/editConfirm';
 import { buildMealConfirmCarousels } from '@/lib/line/flex/mealConfirm';
 import { createSid, MEAL_TYPE_LABELS } from '@/lib/line/mealUtils';
 import { resolveUserOrReply } from '@/lib/line/resolveUser';
@@ -62,6 +64,41 @@ export const pickMealSlotByHour = (date = new Date()) => {
     if (jstHour < 10) return 'breakfast';
     if (jstHour < 15) return 'lunch';
     return 'dinner';
+};
+
+const MAX_DELETE_IDS = 20;
+
+const deleteTargetName = (meal) => {
+    const label = MEAL_TYPE_LABELS[meal.mealType] || '食事';
+    return `${meal.foodName || '食事'}（${label}/${Number(meal.calories) || 0}kcal）`;
+};
+
+/**
+ * mid は `.` 区切りの食事ID。自分の meals サブコレクションから引くので、他人の記録は消せない。
+ * 既に消えているものは除き、残りだけを確認カードに出す
+ */
+const handleDeleteSavedPrompt = async (event, user, mid) => {
+    const ids = [...new Set(String(mid || '').split('.').filter(Boolean))].slice(0, MAX_DELETE_IDS);
+    const meals = (await Promise.all(ids.map(id => getMealByIdAdmin(user.uid, id).catch(() => null))))
+        .filter(Boolean);
+
+    if (meals.length === 0) {
+        await replyOrPushMessage(event, {
+            type: 'text',
+            text: 'その記録はもう削除されているみたいです👌',
+        });
+        return;
+    }
+
+    const pendingEdit = {
+        operation: 'delete',
+        mealType: null,
+        targetIds: meals.map(meal => meal.id),
+        targetNames: meals.map(deleteTargetName),
+    };
+    const sid = createSid();
+    await setLineState(user.uid, { pendingEdit, mode: 'awaiting_edit_confirm', sid });
+    await replyOrPushMessage(event, buildEditConfirmFlex(pendingEdit, sid));
 };
 
 export const handlePostbackEvent = async (event) => {
@@ -138,6 +175,13 @@ export const handlePostbackEvent = async (event) => {
             type: 'text',
             text: '記録はやめておきました👌 また「履歴」から呼んでくださいね！',
         });
+        return;
+    }
+
+    // 保存完了カードの「🗑 この記録を削除」。いきなり消さず、確認カードを挟む
+    // （確認後は既存の apply_edit で削除される）
+    if (action === 'delete_saved') {
+        await handleDeleteSavedPrompt(event, user, mid);
         return;
     }
 

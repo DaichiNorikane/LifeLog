@@ -2,8 +2,14 @@ import { formatElenaText } from '@/lib/line/textFormat';
 import { evaluateSingleMeal } from '@/app/actions/daily-evaluation';
 import { getLineChatContextAdmin, saveLineChatExchangeAdmin } from '@/lib/firebase/adminHelpers';
 import { replyOrPushMessage } from '@/lib/line/client';
-import { buildMealSavedFlex, buildMealSetSavedFlex } from '@/lib/line/flex/mealSaved';
+import { buildDeleteSavedAction, buildMealSavedFlex, buildMealSetSavedFlex } from '@/lib/line/flex/mealSaved';
 import { combineMeals, MEAL_TYPE_LABELS } from '@/lib/line/mealUtils';
+
+/** テキストで返すとき（評価失敗・履歴/レシピから）もクイックリプライで削除できるようにする */
+const withDeleteQuickReply = (message, mealIds, label) => {
+    const action = buildDeleteSavedAction(mealIds, label);
+    return action ? { ...message, quickReply: { items: [{ type: 'action', action }] } } : message;
+};
 
 /** 保存済みの記録を含む当日の集計を取得し、評価とカロリーだけの進捗を返す。 */
 export const replyWithSavedMeal = async (event, user, meal, { flex = false } = {}) => {
@@ -28,7 +34,7 @@ export const replyWithSavedMeal = async (event, user, meal, { flex = false } = {
     const text = `${label}に「${meal.foodName}」を記録しました✅\n${feedback}\n\n${progress}`;
     await replyOrPushMessage(event, flex && evaluated
         ? buildMealSavedFlex(meal, evaluation, progress)
-        : { type: 'text', text: formatElenaText(text) });
+        : withDeleteQuickReply({ type: 'text', text: formatElenaText(text) }, [meal.id], '🗑 削除'));
     try {
         await saveLineChatExchangeAdmin(user.uid,
             `（食事を記録: ${meal.foodName} ${meal.calories}kcal / ${label}）`,
@@ -73,7 +79,7 @@ export const replyWithSavedMeals = async (event, user, meals, { flex = false } =
     const text = `${label}に${meals.length}品を記録しました✅\n${list}\n合計 ${combined.calories}kcal\n\n${feedback}\n\n${progress}`;
     await replyOrPushMessage(event, flex && evaluated
         ? buildMealSetSavedFlex(meals, combined, evaluation, progress)
-        : { type: 'text', text: formatElenaText(text) });
+        : withDeleteQuickReply({ type: 'text', text: formatElenaText(text) }, meals.map(meal => meal.id), `🗑 ${meals.length}品を削除`));
     try {
         await saveLineChatExchangeAdmin(user.uid,
             `（食事を${meals.length}品まとめて記録: ${meals.map(meal => `${meal.foodName} ${meal.calories}kcal`).join('、')} / ${label}）`,

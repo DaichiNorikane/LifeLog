@@ -24,6 +24,7 @@ const iconNames = [
   'ReferenceArea', 'ReferenceLine',
   'Moon', 'Settings2', 'Check', 'Coffee', 'TrendingUp',
   'ChevronDown', 'ChevronUp', 'Dumbbell', 'Footprints', 'Scale',
+  'Copy', 'Download', 'Share2',
 ];
 
 const mocks = {};

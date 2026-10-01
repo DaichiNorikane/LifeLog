@@ -1,6 +1,7 @@
 import { getLineChatContextAdmin } from '@/lib/firebase/adminHelpers';
 import { replyOrPushMessage } from '@/lib/line/client';
 import { buildDailySummaryFlex } from '@/lib/line/flex/dailySummary';
+import { withShareQuickReply } from '@/lib/line/handlers/share-report';
 import { resolveUserOrReply } from '@/lib/line/resolveUser';
 
 // 「サマリー」「今日のカロリー」等の短い問い合わせにマッチ（食事記録の発話は誤爆させない）
@@ -23,7 +24,7 @@ export const handleDailySummaryEvent = async (event, user = null) => {
         return { mealsCount: 0 };
     }
 
-    await replyOrPushMessage(event, buildDailySummaryFlex({
+    await replyOrPushMessage(event, withShareQuickReply(buildDailySummaryFlex({
         dateId: context.today?.dateId,
         totalCalories: context.today?.totalCalories,
         targetCalories: context.user?.targetCalories,
@@ -31,6 +32,6 @@ export const handleDailySummaryEvent = async (event, user = null) => {
         mealsCount: meals.length,
         // 微量栄養素の目標は性別で変わる（dailyTargets.js）
         profile: resolvedUser.data || {},
-    }));
+    })));
     return { mealsCount: meals.length };
 };

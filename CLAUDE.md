@@ -47,6 +47,7 @@ src/
 │       ├── health/workout/  # HealthKitワークアウト受信API（冪等）
 │       ├── health/sleep/    # HealthKit睡眠データ受信API
 │       ├── health/weight/   # HealthKit体組成データ受信API
+│       ├── share/chart/     # LINE共有用の推移グラフPNG（署名付きURL）
 │       ├── push/send/       # Web Push通知送信
 │       ├── push/subscribe/  # Web Push購読管理
 │       ├── manifest/        # PWAマニフェスト
@@ -84,6 +85,7 @@ src/
 │   ├── health/trainerContext.js # 日次評価に渡す「生活データ」テキストの組み立て（唯一の真実）
 │   ├── health/ingest.js     # HealthKit受信の共通処理（認証・検証・書き込み）
 │   ├── recipeCategories.js  # レシピカテゴリの定義（唯一の真実。WebとLINEで共通）
+│   ├── share/               # LINE共有用の出力（テキスト・グラフ・署名。WebとLINEで共通）
 │   ├── reports/weeklyReport.js # 週間レポートの集計（cronとLINEオンデマンドで共通）
 │   └── game/                # SoundManager
 ├── data/
@@ -185,6 +187,20 @@ cron の日次レポートと同じ `daily_evaluations/{YYYYMMDD}` に保存す�
 カルーセルは12枚が上限なので、料理11件＋末尾に操作カード（もっと見る/キーワードで探す/すべて表示）を置く。
 検索は「履歴 唐揚げ」と送るか、「キーワードで探す」を押して次の発話を待つ（`awaiting_recent_search`）。
 Firestore は部分一致検索ができないため、直近300件を読んでメモリ上で絞り込む。
+
+## LINE共有用に出力
+
+家族やグループに転送するための「項目と数値だけ」の共有テキスト + 推移グラフ画像。**定期送信はしない**（押したときだけ）。
+- テキストは `src/lib/share/shareReport.js` の `buildShareText()` が唯一の真実（Web と LINE で共通）。エレナの口調・絵文字は使わない。
+  記録が無い日は `0kcal` ではなく「未記録」。体年齢（`weights.bodyAge`）は HealthKit に型が無いので、値がある日だけ行を出す
+- グラフは画像生成AIではなく `src/lib/share/trendChartImage.js`（`next/og` = Satori + resvg で SVG→PNG）。
+  同梱フォントが日本語を持たないので画像内の文字は英数字のみ。null の日で線を切る
+- 画像 URL は `/api/share/chart?uid&exp&sig`。LINE の画像メッセージは公開 URL しか受けないため、
+  `SHARE_LINK_SECRET`（環境変数）で uid+期限を HMAC 署名する（`shareToken.js`、30日有効）。未設定ならテキストだけ返す
+- 絶対 URL は `APP_BASE_URL` → `VERCEL_PROJECT_PRODUCTION_URL` の順
+- Web: 「今日のからだ」（BodyDetailModal）の「LINE共有用に出力」→ `ShareReportPanel`。署名は Server Action
+  `createShareChartPathAction(idToken)` が Firebase ID トークンを検証してから発行する
+- LINE: 「からだ」「今日のまとめ」の返信にクイックリプライ（postback `action=share_report`）。「共有」と送っても同じ
 
 ## LINE の複数写真（まとめ記録）
 

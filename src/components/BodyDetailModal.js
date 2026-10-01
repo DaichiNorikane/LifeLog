@@ -1,8 +1,10 @@
 'use client';
 
-import { Activity, X } from 'lucide-react';
+import { useState } from 'react';
+import { Activity, Share2, X } from 'lucide-react';
 import ActivityCard from '@/components/ActivityCard';
 import DietGoalPanel from '@/components/DietGoalPanel';
+import ShareReportPanel from '@/components/ShareReportPanel';
 
 /**
  * 「今日のからだ」の詳細。
@@ -14,6 +16,7 @@ import DietGoalPanel from '@/components/DietGoalPanel';
  * 分担:
  *   ActivityCard   … 今日の実測（歩数・消費・睡眠・ワークアウト・体組成）
  *   DietGoalPanel  … 目標（いつまでに何kg）と推移グラフ、エレナの目標診断
+ *   ShareReportPanel … 「LINE共有用に出力」（shareData があるときだけボタンを出す）
  */
 export default function BodyDetailModal({
     user,
@@ -27,8 +30,11 @@ export default function BodyDetailModal({
     title = '今日のからだ',
     onClose,
     onUpdateWeights,
+    shareData = null, // { dateKey, totalCalories, targetCalories }
     ...panelProps
 }) {
+    const [showShare, setShowShare] = useState(false);
+
     return (
         <div className="fixed-overlay">
             <div
@@ -57,6 +63,28 @@ export default function BodyDetailModal({
                 </div>
 
                 <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {shareData && (showShare ? (
+                        <ShareReportPanel
+                            user={user}
+                            dateKey={shareData.dateKey}
+                            totalCalories={shareData.totalCalories}
+                            targetCalories={shareData.targetCalories}
+                            weights={weights}
+                            onClose={() => setShowShare(false)}
+                        />
+                    ) : (
+                        <button
+                            onClick={() => setShowShare(true)}
+                            style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                                padding: '12px', borderRadius: 'var(--radius-lg)', border: '1px solid #06C755',
+                                background: 'white', color: '#06C755', fontWeight: 700, cursor: 'pointer',
+                            }}
+                        >
+                            <Share2 size={18} /> LINE共有用に出力
+                        </button>
+                    ))}
+
                     <ActivityCard
                         title="今日の実測"
                         activity={activity}

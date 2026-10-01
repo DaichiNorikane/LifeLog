@@ -115,6 +115,13 @@ export const handlePostbackEvent = async (event) => {
         return;
     }
 
+    // 「からだ」「今日のまとめ」のクイックリプライ「LINE共有用に出力」
+    if (action === 'share_report') {
+        const { handleShareReportEvent } = await import('@/lib/line/handlers/share-report');
+        await handleShareReportEvent(event, user);
+        return;
+    }
+
     // リッチメニューの「履歴から」。過去に記録したものを一覧で出す
     // offset と q が付いていれば、続きの表示・キーワード絞り込みになる
     if (action === 'recent_meals') {

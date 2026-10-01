@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => {
   const webhookCreate = vi.fn().mockResolvedValue(undefined);
   return {
     webhookCreate,
+    handleShareReportEvent: vi.fn().mockResolvedValue(undefined),
     showLoadingAnimation: vi.fn().mockResolvedValue({ success: true }),
     replyOrPushMessage: vi.fn().mockResolvedValue({ success: true }),
     handleChatEvent: vi.fn(),
@@ -127,6 +128,11 @@ vi.mock('@/lib/line/handlers/weekly-report', async () => {
   return { ...actual, handleWeeklyReportEvent: mocks.handleWeeklyReportEvent };
 });
 
+vi.mock('@/lib/line/handlers/share-report', async () => {
+  const actual = await vi.importActual('@/lib/line/handlers/share-report');
+  return { ...actual, handleShareReportEvent: mocks.handleShareReportEvent };
+});
+
 vi.mock('@/lib/line/handlers/goal', async () => {
   // parseGoalCommand は本物を使い、送信だけモックする（ルーティング判定そのものを検証したいため）
   const actual = await vi.importActual('@/lib/line/handlers/goal');
@@ -201,6 +207,16 @@ describe('LINE router dispatch', () => {
     expect(mocks.handleRecentMealsEvent).toHaveBeenCalledWith(
       event, { uid: 'uid-1', data: {} }, { query: '' },
     );
+    expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
+  });
+
+  it('routes 共有 to the share report handler', async () => {
+    expect(classifyTextRoute('LINE共有用に出力')).toEqual({ type: 'share_report' });
+    expect(classifyTextRoute('共有')).toEqual({ type: 'share_report' });
+
+    const event = textEvent('共有');
+    await handleLineEvent(event);
+    expect(mocks.handleShareReportEvent).toHaveBeenCalledWith(event, { uid: 'uid-1', data: {} });
     expect(mocks.classifyLineIntent).not.toHaveBeenCalled();
   });
 

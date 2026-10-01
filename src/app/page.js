@@ -1477,6 +1477,12 @@ export default function Home() {
               workouts={workoutsForDate}
               onClose={() => setShowBodyDetail(false)}
               onUpdateWeights={loadData}
+              shareData={{
+                dateKey: currentDateKey,
+                // 記録が無い日は 0kcal ではなく「未記録」と出す
+                totalCalories: displayMeals.length > 0 ? totalCalories : null,
+                targetCalories: userProfile?.targetCalories ?? null,
+              }}
               recentCalories={(() => {
                 // Calculate average of last 7 days including today
                 let total = 0;

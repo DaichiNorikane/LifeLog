@@ -11,6 +11,7 @@ import {
     handleRecentMealsEvent, handleRecentSearchInput, parseRecentMealsQuery,
 } from '@/lib/line/handlers/recent-meals';
 import { handleRecipesEvent, isRecipesText } from '@/lib/line/handlers/recipes';
+import { handleShareReportEvent, isShareReportText } from '@/lib/line/handlers/share-report';
 import { handleDailyReviewEvent, isDailyReviewText } from '@/lib/line/handlers/daily-review';
 import { handleWeeklyReportEvent, isWeeklyReportText } from '@/lib/line/handlers/weekly-report';
 import { handleKeywordSuggestEvent, MEAL_KEYWORDS } from '@/lib/line/handlers/keyword-suggest';
@@ -63,6 +64,7 @@ export const classifyTextRoute = (text, state = null) => {
     if (isDailyReviewText(trimmed)) return { type: 'daily_review' };
     if (isWeeklyReportText(trimmed)) return { type: 'weekly_report' };
     if (isRecipesText(trimmed)) return { type: 'recipes' };
+    if (isShareReportText(trimmed)) return { type: 'share_report' };
     // 「履歴」だけでも「履歴 唐揚げ」でも拾う（query は空文字なら絞り込みなし）
     const recentQuery = parseRecentMealsQuery(trimmed);
     if (recentQuery !== null) return { type: 'recent_meals', query: recentQuery };
@@ -151,6 +153,10 @@ export const handleLineEvent = async (event) => {
     if (route.type === 'recipes') {
         await handleRecipesEvent(event, user);
         return { handled: 'recipes' };
+    }
+    if (route.type === 'share_report') {
+        await handleShareReportEvent(event, user);
+        return { handled: 'share_report' };
     }
 
     const state = await getAwaitingCorrectionState(user.uid);

@@ -3,6 +3,7 @@ import { getJstDateId, getLatestWeightBefore } from '@/lib/firebase/adminHelpers
 import { getSleepTargetDateKey } from '@/lib/health/conditionDate';
 import { ACTIVITY_METRICS, calcFatMass, formatMetric } from '@/lib/health/healthMetrics';
 import { replyOrPushMessage } from '@/lib/line/client';
+import { withShareQuickReply } from '@/lib/line/handlers/share-report';
 
 /**
  * 「からだ」— ヘルスケアから届いた実測値を LINE で返す。
@@ -117,9 +118,9 @@ export const handleBodyEvent = async (event, user) => {
         return { empty: true };
     }
 
-    await replyOrPushMessage(event, {
+    await replyOrPushMessage(event, withShareQuickReply({
         type: 'text',
         text: `今日のからだ📊\n\n${lines.join('\n')}`,
-    });
+    }));
     return { lines: lines.length };
 };
